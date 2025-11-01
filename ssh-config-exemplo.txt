@@ -1,0 +1,23 @@
+# SSH config recomendado para múltiplas chaves/hosts (Windows)
+# Ajuste os caminhos de IdentityFile conforme suas chaves reais.
+
+# Entrada padrão para sua conta GitHub pessoal
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile C:\Users\enzol\.ssh\id_ed25519
+  IdentitiesOnly yes
+  AddKeysToAgent yes
+
+# Exemplo para outra conta/host (use git@github-work:owner/repo.git como remote)
+Host github-work
+  HostName github.com
+  User git
+  IdentityFile C:\Users\enzol\.ssh\id_ed25519_work
+  IdentitiesOnly yes
+  AddKeysToAgent yes
+
+# Permissões recomendadas (execute no PowerShell/Git Bash se necessário):
+# chmod 600 ~/.ssh/id_ed25519
+# chmod 600 ~/.ssh/config
+# chmod 700 ~/.ssh

@@ -19,9 +19,12 @@
 
 # production
 /build
+/dist/
 
 # misc
 .DS_Store
+Thumbs.db
+ehthumbs.db
 *.pem
 
 # debug
@@ -31,7 +34,9 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
+.env.*
+.local.env
 
 # vercel
 .vercel
@@ -39,3 +44,36 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# logs
+logs
+*.log
+
+# editor folders
+.vscode/
+.idea/
+
+# cache
+.cache/
+.next/cache
+
+# uploads
+uploads/
+
+# database
+*.sqlite
+*.sqlite3
+*.db
+
+# lockfiles (descomente se optar por não versionar)
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock
+
+# dotenv
+.env*
+
+# optional: arquivos locais
+local.env
+
+# End of file

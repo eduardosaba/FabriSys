@@ -49,6 +49,21 @@ next-env.d.ts
 logs
 *.log
 
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# cache
+.cache
+.turbo
+
 # editor folders
 .vscode/
 .idea/
@@ -72,6 +87,7 @@ uploads/
 
 # dotenv
 .env*
+!.env.example
 
 # optional: arquivos locais
 local.env

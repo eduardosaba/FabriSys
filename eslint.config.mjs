@@ -11,6 +11,9 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "dist/**",
+    "node_modules/**",
+    "pnpm-lock.yaml",
     "next-env.d.ts",
   ]),
 ]);

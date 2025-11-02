@@ -1,0 +1,26 @@
+b66ebffb33395ef4a606f3b1d9732282
+"use strict";
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = Button;
+const jsx_runtime_1 = require("react/jsx-runtime");
+const react_1 = __importDefault(require("react"));
+function Button(_a) {
+    var _b;
+    var { label, children } = _a, rest = __rest(_a, ["label", "children"]);
+    return ((0, jsx_runtime_1.jsx)("button", Object.assign({}, rest, { className: `inline-flex items-center gap-2 rounded bg-foreground px-4 py-2 text-sm font-medium text-background ${(_b = rest.className) !== null && _b !== void 0 ? _b : ''}`, children: label !== null && label !== void 0 ? label : children })));
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJmaWxlIjoiRDpcXERPQ1VNRU5UT1MgUEFJXFxTaXN0ZW1hTGFyaVxcc3lzbGFyaVxcY29tcG9uZW50c1xcQnV0dG9uLnRzeCIsIm1hcHBpbmdzIjoiOzs7Ozs7Ozs7Ozs7Ozs7O0FBTUEseUJBV0M7O0FBakJELGtEQUEwQjtBQU0xQixTQUF3QixNQUFNLENBQUMsRUFBbUM7O1FBQW5DLEVBQUUsS0FBSyxFQUFFLFFBQVEsT0FBa0IsRUFBYixJQUFJLGNBQTFCLHFCQUE0QixDQUFGO0lBQ3ZELE9BQU8sQ0FDTCxtREFDTSxJQUFJLElBQ1IsU0FBUyxFQUFFLHNHQUNULE1BQUEsSUFBSSxDQUFDLFNBQVMsbUNBQUksRUFDcEIsRUFBRSxZQUVELEtBQUssYUFBTCxLQUFLLGNBQUwsS0FBSyxHQUFJLFFBQVEsSUFDWCxDQUNWLENBQUM7QUFDSixDQUFDIiwibmFtZXMiOltdLCJzb3VyY2VzIjpbIkQ6XFxET0NVTUVOVE9TIFBBSVxcU2lzdGVtYUxhcmlcXHN5c2xhcmlcXGNvbXBvbmVudHNcXEJ1dHRvbi50c3giXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IFJlYWN0IGZyb20gJ3JlYWN0JztcblxudHlwZSBQcm9wcyA9IFJlYWN0LkJ1dHRvbkhUTUxBdHRyaWJ1dGVzPEhUTUxCdXR0b25FbGVtZW50PiAmIHtcbiAgbGFiZWw/OiBzdHJpbmc7XG59O1xuXG5leHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBCdXR0b24oeyBsYWJlbCwgY2hpbGRyZW4sIC4uLnJlc3QgfTogUHJvcHMpIHtcbiAgcmV0dXJuIChcbiAgICA8YnV0dG9uXG4gICAgICB7Li4ucmVzdH1cbiAgICAgIGNsYXNzTmFtZT17YGlubGluZS1mbGV4IGl0ZW1zLWNlbnRlciBnYXAtMiByb3VuZGVkIGJnLWZvcmVncm91bmQgcHgtNCBweS0yIHRleHQtc20gZm9udC1tZWRpdW0gdGV4dC1iYWNrZ3JvdW5kICR7XG4gICAgICAgIHJlc3QuY2xhc3NOYW1lID8/ICcnXG4gICAgICB9YH1cbiAgICA+XG4gICAgICB7bGFiZWwgPz8gY2hpbGRyZW59XG4gICAgPC9idXR0b24+XG4gICk7XG59XG4iXSwidmVyc2lvbiI6M30=

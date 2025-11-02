@@ -1,0 +1,95 @@
+
+1
+
+Zoom automático
+      Resumo Completo do Sistema SaaS de Gestão de Alimentos 
+Característica 
+Chave Detalhamento 
+Nome 
+(Conceitual) PDV Sabas 
+Modelo SaaS (Software as a Service) por assinatura. 
+Tecnologias Frontend: Next.js (React). Backend/BD: Supabase (PostgreSQL). Versão: 
+PWA (Progressive Web App), otimizado para Celular/Tablet. 
+Vantagem 
+Principal 
+Centralização da gestão da fábrica e dos PDVs em uma única plataforma, 
+garantindo rastreabilidade e precisão na Prestação de Contas. 
+ 
+            Módulos e Funcionalidades Detalhadas 
+O sistema é dividido em módulos integrados, cada um resolvendo um aspecto crucial do 
+negócio: 
+Módulo 1: Gestão de Estoque e Compras (Matéria-Prima e Insumos) 
+O foco é garantir que a fábrica sempre tenha o que precisa, minimizando perdas por validade. 
+Funcionalidade Detalhamento e Benefício 
+Cadastro de 
+Insumos 
+Registro de todos os ingredientes (farinha, açúcar, recheios, embalagens), 
+com unidades de medida e conversão (ex: comprar em kg, usar em 
+gramas). 
+Controle de 
+Recebimento 
+Registro de entradas no estoque, incluindo número da Nota Fiscal, 
+Fornecedor, Quantidade e, crucialmente, Data de Validade e Lote. 
+Alertas de Nível 
+Mínimo 
+Sistema de notificação (via Supabase Realtime) para avisar o Gerente de 
+Produção quando o estoque de um insumo essencial está baixo, 
+acionando o processo de compras. 
+Giro e Validade 
+Relatórios que destacam quais insumos estão próximos do vencimento 
+(PEPS - Primeiro que Entra, Primeiro que Sai), orientando a produção 
+para usar esses itens primeiro, reduzindo o desperdício. 
+Módulo 2: Planejamento e Controle da Produção 
+Este módulo transforma a demanda em produção eficiente e calcula o custo real dos produtos. 
+Funcionalidade Detalhamento e Benefício 
+Ficha Técnica 
+(Receitas) 
+Cadastro detalhado de cada produto final (doce/salgado), especificando 
+insumos, quantidades e % de Perda/Quebra média esperada durante a 
+fabricação. 
+Ordem de Produção 
+(OP) 
+Criação de planos de produção (Ex: "Fazer 100 coxinhas e 50 bolos de 
+pote"). Ao iniciar a OP, o sistema dá baixa automática nos insumos do 
+estoque (com base nas Fichas Técnicas). 
+Apontamento de 
+Desperdício 
+Campo obrigatório para registrar a perda real (massa estragada, 
+produto que saiu do padrão). Isso permite comparar a Perda Real com a 
+Perda Esperada (da Ficha Técnica). 
+Estoque de 
+Produtos Prontos 
+Controle do estoque de itens acabados (o que será enviado aos PDVs), 
+separado do estoque de insumos. 
+Módulo 3: Gestão de Pontos de Venda (PDV) e Vendas (Prioridade de Desenvolvimento) 
+Garante o controle e a prestação de contas dos pontos de venda de forma transparente. 
+Funcionalidade Detalhamento e Benefício 
+Cadastro de Remessa Interface na fábrica para registrar o envio exato de produtos para um 
+PDV específico, definindo o Estoque Inicial daquele ponto. 
+Terminal de Vendas 
+Mobile 
+Interface PWA ultrarrápida (para tablet/celular) para registro de 
+vendas. Dá baixa no estoque do PDV em tempo real. 
+Fechamento de 
+Caixa/Prestação de 
+Contas 
+No final do dia, o operador informa o total arrecadado (por meio: 
+Dinheiro, Cartão, PIX) e as Sobras Físicas (o que restou). 
+Conferência de 
+Divergência 
+Funcionalidade Crítica: O sistema compara o valor/quantidade 
+esperada (Remessa - Vendas) com o valor/quantidade informada 
+(Sobras Físicas). Diferenças geram um alerta de divergência para a 
+Administradora. 
+Módulo 4: Financeiro e Administração (Acesso Restrito) 
+Concentra a visão estratégica e a segurança dos dados. 
+Funcionalidade Detalhamento e Benefício 
+Perfis de Acesso 
+(RBAC) 
+Criação de perfis (Administrador, Gerente de Produção, Operador de 
+PDV), limitando o acesso a dados sensíveis. 
+Balanço Geral 
+Consolidado 
+Exclusivo para a Administradora: Painel que agrega Vendas, Custos 
+(Produção/Insumos) e Despesas, mostrando a Lucratividade Líquida do 
+negócio como um todo. 

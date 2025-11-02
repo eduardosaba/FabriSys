@@ -1,0 +1,1 @@
+{"file":"D:\\DOCUMENTOS PAI\\SistemaLari\\syslari\\jest.setup.ts","mappings":";;AAAA,qCAAmC","names":[],"sources":["D:\\DOCUMENTOS PAI\\SistemaLari\\syslari\\jest.setup.ts"],"sourcesContent":["import '@testing-library/jest-dom';\n"],"version":3}

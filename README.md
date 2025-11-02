@@ -106,6 +106,8 @@ Há um workflow básico em `.github/workflows/ci.yml` que instala dependências 
 
 Adicione segredos no GitHub (Repository → Settings → Secrets) conforme necessário para deploy/integrações.
 
+Observação: existe um arquivo `codecov.yml` na raiz com a política de cobertura (target 80%). Após cadastrar o repositório no Codecov, adicione o secret `CODECOV_TOKEN` (Repository → Settings → Secrets → Actions) para permitir upload seguro da cobertura quando necessário.
+
 ## Boas práticas e próximos passos
 
 1. Configurar ESLint + Prettier e Husky para manter consistência de código (posso configurar isto para você).

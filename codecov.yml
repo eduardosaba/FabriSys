@@ -1,0 +1,21 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 80%
+    patch:
+      default:
+        target: 80%
+
+ignore:
+  - "node_modules/*"
+  - "**/__tests__/**"
+  - "**/*.test.*"
+
+comment:
+  layout: classic
+  behavior: default
+
+# Requer que o CI passe antes de atualizar o status no Codecov
+notify:
+  require_ci_to_pass: yes

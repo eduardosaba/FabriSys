@@ -1,5 +1,7 @@
 import { Insumo } from '@/lib/types';
 import Button from '@/components/Button';
+import Text from '@/components/ui/Text';
+import Badge from '@/components/ui/Badge';
 
 type Props = {
   insumos: Insumo[];
@@ -12,19 +14,32 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-gray-50 dark:bg-gray-700">
+        <thead className="bg-gray-50 dark:bg-gray-900/50">
           <tr>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Nome
+            <th scope="col" className="px-6 py-3 text-left">
+              <Text variant="caption" weight="medium" color="muted">
+                Nome
+              </Text>
             </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Unidade
+            <th scope="col" className="px-6 py-3 text-left">
+              <Text variant="caption" weight="medium" color="muted">
+                Unidade
+              </Text>
             </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Estoque Mínimo
+            <th scope="col" className="px-6 py-3 text-left">
+              <Text variant="caption" weight="medium" color="muted">
+                Estoque Atual
+              </Text>
             </th>
-            <th scope="col" className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Ações
+            <th scope="col" className="px-6 py-3 text-left">
+              <Text variant="caption" weight="medium" color="muted">
+                Estoque Mínimo
+              </Text>
+            </th>
+            <th scope="col" className="px-6 py-3 text-right">
+              <Text variant="caption" weight="medium" color="muted">
+                Ações
+              </Text>
             </th>
           </tr>
         </thead>
@@ -32,15 +47,26 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
           {insumos.map((insumo) => (
             <tr key={insumo.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
               <td className="whitespace-nowrap px-6 py-4">
-                <div className="font-medium text-gray-900 dark:text-white">
+                <Text variant="body-sm" weight="medium">
                   {insumo.nome}
-                </div>
+                </Text>
               </td>
-              <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                {insumo.unidade_medida}
+              <td className="whitespace-nowrap px-6 py-4">
+                <Badge variant="default">{insumo.unidade_medida}</Badge>
               </td>
-              <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                {insumo.estoque_minimo_alerta}
+              <td className="whitespace-nowrap px-6 py-4">
+                <Text 
+                  variant="body-sm" 
+                  color={insumo.estoque_atual < insumo.estoque_minimo_alerta ? 'danger' : 'success'}
+                  weight="medium"
+                >
+                  {insumo.estoque_atual} {insumo.unidade_medida}
+                </Text>
+              </td>
+              <td className="whitespace-nowrap px-6 py-4">
+                <Text variant="body-sm" color="muted">
+                  {insumo.estoque_minimo_alerta} {insumo.unidade_medida}
+                </Text>
               </td>
               <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
                 <div className="flex justify-end gap-2">

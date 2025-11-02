@@ -1,289 +1,228 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Insumo, Fornecedor } from '@/lib/types';
-import { LoteInsumoFormData, loteInsumoSchema } from '@/lib/validations';
-import Button from '@/components/Button';
-import { z } from 'zod';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { toast } from 'react-hot-toast';
+import { LoteInsumo, Insumo, Fornecedor } from '@/lib/types';
+import Button from '@/components/Button';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { LoteInsumoFormData, loteInsumoSchema } from '@/lib/validations';
 
 type Props = {
   onSubmit: (values: LoteInsumoFormData) => Promise<void>;
   onCancel?: () => void;
   loading?: boolean;
+  initialData?: LoteInsumo | null;
 };
 
-export default function LoteInsumoForm({ onSubmit, onCancel, loading }: Props) {
-  const [formData, setFormData] = useState<LoteInsumoFormData>({
-    insumo_id: '',
-    fornecedor_id: null,
-    quantidade_inicial: 0,
-    data_recebimento: new Date().toISOString().split('T')[0],
-    data_validade: null,
-    numero_lote: null,
-    numero_nota_fiscal: null,
-  });
-
+export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialData }: Props) {
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [loadingData, setLoadingData] = useState(true);
 
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+    watch,
+  } = useForm<LoteInsumoFormData>({
+    resolver: zodResolver(loteInsumoSchema),
+    defaultValues: {
+      insumo_id: initialData?.insumo_id || '',
+      fornecedor_id: initialData?.fornecedor_id || '',
+      data_recebimento: initialData?.data_recebimento.split('T')[0] || new Date().toISOString().split('T')[0],
+      data_validade: initialData?.data_validade?.split('T')[0] || '',
+      quantidade_inicial: initialData?.quantidade_inicial || 0,
+      numero_lote: initialData?.numero_lote || '',
+      numero_nota_fiscal: initialData?.numero_nota_fiscal || '',
+
+    },
+  });
+
   useEffect(() => {
-    async function fetchData() {
-      try {
-        // Buscar insumos
-        const { data: insumosData, error: insumosError } = await supabase
-          .from('insumos')
-          .select('*')
-          .order('nome');
-
-        if (insumosError) throw insumosError;
-        setInsumos(insumosData);
-
-        // Buscar fornecedores
-        const { data: fornecedoresData, error: fornecedoresError } = await supabase
-          .from('fornecedores')
-          .select('*')
-          .order('nome');
-
-        if (fornecedoresError) throw fornecedoresError;
-        setFornecedores(fornecedoresData);
-      } catch (err) {
-        console.error('Erro ao carregar dados:', err);
-        toast.error('Erro ao carregar dados. Por favor, recarregue a página.');
-      } finally {
-        setLoadingData(false);
-      }
-    }
-
     fetchData();
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
-    
-    setFormData(prev => ({
-      ...prev,
-      [name]: value === '' 
-        ? null 
-        : type === 'number' 
-          ? Number(value) 
-          : value,
-    }));
+  useEffect(() => {
+    if (initialData) {
+      reset({
+        insumo_id: initialData.insumo_id,
+        fornecedor_id: initialData.fornecedor_id || '',
+        data_recebimento: initialData.data_recebimento.split('T')[0],
+        data_validade: initialData.data_validade?.split('T')[0] || '',
+        quantidade_inicial: initialData.quantidade_inicial,
+        numero_lote: initialData.numero_lote || '',
+        numero_nota_fiscal: initialData.numero_nota_fiscal || '',
 
-    // Limpa o erro do campo quando o usuário começa a digitar
-    if (errors[name]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
       });
     }
-  };
+  }, [initialData, reset]);
 
-  const validateForm = () => {
+  async function fetchData() {
     try {
-      loteInsumoSchema.parse(formData);
-      setErrors({});
-      return true;
+      setLoadingData(true);
+      const [insumos, fornecedores] = await Promise.all([
+        supabase.from('insumos').select('*').order('nome'),
+        supabase.from('fornecedores').select('*').order('nome'),
+      ]);
+
+      if (insumos.error) throw insumos.error;
+      if (fornecedores.error) throw fornecedores.error;
+
+      setInsumos(insumos.data || []);
+      setFornecedores(fornecedores.data || []);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        const newErrors: Record<string, string> = {};
-        err.errors.forEach(error => {
-          if (error.path[0]) {
-            newErrors[error.path[0].toString()] = error.message;
-          }
-        });
-        setErrors(newErrors);
-      }
-      return false;
+      console.error('Erro ao carregar dados:', err);
+    } finally {
+      setLoadingData(false);
     }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) return;
-
-    await onSubmit(formData);
-  };
-
-  if (loadingData) {
-    return <div>Carregando...</div>;
   }
 
+  const insumoSelecionado = insumos.find((insumo) => insumo.id === watch('insumo_id'));
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
-        <label htmlFor="insumo_id" className="block text-sm font-medium">
-          Insumo
+        <label htmlFor="insumo_id" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+          Insumo *
         </label>
         <select
           id="insumo_id"
-          name="insumo_id"
-          value={formData.insumo_id}
-          onChange={handleChange}
-          className={`mt-1 block w-full rounded-md ${
-            errors.insumo_id ? 'border-red-500' : 'border-gray-300'
-          } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
-          required
-          disabled={loading}
+          {...register('insumo_id')}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+          disabled={loadingData || loading || !!initialData}
         >
           <option value="">Selecione um insumo</option>
-          {insumos.map(insumo => (
+          {insumos.map((insumo) => (
             <option key={insumo.id} value={insumo.id}>
               {insumo.nome} ({insumo.unidade_medida})
             </option>
           ))}
         </select>
         {errors.insumo_id && (
-          <p className="mt-1 text-sm text-red-500">{errors.insumo_id}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.insumo_id.message}</p>
         )}
       </div>
 
       <div>
-        <label htmlFor="fornecedor_id" className="block text-sm font-medium">
+        <label htmlFor="fornecedor_id" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
           Fornecedor
         </label>
         <select
           id="fornecedor_id"
-          name="fornecedor_id"
-          value={formData.fornecedor_id || ''}
-          onChange={handleChange}
-          className={`mt-1 block w-full rounded-md ${
-            errors.fornecedor_id ? 'border-red-500' : 'border-gray-300'
-          } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
-          disabled={loading}
+          {...register('fornecedor_id')}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+          disabled={loadingData || loading}
         >
-          <option value="">Selecione um fornecedor (opcional)</option>
-          {fornecedores.map(fornecedor => (
+          <option value="">Selecione um fornecedor</option>
+          {fornecedores.map((fornecedor) => (
             <option key={fornecedor.id} value={fornecedor.id}>
               {fornecedor.nome}
             </option>
           ))}
         </select>
         {errors.fornecedor_id && (
-          <p className="mt-1 text-sm text-red-500">{errors.fornecedor_id}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.fornecedor_id.message}</p>
         )}
       </div>
 
       <div>
-        <label htmlFor="quantidade_inicial" className="block text-sm font-medium">
-          Quantidade Recebida
-        </label>
-        <input
-          type="number"
-          id="quantidade_inicial"
-          name="quantidade_inicial"
-          value={formData.quantidade_inicial}
-          onChange={handleChange}
-          className={`mt-1 block w-full rounded-md ${
-            errors.quantidade_inicial ? 'border-red-500' : 'border-gray-300'
-          } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
-          required
-          min={0.01}
-          step={0.01}
-          disabled={loading}
-        />
-        {errors.quantidade_inicial && (
-          <p className="mt-1 text-sm text-red-500">{errors.quantidade_inicial}</p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor="data_recebimento" className="block text-sm font-medium">
-          Data de Recebimento
+        <label htmlFor="data_recebimento" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+          Data de Recebimento *
         </label>
         <input
           type="date"
           id="data_recebimento"
-          name="data_recebimento"
-          value={formData.data_recebimento}
-          onChange={handleChange}
-          className={`mt-1 block w-full rounded-md ${
-            errors.data_recebimento ? 'border-red-500' : 'border-gray-300'
-          } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
-          required
+          {...register('data_recebimento')}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
           disabled={loading}
         />
         {errors.data_recebimento && (
-          <p className="mt-1 text-sm text-red-500">{errors.data_recebimento}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.data_recebimento.message}</p>
         )}
       </div>
 
       <div>
-        <label htmlFor="data_validade" className="block text-sm font-medium">
+        <label htmlFor="data_validade" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
           Data de Validade
         </label>
         <input
           type="date"
           id="data_validade"
-          name="data_validade"
-          value={formData.data_validade || ''}
-          onChange={handleChange}
-          className={`mt-1 block w-full rounded-md ${
-            errors.data_validade ? 'border-red-500' : 'border-gray-300'
-          } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+          {...register('data_validade')}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
           disabled={loading}
         />
         {errors.data_validade && (
-          <p className="mt-1 text-sm text-red-500">{errors.data_validade}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.data_validade.message}</p>
         )}
       </div>
 
       <div>
-        <label htmlFor="numero_lote" className="block text-sm font-medium">
+        <label htmlFor="quantidade_inicial" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+          Quantidade *
+        </label>
+        <div className="mt-1 flex items-center">
+          <input
+            type="number"
+            step="any"
+            id="quantidade_inicial"
+            {...register('quantidade_inicial', { valueAsNumber: true })}
+            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+            disabled={loading}
+          />
+          {insumoSelecionado && (
+            <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">{insumoSelecionado.unidade_medida}</span>
+          )}
+        </div>
+        {errors.quantidade_inicial && (
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.quantidade_inicial.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="numero_lote" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
           Número do Lote
         </label>
         <input
           type="text"
           id="numero_lote"
-          name="numero_lote"
-          value={formData.numero_lote || ''}
-          onChange={handleChange}
-          className={`mt-1 block w-full rounded-md ${
-            errors.numero_lote ? 'border-red-500' : 'border-gray-300'
-          } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+          {...register('numero_lote')}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
           disabled={loading}
         />
         {errors.numero_lote && (
-          <p className="mt-1 text-sm text-red-500">{errors.numero_lote}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.numero_lote.message}</p>
         )}
       </div>
 
       <div>
-        <label htmlFor="numero_nota_fiscal" className="block text-sm font-medium">
+        <label htmlFor="numero_nota_fiscal" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
           Número da Nota Fiscal
         </label>
         <input
           type="text"
           id="numero_nota_fiscal"
-          name="numero_nota_fiscal"
-          value={formData.numero_nota_fiscal || ''}
-          onChange={handleChange}
-          className={`mt-1 block w-full rounded-md ${
-            errors.numero_nota_fiscal ? 'border-red-500' : 'border-gray-300'
-          } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+          {...register('numero_nota_fiscal')}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
           disabled={loading}
         />
         {errors.numero_nota_fiscal && (
-          <p className="mt-1 text-sm text-red-500">{errors.numero_nota_fiscal}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.numero_nota_fiscal.message}</p>
         )}
       </div>
 
-      <div className="flex justify-end gap-3 pt-2">
+
+
+      <div className="flex justify-end gap-3">
         {onCancel && (
           <Button type="button" variant="secondary" onClick={onCancel} disabled={loading}>
             Cancelar
           </Button>
         )}
-        <Button
-          type="submit"
-          disabled={loading || Object.keys(errors).length > 0}
-        >
-          {loading ? 'Salvando...' : 'Registrar Lote'}
+        <Button type="submit" loading={loading}>
+          {initialData ? 'Salvar' : 'Cadastrar'}
         </Button>
       </div>
     </form>

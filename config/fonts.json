@@ -1,0 +1,21 @@
+{
+  "name": "FabriSys",
+  "google_fonts": [
+    {
+      "family": "Inter",
+      "weights": [400, 500, 600, 700]
+    },
+    {
+      "family": "Roboto",
+      "weights": [400, 500, 700]
+    },
+    {
+      "family": "Open Sans",
+      "weights": [400, 600, 700]
+    },
+    {
+      "family": "Poppins",
+      "weights": [400, 500, 600, 700]
+    }
+  ]
+}

@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
+import Card from '@/components/ui/Card';
+import Text from '@/components/ui/Text';
+import StatusIcon from '@/components/ui/StatusIcon';
+import Badge from '@/components/ui/Badge';
 
 interface Insumo {
   id: string;
@@ -20,7 +24,7 @@ interface EstoqueAlerta {
 export default function AlertasEstoque() {
   const [alertas, setAlertas] = useState<EstoqueAlerta[]>([]);
   const [loading, setLoading] = useState(true);
-  const [_channel, setChannel] = useState<RealtimeChannel | null>(null);
+  const [, setChannel] = useState<RealtimeChannel | null>(null);
 
   useEffect(() => {
     verificarEstoque();
@@ -102,28 +106,74 @@ export default function AlertasEstoque() {
 
   if (alertas.length === 0) {
     return (
-      <div className="rounded-lg bg-green-50 p-4 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-200">
-        Todos os insumos estão com níveis de estoque adequados.
-      </div>
+      <Card variant="default" className="bg-green-50 dark:bg-green-900/20">
+        <div className="flex items-center gap-3">
+          <StatusIcon variant="success" size="md" />
+          <Text color="success">
+            Todos os insumos estão com níveis de estoque adequados.
+          </Text>
+        </div>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-4">
-      {alertas.map((alerta) => (
-        <div
-          key={alerta.insumo.id}
-          className="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-200"
-        >
-          <div className="mb-1 font-medium">
-            Alerta: Estoque Baixo
-          </div>
-          <p>
-            {alerta.insumo.nome} está com apenas {alerta.quantidade_total} {alerta.insumo.unidade_medida} em estoque
-            (mínimo: {alerta.insumo.estoque_minimo_alerta} {alerta.insumo.unidade_medida}).
-          </p>
-        </div>
-      ))}
+      {alertas.map((alerta) => {
+        const percentual = (alerta.quantidade_total / alerta.insumo.estoque_minimo_alerta) * 100;
+        const isZero = alerta.quantidade_total === 0;
+        const isCritical = percentual <= 30;
+        
+        const variant = isZero ? 'danger' : isCritical ? 'warning' : 'default' as const;
+        const status = isZero ? 'Estoque Zerado!' : isCritical ? 'Estoque Crítico' : 'Estoque Baixo';
+        
+        return (
+          <Card
+            key={alerta.insumo.id}
+            variant="default"
+            className="relative overflow-hidden"
+            progress={percentual}
+            progressVariant={variant}
+          >
+            {/* Cabeçalho com status */}
+            <div className="mb-3 flex items-center gap-3">
+              <StatusIcon 
+                variant={variant} 
+                size="md"
+                icon={isZero ? ({className}) => (
+                  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                ) : undefined}
+              />
+              <Text variant="body" weight="medium" color={variant}>
+                {status}
+              </Text>
+            </div>
+
+            {/* Conteúdo */}
+            <div className="space-y-1">
+              <Text variant="body" weight="semibold">
+                {alerta.insumo.nome}
+              </Text>
+              <Text variant="body-sm" color="muted">
+                Quantidade atual: {alerta.quantidade_total} {alerta.insumo.unidade_medida}
+              </Text>
+              <Text variant="body-sm" color="muted">
+                Mínimo recomendado: {alerta.insumo.estoque_minimo_alerta} {alerta.insumo.unidade_medida}
+              </Text>
+            </div>
+
+            {/* Badge de porcentagem */}
+            <Badge
+              variant={variant}
+              className="absolute right-4 top-4"
+            >
+              {percentual.toFixed(0)}%
+            </Badge>
+          </Card>
+        );
+      })}
     </div>
   );
 }

@@ -45,5 +45,12 @@ jobs:
           name: coverage-report
           path: coverage
 
+      - name: Upload coverage to Codecov
+        if: secrets.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+
       - name: Build
         run: pnpm build --if-present

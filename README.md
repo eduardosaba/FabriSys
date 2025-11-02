@@ -1,5 +1,8 @@
 # FabriSys
 
+![CI](https://github.com/eduardosaba/FabriSys/actions/workflows/ci.yml/badge.svg)
+![Lint](https://img.shields.io/badge/lint-eslint-brightgreen)
+
 Este é o front-end do sistema FabriSys, criado com Next.js.
 
 ## Visão geral

@@ -6,7 +6,8 @@
 [![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
 [![Package Manager](https://img.shields.io/badge/package--manager-pnpm-blue.svg)](https://pnpm.io/)
 [![Coverage](https://codecov.io/gh/eduardosaba/FabriSys/branch/main/graph/badge.svg)](https://codecov.io/gh/eduardosaba/FabriSys) <!-- Codecov badge is conditional on setting up CODECOV_TOKEN -->
-
+[![Issues](https://img.shields.io/github/issues/eduardosaba/FabriSys.svg)](https://github.com/eduardosaba/FabriSys/issues)
+[![Dependencies](https://img.shields.io/librariesio/release/github/eduardosaba/FabriSys.svg)](https://libraries.io/github/eduardosaba/FabriSys)
 Front-end do sistema FabriSys desenvolvido com Next.js.
 
 ## Visão geral
@@ -113,8 +114,17 @@ Adicione segredos no GitHub (Repository → Settings → Secrets) conforme neces
 
 ## Como contribuir
 
-- Crie branches por funcionalidade (`feature/minha-nova-funcionalidade`) e abra PRs para `main`.
-- Antes de commitar, rode lint e testes. Considere habilitar hooks com Husky.
+1. Crie branches por funcionalidade (`feature/minha-nova-funcionalidade`) e abra PRs para `main`.
+2. Antes de commitar, rode os checks locais (format/lint/test). Os hooks Husky devem rodar automaticamente se configurados.
+3. Peça revisão de pelo menos uma pessoa e aguarde a aprovação antes de mergear.
+
+### Checklist de PR rápida
+
+- [ ] O PR tem um título claro e descrição concisa
+- [ ] Você linkou a issue relacionada (quando aplicável)
+- [ ] Rodei `pnpm format --check` e `pnpm lint` localmente
+- [ ] Testes relevantes foram adicionados/atualizados e `pnpm test` passa
+- [ ] Não há segredos ou credenciais no PR
 
 ---
 

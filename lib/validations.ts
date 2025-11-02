@@ -1,5 +1,37 @@
 import { z } from 'zod';
 
+export const themeSettingsSchema = z.object({
+  name: z
+    .string()
+    .min(3, 'Nome deve ter pelo menos 3 caracteres')
+    .max(50, 'Nome deve ter no máximo 50 caracteres'),
+  logo_url: z
+    .string()
+    .url('URL do logo inválida'),
+  primary_color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+  secondary_color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+  accent_color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+  background_color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+  text_color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+  font_family: z
+    .string()
+    .min(1, 'Fonte é obrigatória')
+    .max(50, 'Nome da fonte muito longo'),
+  border_radius: z
+    .string()
+    .regex(/^\d+(\.\d+)?rem$/, 'Raio da borda deve estar no formato 0.5rem')
+});
+
 export const insumoSchema = z.object({
   nome: z
     .string()

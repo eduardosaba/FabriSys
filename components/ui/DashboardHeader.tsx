@@ -2,20 +2,27 @@
 
 import { useState } from 'react';
 import { useTheme } from '@/lib/theme';
+import { useAuth } from '@/lib/auth';
 import { Search, Sun, Moon, User, Settings, LogOut } from 'lucide-react';
-// import Button from '@/components/Button';
+import Button from '@/components/Button';
 
 type Props = { title?: string; description?: string };
 
 export default function DashboardHeader({ title, description }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const { theme, resolvedTheme, updateTheme } = useTheme();
+  const { profile, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const effectiveMode = theme.theme_mode === 'system' ? resolvedTheme : theme.theme_mode;
   const toggleMode = () => {
     const nextMode = effectiveMode === 'dark' ? 'light' : 'dark';
     void updateTheme({ theme_mode: nextMode });
+  };
+
+  const handleSignOut = async () => {
+    setShowUserMenu(false);
+    await signOut();
   };
 
   return (
@@ -63,12 +70,19 @@ export default function DashboardHeader({ title, description }: Props) {
             className="flex items-center gap-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <User className="h-5 w-5" />
-            <span className="text-sm font-medium">Usuário</span>
+            <span className="text-sm font-medium">
+              {profile?.nome || profile?.email || 'Usuário'}
+            </span>
           </button>
 
           {/* Menu dropdown */}
           {showUserMenu && (
             <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5">
+              <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                {profile?.role === 'admin' && 'Administrador'}
+                {profile?.role === 'fabrica' && 'Fábrica'}
+                {profile?.role === 'pdv' && 'PDV'}
+              </div>
               <button
                 onClick={() => {
                   setShowUserMenu(false);
@@ -80,10 +94,7 @@ export default function DashboardHeader({ title, description }: Props) {
                 Ajustes
               </button>
               <button
-                onClick={() => {
-                  setShowUserMenu(false);
-                  // TODO: Implementar logout
-                }}
+                onClick={handleSignOut}
                 className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 w-full text-left"
               >
                 <LogOut className="h-4 w-4" />

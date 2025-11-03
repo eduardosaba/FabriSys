@@ -66,7 +66,7 @@ export default function PedidoCompraForm({ itens, onSuccess }: PedidoCompraFormP
         </div>
 
         <Button type="submit" variant="primary" className="w-full" disabled={salvando}>
-          {salvando ? 'Salvando...' : 'Salvar Pedido'}
+          {salvando ? 'Salvando...' : 'Salvar Ordem'}
         </Button>
       </form>
     </Panel>

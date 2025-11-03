@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Button from '@/components/Button';
 import Card from '@/components/ui/Card';
@@ -15,6 +16,7 @@ type CartItem = { insumo: Insumo; quantidade: number };
 export default function PedidosCompraPage() {
   const supabase = createClientComponentClient();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [busca, setBusca] = useState('');
   const [view, setView] = useState<'grid' | 'list'>('grid');
@@ -75,7 +77,7 @@ export default function PedidosCompraPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <Text variant="h1">Pedidos de Compra</Text>
+        <Text variant="h1">Ordens de Compra</Text>
         <div className="flex gap-2">
           <Button variant={view === 'grid' ? 'primary' : 'outline'} onClick={() => setView('grid')}>
             Grade
@@ -188,6 +190,7 @@ export default function PedidosCompraPage() {
                 onSuccess={() => {
                   setCart([]);
                   toast({ title: 'Pedido enviado com sucesso', variant: 'success' });
+                  router.push('/dashboard/pedidos-compra/list');
                 }}
               />
             </Panel>

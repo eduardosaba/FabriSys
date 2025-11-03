@@ -48,7 +48,7 @@ export async function gerarPedidoCompraPDF(itens: ItemPedido[]): Promise<Buffer>
     <body>
       <div class="header">
         <img src="${base64Logo}" alt="Logo" class="logo">
-        <h1 class="title">Pedido de Compra</h1>
+        <h1 class="title">Ordem de Compra</h1>
         <div class="date">Data: ${dataAtual}</div>
       </div>
 

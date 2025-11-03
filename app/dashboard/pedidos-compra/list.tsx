@@ -58,7 +58,7 @@ export default function PedidosCompraList() {
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center space-x-2">
-                <Text variant="h3">Pedido #{pedido.id}</Text>
+                <Text variant="h3">Ordem #{pedido.id}</Text>
                 <StatusIcon
                   variant={
                     pedido.status === 'finalizado'
@@ -76,12 +76,22 @@ export default function PedidosCompraList() {
                       ? 'success'
                       : pedido.status === 'rejeitado'
                         ? 'danger'
-                        : pedido.status === 'aprovado'
-                          ? 'warning'
+                        : pedido.status === 'aprovado' ||
+                            pedido.status === 'pendente' ||
+                            pedido.status === 'enviado'
+                          ? 'info'
                           : 'default'
                   }
                 >
-                  {pedido.status}
+                  {pedido.status === 'finalizado'
+                    ? 'Finalizado'
+                    : pedido.status === 'rejeitado'
+                      ? 'Cancelado'
+                      : pedido.status === 'aprovado' ||
+                          pedido.status === 'pendente' ||
+                          pedido.status === 'enviado'
+                        ? 'Em Aberto'
+                        : pedido.status}
                 </Badge>
               </div>
 
@@ -114,7 +124,7 @@ export default function PedidosCompraList() {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `pedido-compra-${pedido.id}.pdf`;
+                    a.download = `ordem-compra-${pedido.id}.pdf`;
                     a.click();
                   } catch (error) {
                     console.error('Erro ao baixar PDF:', error);
@@ -150,7 +160,7 @@ export default function PedidosCompraList() {
           </div>
 
           <Panel className="mt-4">
-            <Text variant="h4">Itens do Pedido</Text>
+            <Text variant="h4">Itens da Ordem</Text>
             <div className="space-y-2">
               {pedido.itens_pedido_compra.map((item) => (
                 <div

@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { supabase } from '@/lib/supabase';
 import { type Fornecedor } from '@/lib/types/fornecedores';
+import { maskCNPJ, onlyDigits, formatCNPJ } from '@/lib/utils';
 import Button from '@/components/Button';
 import Modal from '@/components/Modal';
 import { Toaster, toast } from 'react-hot-toast';
@@ -15,7 +16,7 @@ import StatusIcon from '@/components/ui/StatusIcon';
 
 const fornecedorSchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
-  cnpj: z.string().min(14, 'CNPJ inválido').max(14, 'CNPJ inválido'),
+  cnpj: z.string().refine((v) => onlyDigits(v).length === 14, 'CNPJ inválido'),
   email: z.string().email('Email inválido').optional().nullish(),
   telefone: z
     .string()
@@ -80,12 +81,16 @@ export default function FornecedoresPage() {
   async function handleSave(values: FornecedorFormData) {
     try {
       setSaving(true);
+      const payload = {
+        ...values,
+        cnpj: onlyDigits(values.cnpj || ''),
+      };
       let error;
 
       if (editingFornecedor) {
         const result = await supabase
           .from('fornecedores')
-          .update(values)
+          .update(payload)
           .eq('id', editingFornecedor.id);
         error = result.error;
 
@@ -93,7 +98,7 @@ export default function FornecedoresPage() {
           toast.success('Fornecedor atualizado com sucesso!');
         }
       } else {
-        const result = await supabase.from('fornecedores').insert(values);
+        const result = await supabase.from('fornecedores').insert(payload);
         error = result.error;
 
         if (!error) {
@@ -211,7 +216,7 @@ export default function FornecedoresPage() {
                       {fornecedor.nome}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {fornecedor.cnpj}
+                      {formatCNPJ(fornecedor.cnpj)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {fornecedor.email || '-'}
@@ -272,6 +277,15 @@ export default function FornecedoresPage() {
             </Text>
             <input
               {...register('cnpj')}
+              onChange={(e) => {
+                const masked = maskCNPJ(e.target.value);
+                const setter = Object.getOwnPropertyDescriptor(
+                  window.HTMLInputElement.prototype,
+                  'value'
+                )?.set;
+                setter?.call(e.target, masked);
+                e.target.dispatchEvent(new Event('input', { bubbles: true }));
+              }}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               defaultValue={editingFornecedor?.cnpj || ''}
             />

@@ -129,7 +129,7 @@ function LotesContent({ searchParams }: { searchParams: Promise<PageProps['searc
               Novo Lote Individual
             </Button>
             <Button variant="primary" onClick={() => setRegistroCompraOpen(true)}>
-              Nova Compra
+              Entrada de Mercadoria
             </Button>
           </div>
         </div>

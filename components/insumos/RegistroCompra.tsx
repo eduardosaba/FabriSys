@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { z } from 'zod';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Button from '@/components/Button';
 import Text from '@/components/ui/Text';
 import { toast } from 'react-hot-toast';
+import { maskBRL, parseBRLToNumber } from '@/lib/utils';
 
 // Schema de validação para um item da compra
 const itemCompraSchema = z.object({
@@ -248,11 +249,21 @@ export default function RegistroCompra({ onClose }: RegistroCompraProps) {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Valor Unitário
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register(`itens.${index}.valor_unitario`, { valueAsNumber: true })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700"
+                <Controller
+                  control={control}
+                  name={`itens.${index}.valor_unitario`}
+                  render={({ field }) => (
+                    <input
+                      type="text"
+                      value={field.value === undefined ? '' : maskBRL(field.value)}
+                      onChange={(e) => {
+                        const num = parseBRLToNumber(e.target.value);
+                        field.onChange(num);
+                      }}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700"
+                      placeholder="R$ 0,00"
+                    />
+                  )}
                 />
                 {errors.itens?.[index]?.valor_unitario && (
                   <p className="mt-1 text-sm text-red-600">

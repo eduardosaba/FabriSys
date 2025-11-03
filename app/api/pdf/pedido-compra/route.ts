@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     return new Response(bytes, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': 'attachment; filename=pedido-compra.pdf',
+        'Content-Disposition': 'attachment; filename=ordem-compra.pdf',
       },
     });
   } catch (error) {

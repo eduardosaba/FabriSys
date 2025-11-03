@@ -5,17 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState } from 'react';
 import { useTheme } from '@/lib/theme';
-import {
-  Home,
-  Package,
-  Truck,
-  Settings,
-  Menu,
-  X,
-  ChevronRight,
-  AlertTriangle,
-  BarChart2,
-} from 'lucide-react';
+import { Home, Package, Truck, Settings, Menu, X, ChevronRight, BarChart2 } from 'lucide-react';
 
 interface SidebarItem {
   name: string;
@@ -42,7 +32,7 @@ const sidebarItems: SidebarItem[] = [
       { name: 'Estoque', href: '/dashboard/insumos/lotes' },
       { name: 'Alertas', href: '/dashboard/insumos/alertas' },
       { name: 'Categorias', href: '/dashboard/producao/categorias' },
-      { name: 'Pedidos de Compra', href: '/dashboard/producao/pedidos-compra' },
+      { name: 'Ordem de Compra', href: '/dashboard/producao/pedidos-compra' },
     ],
   },
   {
@@ -178,7 +168,7 @@ export default function Sidebar() {
                         : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
                     }
                   `}
-                  onClick={(e) => {
+                  onClick={() => {
                     // Se houver filhos, apenas abre/fecha o submenu sem prevenir navegação
                     if (item.children) {
                       toggleSubmenu(item.name);

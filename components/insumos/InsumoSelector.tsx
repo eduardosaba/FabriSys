@@ -44,7 +44,7 @@ export default function InsumoSelector({ onSelect }: InsumoSelectorProps) {
       }
     };
 
-    buscarInsumos();
+    void buscarInsumos();
   }, [busca, supabase]);
 
   const handleSubmit = () => {
@@ -59,7 +59,7 @@ export default function InsumoSelector({ onSelect }: InsumoSelectorProps) {
   return (
     <Panel className="space-y-4">
       <div>
-        <Text variant="subtitle">Buscar Insumo</Text>
+        <Text variant="h4">Buscar Insumo</Text>
         <input
           type="text"
           value={busca}
@@ -81,7 +81,7 @@ export default function InsumoSelector({ onSelect }: InsumoSelectorProps) {
                 insumoSelecionado?.id === insumo.id ? 'bg-blue-50 border-blue-500' : ''
               }`}
             >
-              <Text variant="subtitle">{insumo.nome}</Text>
+              <Text>{insumo.nome}</Text>
               <Text className="text-sm text-gray-500">
                 Unidade: {insumo.unidade_medida}
                 {insumo.ultimo_valor && ` | Último valor: R$ ${insumo.ultimo_valor.toFixed(2)}`}
@@ -95,7 +95,7 @@ export default function InsumoSelector({ onSelect }: InsumoSelectorProps) {
 
       {insumoSelecionado && (
         <div>
-          <Text variant="subtitle">Quantidade</Text>
+          <Text variant="h4">Quantidade</Text>
           <div className="flex items-center space-x-4">
             <input
               type="number"

@@ -31,17 +31,17 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
     defaultValues: {
       insumo_id: initialData?.insumo_id || '',
       fornecedor_id: initialData?.fornecedor_id || '',
-      data_recebimento: initialData?.data_recebimento.split('T')[0] || new Date().toISOString().split('T')[0],
+      data_recebimento:
+        initialData?.data_recebimento.split('T')[0] || new Date().toISOString().split('T')[0],
       data_validade: initialData?.data_validade?.split('T')[0] || '',
       quantidade_inicial: initialData?.quantidade_inicial || 0,
       numero_lote: initialData?.numero_lote || '',
       numero_nota_fiscal: initialData?.numero_nota_fiscal || '',
-
     },
   });
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, []);
 
   useEffect(() => {
@@ -54,7 +54,6 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
         quantidade_inicial: initialData.quantidade_inicial,
         numero_lote: initialData.numero_lote || '',
         numero_nota_fiscal: initialData.numero_nota_fiscal || '',
-
       });
     }
   }, [initialData, reset]);
@@ -84,7 +83,10 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div>
-        <label htmlFor="insumo_id" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+        <label
+          htmlFor="insumo_id"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
           Insumo *
         </label>
         <select
@@ -106,7 +108,10 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
       </div>
 
       <div>
-        <label htmlFor="fornecedor_id" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+        <label
+          htmlFor="fornecedor_id"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
           Fornecedor
         </label>
         <select
@@ -123,12 +128,17 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
           ))}
         </select>
         {errors.fornecedor_id && (
-          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.fornecedor_id.message}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+            {errors.fornecedor_id.message}
+          </p>
         )}
       </div>
 
       <div>
-        <label htmlFor="data_recebimento" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+        <label
+          htmlFor="data_recebimento"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
           Data de Recebimento *
         </label>
         <input
@@ -139,12 +149,17 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
           disabled={loading}
         />
         {errors.data_recebimento && (
-          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.data_recebimento.message}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+            {errors.data_recebimento.message}
+          </p>
         )}
       </div>
 
       <div>
-        <label htmlFor="data_validade" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+        <label
+          htmlFor="data_validade"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
           Data de Validade
         </label>
         <input
@@ -155,12 +170,17 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
           disabled={loading}
         />
         {errors.data_validade && (
-          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.data_validade.message}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+            {errors.data_validade.message}
+          </p>
         )}
       </div>
 
       <div>
-        <label htmlFor="quantidade_inicial" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+        <label
+          htmlFor="quantidade_inicial"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
           Quantidade *
         </label>
         <div className="mt-1 flex items-center">
@@ -173,16 +193,23 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
             disabled={loading}
           />
           {insumoSelecionado && (
-            <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">{insumoSelecionado.unidade_medida}</span>
+            <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+              {insumoSelecionado.unidade_medida}
+            </span>
           )}
         </div>
         {errors.quantidade_inicial && (
-          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.quantidade_inicial.message}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+            {errors.quantidade_inicial.message}
+          </p>
         )}
       </div>
 
       <div>
-        <label htmlFor="numero_lote" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+        <label
+          htmlFor="numero_lote"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
           Número do Lote
         </label>
         <input
@@ -193,12 +220,17 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
           disabled={loading}
         />
         {errors.numero_lote && (
-          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.numero_lote.message}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+            {errors.numero_lote.message}
+          </p>
         )}
       </div>
 
       <div>
-        <label htmlFor="numero_nota_fiscal" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+        <label
+          htmlFor="numero_nota_fiscal"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-200"
+        >
           Número da Nota Fiscal
         </label>
         <input
@@ -209,11 +241,11 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
           disabled={loading}
         />
         {errors.numero_nota_fiscal && (
-          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.numero_nota_fiscal.message}</p>
+          <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+            {errors.numero_nota_fiscal.message}
+          </p>
         )}
       </div>
-
-
 
       <div className="flex justify-end gap-3">
         {onCancel && (

@@ -103,7 +103,7 @@ function LotesContent({ searchParams }: { searchParams: Promise<PageProps['searc
           '_errors' in firstError &&
           Array.isArray(firstError._errors)
         ) {
-          toast.error(firstError._errors[0]);
+          toast.error(String(firstError._errors[0]));
         } else {
           toast.error('Dados inválidos. Verifique os campos.');
         }

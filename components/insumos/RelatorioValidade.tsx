@@ -96,7 +96,7 @@ export default function RelatorioValidade({ diasAlerta = 30 }: RelatorioValidade
       }
     }
 
-    fetchLotes();
+    void fetchLotes();
   }, [diasAlerta]);
 
   function formatDate(date: string | null) {

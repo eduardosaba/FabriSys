@@ -8,7 +8,7 @@ async function gerarPDFTeste(): Promise<Buffer> {
     const doc = new PDFDocument();
     const chunks: Buffer[] = [];
 
-    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
 
     doc.text('PDF de Teste - Pedido de Compra', { align: 'center' });
@@ -19,7 +19,7 @@ async function gerarPDFTeste(): Promise<Buffer> {
   });
 }
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     // Gerar PDF de teste
     console.log('Gerando PDF de teste...');

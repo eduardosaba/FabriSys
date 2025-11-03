@@ -135,11 +135,11 @@ export default function LotesTable({
       }
     }
 
-    fetchLotes();
+    void fetchLotes();
 
     // Configurar intervalo apenas se necessário
     if (refreshInterval && typeof window !== 'undefined' && lotes.length > 0) {
-      const timer = window.setInterval(fetchLotes, refreshInterval);
+      const timer = window.setInterval(() => void fetchLotes(), refreshInterval);
       return () => {
         window.clearInterval(timer);
         isSubscribed = false;

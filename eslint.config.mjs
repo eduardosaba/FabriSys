@@ -1,12 +1,11 @@
 import js from '@eslint/js';
-import ts from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
 import nextPlugin from '@next/eslint-plugin-next';
+import importPlugin from 'eslint-plugin-import';
 import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
-import importPlugin from 'eslint-plugin-import';
+import tseslint from 'typescript-eslint';
 
-const config = [
+export default tseslint.config(
   {
     ignores: [
       '.next/**',
@@ -20,20 +19,47 @@ const config = [
       '__tests__/**',
       'components/insumos/InsumosTable.old.tsx',
       'components/insumos/PedidoCompraForm.tsx',
+      'tailwind.config.cjs',
     ],
   },
   js.configs.recommended,
+  ...tseslint.configs.recommended,
+  // Regras com verificação de tipos apenas para arquivos TS/TSX
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        project: ['./tsconfig.json'],
+        tsconfigRootDir: process.cwd(),
+      },
+    },
+    rules: {
+      // Regras type-aware em modo "warn" para facilitar adoção gradual
+      '@typescript-eslint/no-floating-promises': 'warn',
+      '@typescript-eslint/require-await': 'warn',
+      '@typescript-eslint/no-misused-promises': [
+        'warn',
+        { checksVoidReturn: { attributes: false } },
+      ],
+      '@typescript-eslint/no-unsafe-assignment': 'warn',
+      '@typescript-eslint/no-unsafe-member-access': 'warn',
+      '@typescript-eslint/no-unsafe-call': 'warn',
+      '@typescript-eslint/no-unsafe-argument': 'warn',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
+    },
+  },
   {
     files: ['**/*.{js,jsx,ts,tsx,mjs,cjs}'],
     plugins: {
-      '@typescript-eslint': ts,
-      'next': nextPlugin,
-      'react': reactPlugin,
+      '@typescript-eslint': tseslint.plugin,
+      next: nextPlugin,
+      react: reactPlugin,
       'react-hooks': reactHooksPlugin,
-      'import': importPlugin,
+      import: importPlugin,
     },
     languageOptions: {
-      parser: tsParser,
+      parser: tseslint.parser,
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
@@ -82,19 +108,18 @@ const config = [
       'react/prop-types': 'off',
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
-      // Em projetos TypeScript, no-undef costuma conflitar com tipos/names DOM e Node
-      // (ex.: HTMLDivElement, Buffer, setTimeout). O TypeScript já valida undefineds.
       'no-undef': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { 
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-        ignoreRestSiblings: true,
-      }],
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
       'no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
-      'import/order': ['off'],
+      'import/order': 'off',
     },
   },
-];
-
-export default config;
+);

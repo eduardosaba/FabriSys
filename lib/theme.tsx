@@ -11,7 +11,7 @@ interface ThemeContextType {
   resolvedTheme: 'light' | 'dark';
   systemTheme: ThemeSettings;
   updateTheme: (newTheme: Partial<ThemeSettings>, asDefault?: boolean) => Promise<void>;
-  resetToSystemTheme: () => Promise<void>;
+  resetToSystemTheme: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -110,7 +110,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const resetToSystemTheme = useCallback(async () => {
+  const resetToSystemTheme = useCallback(() => {
     try {
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem('theme-preference');
@@ -173,7 +173,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           try {
             const storedTheme = window.localStorage.getItem('theme-preference');
             if (storedTheme) {
-              const parsedTheme = JSON.parse(storedTheme);
+              const parsedTheme = JSON.parse(storedTheme) as Partial<ThemeSettings>;
               // Validar que o tema tem todos os campos necessários
               if (parsedTheme && typeof parsedTheme === 'object') {
                 activeTheme = { ...systemTheme, ...parsedTheme };
@@ -195,7 +195,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    initializeTheme();
+    void initializeTheme();
   }, [applyTheme, fetchTheme]);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Categoria } from '@/lib/types/insumos';
 import { useToast } from '@/hooks/useToast';
@@ -24,11 +24,7 @@ export default function CategoriaSelector({
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchCategorias();
-  }, []);
-
-  async function fetchCategorias() {
+  const fetchCategorias = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase.from('categorias').select('*').order('nome');
@@ -44,7 +40,11 @@ export default function CategoriaSelector({
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
+
+  useEffect(() => {
+    void fetchCategorias();
+  }, [fetchCategorias]);
 
   return (
     <select

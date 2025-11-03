@@ -21,7 +21,7 @@ export default function CategoriasPage() {
   const [formData, setFormData] = useState<CategoriaFormData>({ nome: '' });
 
   useEffect(() => {
-    fetchCategorias();
+    void fetchCategorias();
   }, []);
 
   async function fetchCategorias() {
@@ -132,7 +132,7 @@ export default function CategoriasPage() {
                     variant="secondary"
                     onClick={() => {
                       if (confirm(`Deseja realmente excluir a categoria "${categoria.nome}"?`)) {
-                        handleDelete(categoria);
+                        void handleDelete(categoria);
                       }
                     }}
                   >

@@ -1,13 +1,14 @@
 export interface PedidoCompra {
   id: string;
+  numero: number; // Sequencial da ordem (ex.: 1 => 00001)
   created_at: string;
   status: 'pendente' | 'enviado' | 'aprovado' | 'rejeitado' | 'finalizado';
-  observacoes?: string;
+  observacoes?: string | null;
   valor_total: number;
   email_enviado: boolean;
   whatsapp_enviado: boolean;
-  data_envio_email?: string;
-  data_envio_whatsapp?: string;
+  data_envio_email?: string | null;
+  data_envio_whatsapp?: string | null;
 }
 
 export interface ItemPedidoCompra {
@@ -16,7 +17,7 @@ export interface ItemPedidoCompra {
   insumo_id: string;
   quantidade: number;
   valor_unitario: number;
-  observacoes?: string;
+  observacoes?: string | null;
   created_at: string;
 }
 

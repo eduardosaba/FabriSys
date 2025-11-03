@@ -72,7 +72,7 @@ export default function RegistroCompra({ onClose }: RegistroCompraProps) {
       if (insumosRes.data) setInsumos(insumosRes.data);
     }
 
-    loadData();
+    void loadData();
   }, []);
 
   // Função para registrar a compra

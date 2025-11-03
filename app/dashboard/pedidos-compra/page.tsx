@@ -41,7 +41,7 @@ export default function PedidosCompraPage() {
         if (ativo) setCarregando(false);
       }
     };
-    carregar();
+    void carregar();
     return () => {
       ativo = false;
     };

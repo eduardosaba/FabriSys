@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
     // Upload do arquivo para o bucket public
     const supabase = createRouteHandlerClient({ cookies });
-    const { data, error } = await supabase.storage.from('public').upload(fileName, file, {
+    const { error } = await supabase.storage.from('public').upload(fileName, file, {
       cacheControl: '3600',
       upsert: true,
     });

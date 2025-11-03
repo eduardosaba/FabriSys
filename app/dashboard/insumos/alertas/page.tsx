@@ -46,7 +46,7 @@ export default function AlertasPage() {
 
       <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title="Novo Pedido de Compra">
         <div className="mt-4">
-          <PedidoCompraForm />
+          <PedidoCompraForm itens={[]} />
         </div>
       </Modal>
     </>

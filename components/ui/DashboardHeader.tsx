@@ -5,7 +5,9 @@ import { useTheme } from '@/lib/theme';
 import { Search, Sun, Moon, User, Settings, LogOut } from 'lucide-react';
 // import Button from '@/components/Button';
 
-export default function DashboardHeader() {
+type Props = { title?: string; description?: string };
+
+export default function DashboardHeader({ title, description }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const { theme, resolvedTheme, updateTheme } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -13,25 +15,34 @@ export default function DashboardHeader() {
   const effectiveMode = theme.theme_mode === 'system' ? resolvedTheme : theme.theme_mode;
   const toggleMode = () => {
     const nextMode = effectiveMode === 'dark' ? 'light' : 'dark';
-    updateTheme({ theme_mode: nextMode });
+    void updateTheme({ theme_mode: nextMode });
   };
 
   return (
     <header className="h-16 border-b bg-background flex items-center justify-between px-6">
-      {/* Barra de pesquisa */}
+      {/* Título/descrição ou busca */}
       <div className="flex-1 max-w-xl">
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400" />
+        {title ? (
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h2>
+            {description && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
+            )}
           </div>
-          <input
-            type="search"
-            placeholder="Pesquisar..."
-            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white dark:bg-gray-800 dark:border-gray-600 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+        ) : (
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="search"
+              placeholder="Pesquisar..."
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white dark:bg-gray-800 dark:border-gray-600 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Ações do usuário */}

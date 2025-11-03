@@ -30,6 +30,7 @@ pnpm test
 
 ## Padrões de código
 
+- O projeto usa o ESLint com Flat Config em `eslint.config.mjs`; ajuste regras ali quando necessário.
 - Siga as regras do ESLint e Prettier configuradas no repositório.
 - Evite adicionar credenciais ou segredos no código.
 

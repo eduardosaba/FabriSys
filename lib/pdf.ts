@@ -103,8 +103,8 @@ export async function gerarPedidoCompraPDF(itens: ItemPedido[]): Promise<Buffer>
 
   const file: htmlPdf.File = { content: html };
   // Tipagem de html-pdf-node pode não refletir o retorno (Buffer). Forçamos o cast.
-  const buffer = (await (
+  const buffer = await (
     htmlPdf as unknown as { generatePdf: (f: htmlPdf.File, o?: htmlPdf.Options) => Promise<Buffer> }
-  ).generatePdf(file, options)) as Buffer;
+  ).generatePdf(file, options);
   return buffer;
 }

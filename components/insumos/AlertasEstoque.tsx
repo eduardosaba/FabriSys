@@ -34,7 +34,7 @@ export default function AlertasEstoque() {
   const [, setChannel] = useState<RealtimeChannel | null>(null);
 
   useEffect(() => {
-    verificarEstoque();
+    void verificarEstoque();
 
     // Inscrever-se para atualizações de estoque em tempo real
     const channel = supabase
@@ -47,7 +47,7 @@ export default function AlertasEstoque() {
           table: 'lotes_insumos',
         },
         () => {
-          verificarEstoque();
+          void verificarEstoque();
         }
       )
       .subscribe();
@@ -55,7 +55,7 @@ export default function AlertasEstoque() {
     setChannel(channel);
 
     return () => {
-      channel.unsubscribe();
+      void channel.unsubscribe();
     };
   }, []);
 
@@ -70,7 +70,7 @@ export default function AlertasEstoque() {
 
       const alertas: EstoqueAlerta[] = [];
 
-      for (const insumo of insumos) {
+      for (const insumo of insumos as Insumo[]) {
         const dataLimite = addDays(new Date(), 30); // Alertar para vencimentos nos próximos 30 dias
 
         // Buscar lotes com quantidade e data de validade
@@ -83,11 +83,11 @@ export default function AlertasEstoque() {
         if (lotesError) throw lotesError;
 
         // Separar lotes vencendo
-        const lotes_vencendo = lotes.filter(
-          (lote) => lote.data_validade && new Date(lote.data_validade) <= dataLimite
+        const lotes_vencendo = (lotes || []).filter(
+          (lote) => lote.data_validade && new Date(lote.data_validade as string) <= dataLimite
         );
 
-        const quantidade_total = lotes.reduce(
+        const quantidade_total = (lotes || []).reduce(
           (total, lote) => total + (lote.quantidade_restante || 0),
           0
         );

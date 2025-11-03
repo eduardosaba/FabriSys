@@ -7,6 +7,7 @@ import { InsumoFormData } from '@/lib/validations/insumos';
 import Button from '@/components/Button';
 import Modal from '@/components/Modal';
 import InsumoForm from '@/components/insumos/InsumoForm';
+import { unidadesMedida } from '@/lib/validations/insumos';
 import InsumosTable from '@/components/insumos/InsumosTable';
 import { Toaster, toast } from 'react-hot-toast';
 import Panel from '@/components/ui/Panel';
@@ -14,57 +15,7 @@ import Text from '@/components/ui/Text';
 import Card from '@/components/ui/Card';
 import StatusIcon from '@/components/ui/StatusIcon';
 
-function InsumosPorCategoria({
-  insumos,
-  onEdit,
-  onDelete,
-  loading,
-}: {
-  insumos: Insumo[];
-  onEdit: (insumo: Insumo) => void;
-  onDelete: (insumo: Insumo) => void;
-  loading: boolean;
-}) {
-  // Agrupar insumos por categoria
-  const insumosPorCategoria = insumos.reduce(
-    (acc, insumo) => {
-      const categoriaId = insumo.categoria?.id || 'sem-categoria';
-      const categoriaNome = insumo.categoria?.nome || 'Sem Categoria';
-
-      if (!acc[categoriaId]) {
-        acc[categoriaId] = {
-          nome: categoriaNome,
-          insumos: [],
-        };
-      }
-      acc[categoriaId].insumos.push(insumo);
-      return acc;
-    },
-    {} as Record<string, { nome: string; insumos: Insumo[] }>
-  );
-
-  return (
-    <div className="space-y-8">
-      {Object.entries(insumosPorCategoria).map(
-        ([categoriaId, { nome, insumos: insumosCategoria }]) => (
-          <div key={categoriaId} className="space-y-4">
-            <Text variant="h4" className="px-6">
-              {nome}
-            </Text>
-            <Panel>
-              <InsumosTable
-                insumos={insumosCategoria}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                loading={loading}
-              />
-            </Panel>
-          </div>
-        )
-      )}
-    </div>
-  );
-}
+// Componente "InsumosPorCategoria" removido por não ser utilizado
 
 export default function InsumosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -74,7 +25,7 @@ export default function InsumosPage() {
   const [editingInsumo, setEditingInsumo] = useState<Insumo | null>(null);
 
   useEffect(() => {
-    fetchInsumos();
+    void fetchInsumos();
   }, []);
 
   async function fetchInsumos() {
@@ -235,7 +186,21 @@ export default function InsumosPage() {
           onSubmit={handleSave}
           onCancel={handleCloseModal}
           loading={saving}
-          initialValues={editingInsumo || undefined}
+          initialValues={
+            editingInsumo
+              ? {
+                  nome: editingInsumo.nome,
+                  unidade_medida: (unidadesMedida as readonly string[]).includes(
+                    editingInsumo.unidade_medida
+                  )
+                    ? (editingInsumo.unidade_medida as (typeof unidadesMedida)[number])
+                    : 'un',
+                  estoque_minimo_alerta: editingInsumo.estoque_minimo_alerta,
+                  categoria_id: editingInsumo.categoria_id,
+                  atributos_dinamicos: editingInsumo.atributos_dinamicos ?? {},
+                }
+              : undefined
+          }
         />
       </Modal>
     </>

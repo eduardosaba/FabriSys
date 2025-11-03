@@ -12,7 +12,7 @@ import Modal from '@/components/Modal';
 import { Toaster, toast } from 'react-hot-toast';
 import Text from '@/components/ui/Text';
 import Card from '@/components/ui/Card';
-import StatusIcon from '@/components/ui/StatusIcon';
+// import StatusIcon from '@/components/ui/StatusIcon';
 
 const fornecedorSchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
@@ -46,7 +46,7 @@ export default function FornecedoresPage() {
   });
 
   useEffect(() => {
-    fetchFornecedores();
+    void fetchFornecedores();
   }, []);
 
   useEffect(() => {
@@ -112,7 +112,8 @@ export default function FornecedoresPage() {
       handleCloseModal();
     } catch (err) {
       console.error(err);
-      if ((err as any)?.code === '23505') {
+      const code = (err as { code?: string })?.code;
+      if (code === '23505') {
         toast.error('Já existe um fornecedor com este CNPJ.');
       } else {
         toast.error('Não foi possível salvar o fornecedor. Tente novamente.');
@@ -133,7 +134,8 @@ export default function FornecedoresPage() {
       await fetchFornecedores();
     } catch (err) {
       console.error(err);
-      if ((err as any)?.code === '23503') {
+      const code = (err as { code?: string })?.code;
+      if (code === '23503') {
         toast.error(
           'Este fornecedor não pode ser excluído pois está vinculado a um ou mais lotes.'
         );

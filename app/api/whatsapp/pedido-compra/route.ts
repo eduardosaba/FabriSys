@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
 import { enviarWhatsAppPedido as enviarWhatsApp } from '@/lib/whatsapp';
 import { enviarPedidoWhatsApp } from '@/lib/pedidos';
+import { z } from 'zod';
 
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const { pedidoId, telefone, pdfUrl } = await request.json();
+    const BodySchema = z.object({
+      pedidoId: z.string().optional(),
+      telefone: z.string().min(8),
+      pdfUrl: z.string().url(),
+    });
+    const { pedidoId, telefone, pdfUrl } = BodySchema.parse(await request.json());
 
     // Enviar WhatsApp
     await enviarWhatsApp(
@@ -17,7 +20,9 @@ export async function POST(request: Request) {
     );
 
     // Atualizar status do pedido
-    await enviarPedidoWhatsApp(pedidoId, telefone, pdfUrl);
+    if (pedidoId) {
+      await enviarPedidoWhatsApp(pedidoId, telefone, pdfUrl);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

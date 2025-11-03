@@ -15,7 +15,7 @@ export interface Insumo {
   ultimo_valor?: number;
   categoria_id: string;
   categoria?: Categoria;
-  atributos_dinamicos?: Record<string, any>;
+  atributos_dinamicos?: Record<string, unknown>;
 }
 
 export interface LoteInsumo {

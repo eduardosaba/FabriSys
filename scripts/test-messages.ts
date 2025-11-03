@@ -8,7 +8,7 @@ async function gerarPDFTeste(): Promise<Buffer> {
     const doc = new PDFDocument();
     const chunks: Buffer[] = [];
 
-    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
 
     doc.text('PDF de Teste - Pedido de Compra', { align: 'center' });
@@ -49,4 +49,4 @@ async function testarEnvios() {
 }
 
 // Executar testes
-testarEnvios();
+void testarEnvios();

@@ -87,7 +87,7 @@ export default function ThemeConfigurator() {
     }
   }, []);
 
-  async function handleSave(_values: FormData) {
+  function handleSave(_values: FormData) {
     try {
       setSaving(true);
       // Exemplo de salvamento no Supabase (ajuste conforme sua tabela):

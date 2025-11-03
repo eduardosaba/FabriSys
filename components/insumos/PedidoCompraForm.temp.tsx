@@ -103,7 +103,7 @@ export default function PedidoCompraForm({ itens, onSuccess }: PedidoCompraFormP
 
         if (!responseUpload.ok) throw new Error('Erro ao fazer upload do PDF');
 
-        const { url } = await responseUpload.json();
+        const { url } = (await responseUpload.json()) as { url: string };
 
         // Enviar por WhatsApp
         const responseWhatsApp = await fetch('/api/whatsapp/pedido-compra', {

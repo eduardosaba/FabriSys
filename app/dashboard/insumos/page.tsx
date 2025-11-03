@@ -77,7 +77,7 @@ export default function ProducaoDashboard() {
         </Link>
 
         <Link href="/dashboard/insumos/alertas">
-          <Card variant="outline" className="hover:border-primary transition-colors p-4">
+          <Card variant="default" className="hover:border-primary transition-colors p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg">
                 <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
@@ -86,7 +86,7 @@ export default function ProducaoDashboard() {
                 <Text variant="h4" weight="medium">
                   Alertas
                 </Text>
-                <Text color="muted" size="sm">
+                <Text color="muted" className="text-sm">
                   Ver alertas ativos
                 </Text>
               </div>
@@ -95,7 +95,7 @@ export default function ProducaoDashboard() {
         </Link>
 
         <Link href="/dashboard/fornecedores">
-          <Card variant="outline" className="hover:border-primary transition-colors p-4">
+          <Card variant="default" className="hover:border-primary transition-colors p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
                 <Truck className="h-6 w-6 text-purple-600 dark:text-purple-400" />
@@ -104,7 +104,7 @@ export default function ProducaoDashboard() {
                 <Text variant="h4" weight="medium">
                   Fornecedores
                 </Text>
-                <Text color="muted" size="sm">
+                <Text color="muted" className="text-sm">
                   Gerenciar fornecedores
                 </Text>
               </div>
@@ -139,7 +139,7 @@ export default function ProducaoDashboard() {
               { name: 'Mar', Produto1: 450, Produto2: 350, Produto3: 220 },
               // ... adicione mais dados mensais
             ]}
-            dataKey="Produto1"
+            series={[{ dataKey: 'Produto1', name: 'Produto 1' }]}
           />
         </Card>
 
@@ -157,7 +157,7 @@ export default function ProducaoDashboard() {
               { mes: 'Mar', producao: 1020 },
               // ... adicione mais dados mensais
             ]}
-            dataKey="producao"
+            series={[{ dataKey: 'producao', name: 'Produção' }]}
             xAxisKey="mes"
           />
         </Card>
@@ -201,7 +201,7 @@ export default function ProducaoDashboard() {
             <Text variant="h3" weight="medium">
               Lista de Compras
             </Text>
-            <Button variant="secondary" className="text-sm" className="flex items-center gap-2">
+            <Button variant="secondary" className="text-sm flex items-center gap-2">
               <Plus className="h-4 w-4" />
               Nova Lista
             </Button>

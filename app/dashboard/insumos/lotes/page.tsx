@@ -135,7 +135,13 @@ function LotesContent({ searchParams }: { searchParams: Promise<PageProps['searc
         </div>
       </Panel>{' '}
       <div className="mb-6">
-        <InsumoSelector />
+        <InsumoSelector
+          onSelect={(insumo, quantidade) => {
+            // Aqui você pode integrar com seu fluxo (por exemplo, abrir RegistroCompra já com o item)
+            toast.success(`${insumo.nome} x ${quantidade} adicionado para registro`);
+            setRegistroCompraOpen(true);
+          }}
+        />
       </div>
       {loading ? (
         <Card variant="default" className="mt-6 py-8">

@@ -162,6 +162,7 @@ export default function FornecedoresPage() {
           <Button
             onClick={() => {
               setEditingFornecedor(null);
+              reset({});
               setIsModalOpen(true);
             }}
           >
@@ -262,7 +263,6 @@ export default function FornecedoresPage() {
             <input
               {...register('nome')}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              defaultValue={editingFornecedor?.nome}
             />
             {errors.nome && (
               <Text variant="caption" color="danger">
@@ -287,7 +287,6 @@ export default function FornecedoresPage() {
                 e.target.dispatchEvent(new Event('input', { bubbles: true }));
               }}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              defaultValue={editingFornecedor?.cnpj || ''}
             />
             {errors.cnpj && (
               <Text variant="caption" color="danger">
@@ -304,7 +303,6 @@ export default function FornecedoresPage() {
               type="email"
               {...register('email')}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              defaultValue={editingFornecedor?.email || ''}
             />
             {errors.email && (
               <Text variant="caption" color="danger">
@@ -321,7 +319,6 @@ export default function FornecedoresPage() {
               type="tel"
               {...register('telefone')}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              defaultValue={editingFornecedor?.telefone || ''}
             />
             {errors.telefone && (
               <Text variant="caption" color="danger">
@@ -337,7 +334,6 @@ export default function FornecedoresPage() {
             <textarea
               {...register('endereco')}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              defaultValue={editingFornecedor?.endereco || ''}
               rows={3}
             />
             {errors.endereco && (

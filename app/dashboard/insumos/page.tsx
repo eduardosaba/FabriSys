@@ -1,314 +1,240 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { LoteInsumo } from '@/lib/types';
-import { LoteInsumoFormData } from '@/lib/validations';
-import Button from '@/components/Button';
-import Modal from '@/components/Modal';
-import LoteInsumoForm from '@/components/insumos/LoteInsumoForm';
-import { Toaster, toast } from 'react-hot-toast';
-import { z } from 'zod';
+import Card from '@/components/ui/Card';
 import Panel from '@/components/ui/Panel';
 import Text from '@/components/ui/Text';
-import Card from '@/components/ui/Card';
-import StatusIcon from '@/components/ui/StatusIcon';
-import Badge from '@/components/ui/Badge';
+import Link from 'next/link';
+import { Package, ShoppingCart, AlertTriangle, Truck, Plus, List, BarChart } from 'lucide-react';
+import { KPISection } from '@/components/ui/KPICards';
+import Chart from '@/components/ui/Charts';
+import Button from '@/components/Button';
+import AlertasEstoque from '@/components/insumos/AlertasEstoque';
+import { useState } from 'react';
 
-export default function LotesInsumoPage() {
-  const [lotes, setLotes] = useState<LoteInsumo[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [editingLote, setEditingLote] = useState<LoteInsumo | null>(null);
-
-  useEffect(() => {
-    fetchLotes();
-  }, []);
-
-  async function fetchLotes() {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('lotes_insumos')
-        .select(`
-          *,
-          insumo:insumos (*),
-          fornecedor:fornecedores (*)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setLotes(data || []);
-    } catch (err) {
-      console.error('Erro ao buscar lotes:', err);
-      toast.error('Erro ao carregar lotes de insumos');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleCloseModal() {
-    if (!saving) {
-      setIsModalOpen(false);
-      setEditingLote(null);
-    }
-  }
-
-  async function handleDelete(lote: LoteInsumo) {
-    if (confirm(`Deseja realmente excluir este lote de ${lote.insumo?.nome}?`)) {
-      try {
-        setLoading(true);
-        const { error } = await supabase
-          .from('lotes_insumos')
-          .delete()
-          .eq('id', lote.id);
-
-        if (error) throw error;
-        toast.success('Lote excluído com sucesso!');
-        await fetchLotes();
-      } catch (err) {
-        console.error('Erro ao excluir lote:', err);
-        toast.error('Não foi possível excluir o lote. Tente novamente.');
-      } finally {
-        setLoading(false);
-      }
-    }
-  }
-
-  async function handleSave(values: LoteInsumoFormData) {
-    try {
-      setSaving(true);
-      
-      if (editingLote) {
-        // Atualiza o lote existente
-        const { error } = await supabase
-          .from('lotes_insumos')
-          .update({
-            ...values,
-            // Atualiza a quantidade_restante proporcionalmente à mudança na quantidade_inicial
-            quantidade_restante: editingLote.quantidade_restante * (values.quantidade_inicial / editingLote.quantidade_inicial)
-          })
-          .eq('id', editingLote.id);
-
-        if (error) throw error;
-        toast.success('Lote atualizado com sucesso!');
-      } else {
-        // Insere um novo lote
-        const { error } = await supabase
-          .from('lotes_insumos')
-          .insert({
-            ...values,
-            quantidade_restante: values.quantidade_inicial,
-          });
-
-        if (error) throw error;
-        toast.success('Lote registrado com sucesso!');
-      }
-      
-      await fetchLotes();
-      handleCloseModal();
-    } catch (err) {
-      console.error(err);
-      if (err instanceof z.ZodError) {
-        const errors = err.format();
-        const firstError = Object.values(errors)[0];
-        if (firstError && '_errors' in firstError) {
-          toast.error(firstError._errors[0]);
-        } else {
-          toast.error('Dados inválidos. Verifique os campos.');
-        }
-      } else {
-        toast.error(`Não foi possível ${editingLote ? 'atualizar' : 'registrar'} o lote. Tente novamente.`);
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
+export default function ProducaoDashboard() {
+  const [showAlertasEstoque, setShowAlertasEstoque] = useState(true);
 
   return (
-    <>
-      <Panel variant="default" className="mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6">
+      <Panel>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <Text variant="h2" weight="semibold">
-            Recebimento de Lotes
+            Dashboard de Produção
           </Text>
-          <div className="mt-3 sm:mt-0">
-            <Button 
-              onClick={() => {
-                setEditingLote(null);
-                setIsModalOpen(true);
-              }}
-            >
-              Novo Lote
-            </Button>
+          <div className="flex gap-2">
+            <Link href="/dashboard/insumos/cadastro">
+              <Button variant="primary" className="flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Novo Produto
+              </Button>
+            </Link>
+            <Link href="/dashboard/fornecedores">
+              <Button variant="secondary" className="flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Novo Fornecedor
+              </Button>
+            </Link>
           </div>
         </div>
       </Panel>
 
-      {loading ? (
-        <Card variant="default" className="mt-6 py-8">
-          <div className="flex items-center justify-center gap-3">
-            <StatusIcon variant="default" size="sm" className="animate-spin" />
-            <Text color="muted">Carregando...</Text>
-          </div>
-        </Card>
-      ) : lotes.length === 0 ? (
-        <Card variant="default" className="mt-6">
-          <div className="flex flex-col items-center justify-center p-12 text-center">
-            <Text variant="body" weight="medium">
-              Nenhum lote registrado
-            </Text>
-            <Text variant="body-sm" color="muted" className="mt-1">
-              Clique no botão acima para registrar um novo lote
-            </Text>
-          </div>
-        </Card>
-      ) : (
-        <Card variant="default" className="mt-6">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-900/50">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left">
-                    <Text variant="caption" weight="medium" color="muted">
-                      Insumo
-                    </Text>
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left">
-                    <Text variant="caption" weight="medium" color="muted">
-                      Fornecedor
-                    </Text>
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left">
-                    <Text variant="caption" weight="medium" color="muted">
-                      Quantidade
-                    </Text>
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left">
-                    <Text variant="caption" weight="medium" color="muted">
-                      Restante
-                    </Text>
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left">
-                    <Text variant="caption" weight="medium" color="muted">
-                      Data Receb.
-                    </Text>
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left">
-                    <Text variant="caption" weight="medium" color="muted">
-                      Validade
-                    </Text>
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left">
-                    <Text variant="caption" weight="medium" color="muted">
-                      Nº Lote
-                    </Text>
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left">
-                    <Text variant="caption" weight="medium" color="muted">
-                      NF
-                    </Text>
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left">
-                    <Text variant="caption" weight="medium" color="muted">
-                      Ações
-                    </Text>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                {lotes.map((lote) => (
-                  <tr key={lote.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <Text variant="body-sm" weight="medium">
-                        {lote.insumo?.nome}
-                      </Text>
-                      <Badge variant="default" className="mt-1">
-                        {lote.insumo?.unidade_medida}
-                      </Badge>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <Text variant="body-sm" color="muted">
-                        {lote.fornecedor?.nome || '-'}
-                      </Text>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <Text variant="body-sm" color="muted">
-                        {lote.quantidade_inicial}
-                      </Text>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <Badge 
-                        variant={lote.quantidade_restante === 0 ? 'danger' : 
-                                lote.quantidade_restante < lote.quantidade_inicial * 0.2 ? 'warning' : 'success'}
-                      >
-                        {lote.quantidade_restante}
-                      </Badge>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <Text variant="body-sm" color="muted">
-                        {new Date(lote.data_recebimento).toLocaleDateString()}
-                      </Text>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <Text variant="body-sm" color="muted">
-                        {lote.data_validade ? new Date(lote.data_validade).toLocaleDateString() : '-'}
-                      </Text>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <Text variant="body-sm" color="muted">
-                        {lote.numero_lote || '-'}
-                      </Text>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <Text variant="body-sm" color="muted">
-                        {lote.numero_nota_fiscal || '-'}
-                      </Text>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="secondary"
-                          onClick={() => {
-                            setEditingLote(lote);
-                            setIsModalOpen(true);
-                          }}
-                          className="py-1.5 px-2.5 text-sm"
-                        >
-                          Editar
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => handleDelete(lote)}
-                          className="py-1.5 px-2.5 text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                        >
-                          Excluir
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+      {/* Cards de Ação Rápida */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Link href="/dashboard/insumos/cadastro">
+          <Card variant="default" className="hover:border-primary transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <Text variant="h4" weight="medium">
+                  Cadastrar Produto
+                </Text>
+                <Text color="muted" className="text-sm">
+                  Adicionar novo produto
+                </Text>
+              </div>
+            </div>
+          </Card>
+        </Link>
 
-      <Toaster position="top-right" />
+        <Link href="/dashboard/insumos/lotes">
+          <Card variant="default" className="hover:border-primary transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
+                <ShoppingCart className="h-6 w-6 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <Text variant="h4" weight="medium">
+                  Estoque
+                </Text>
+                <Text color="muted" className="text-sm">
+                  Gerenciar estoque
+                </Text>
+              </div>
+            </div>
+          </Card>
+        </Link>
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        title={editingLote ? "Editar Lote" : "Novo Lote"}
-      >
-        <LoteInsumoForm
-          onSubmit={handleSave}
-          onCancel={handleCloseModal}
-          loading={saving}
-          initialData={editingLote}
-        />
-      </Modal>
-    </>
+        <Link href="/dashboard/insumos/alertas">
+          <Card variant="outline" className="hover:border-primary transition-colors p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg">
+                <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div>
+                <Text variant="h4" weight="medium">
+                  Alertas
+                </Text>
+                <Text color="muted" size="sm">
+                  Ver alertas ativos
+                </Text>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
+        <Link href="/dashboard/fornecedores">
+          <Card variant="outline" className="hover:border-primary transition-colors p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
+                <Truck className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <Text variant="h4" weight="medium">
+                  Fornecedores
+                </Text>
+                <Text color="muted" size="sm">
+                  Gerenciar fornecedores
+                </Text>
+              </div>
+            </div>
+          </Card>
+        </Link>
+      </div>
+
+      {/* KPIs */}
+      <KPISection
+        kpis={{
+          producaoTotal: 15234,
+          eficiencia: 87.5,
+          produtividade: 42.8,
+          perdas: 1.8,
+        }}
+      />
+
+      {/* Gráficos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Produção Mensal por Produto */}
+        <Card className="p-4">
+          <Text variant="h3" weight="medium" className="mb-4">
+            Produção Mensal por Produto
+          </Text>
+          <Chart
+            type="bar"
+            height={300}
+            data={[
+              { name: 'Jan', Produto1: 400, Produto2: 300, Produto3: 200 },
+              { name: 'Fev', Produto1: 500, Produto2: 400, Produto3: 250 },
+              { name: 'Mar', Produto1: 450, Produto2: 350, Produto3: 220 },
+              // ... adicione mais dados mensais
+            ]}
+            dataKey="Produto1"
+          />
+        </Card>
+
+        {/* Análise de Produção Anual */}
+        <Card className="p-4">
+          <Text variant="h3" weight="medium" className="mb-4">
+            Análise de Produção Anual
+          </Text>
+          <Chart
+            type="line"
+            height={300}
+            data={[
+              { mes: 'Jan', producao: 900 },
+              { mes: 'Fev', producao: 1150 },
+              { mes: 'Mar', producao: 1020 },
+              // ... adicione mais dados mensais
+            ]}
+            dataKey="producao"
+            xAxisKey="mes"
+          />
+        </Card>
+
+        {/* Alertas de Estoque */}
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-4">
+            <Text variant="h3" weight="medium">
+              Alertas de Estoque
+            </Text>
+            <Button
+              variant="secondary"
+              className="text-sm"
+              onClick={() => setShowAlertasEstoque(!showAlertasEstoque)}
+            >
+              {showAlertasEstoque ? 'Ocultar' : 'Mostrar'}
+            </Button>
+          </div>
+          {showAlertasEstoque && <AlertasEstoque />}
+        </Card>
+
+        {/* Resumo de Produtos */}
+        <Card className="p-4">
+          <Text variant="h3" weight="medium" className="mb-4">
+            Resumo de Produtos
+          </Text>
+          <div className="space-y-4">
+            {/* TODO: Adicionar gráficos e estatísticas de produtos */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <Text variant="h4" weight="medium">
+                Estatísticas em breve...
+              </Text>
+              <Text color="muted">Gráficos e análises detalhadas serão adicionados em breve.</Text>
+            </div>
+          </div>
+        </Card>
+
+        {/* Lista de Compras */}
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-4">
+            <Text variant="h3" weight="medium">
+              Lista de Compras
+            </Text>
+            <Button variant="secondary" className="text-sm" className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Nova Lista
+            </Button>
+          </div>
+          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <Text variant="h4" weight="medium">
+              Lista de Compras em breve...
+            </Text>
+            <Text color="muted">Sistema de lista de compras será implementado em breve.</Text>
+          </div>
+        </Card>
+
+        {/* Relatórios Rápidos */}
+        <Card className="p-4">
+          <Text variant="h3" weight="medium" className="mb-4">
+            Relatórios Rápidos
+          </Text>
+          <div className="grid grid-cols-2 gap-4">
+            <Link href="/dashboard/relatorios/validade">
+              <Button variant="secondary" className="w-full flex items-center gap-2 justify-center">
+                <BarChart className="h-4 w-4" />
+                Relatório de Validade
+              </Button>
+            </Link>
+            <Link href="/dashboard/relatorios/estoque">
+              <Button variant="secondary" className="w-full flex items-center gap-2 justify-center">
+                <List className="h-4 w-4" />
+                Relatório de Estoque
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    </div>
   );
 }

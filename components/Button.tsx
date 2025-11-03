@@ -1,31 +1,57 @@
 import React from 'react';
+import { cn } from '@/lib/utils';
 
-type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   label?: string;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost';
   loading?: boolean;
-};
+  size?: 'sm' | 'md' | 'lg';
+}
 
-export default function Button({ label, children, variant = 'primary', loading, ...rest }: Props) {
-  const baseClasses = 'inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium transition-colors';
-  
-  const variantClasses = {
-    primary: 'bg-primary text-white hover:bg-primary/90 disabled:bg-primary/50',
-    secondary: 'bg-secondary text-white hover:bg-secondary/90 disabled:bg-secondary/50',
-  };
-
+export default function Button({
+  label,
+  children,
+  variant = 'primary',
+  loading,
+  size = 'md',
+  className,
+  disabled,
+  ...rest
+}: ButtonProps) {
   return (
     <button
+      disabled={loading || disabled}
+      className={cn(
+        'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+        'disabled:pointer-events-none disabled:opacity-50',
+        {
+          'bg-primary text-white hover:bg-primary/90': variant === 'primary',
+          'bg-secondary text-white hover:bg-secondary/90': variant === 'secondary',
+          'bg-red-600 text-white hover:bg-red-700': variant === 'danger',
+          'border border-input bg-background hover:bg-accent hover:text-accent-foreground':
+            variant === 'outline',
+          'hover:bg-accent hover:text-accent-foreground': variant === 'ghost',
+          'h-8 px-3 text-sm': size === 'sm',
+          'h-10 px-4 py-2': size === 'md',
+          'h-12 px-8': size === 'lg',
+        },
+        className
+      )}
       {...rest}
-      disabled={loading || rest.disabled}
-      className={`${baseClasses} ${variantClasses[variant]} ${
-        rest.className ?? ''
-      }`}
     >
       {loading ? (
         <>
           <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+              fill="none"
+            />
             <path
               className="opacity-75"
               fill="currentColor"
@@ -35,7 +61,7 @@ export default function Button({ label, children, variant = 'primary', loading, 
           <span>Carregando...</span>
         </>
       ) : (
-        label ?? children
+        (label ?? children)
       )}
     </button>
   );

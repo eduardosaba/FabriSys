@@ -2,7 +2,7 @@
 -- Este script define as tabelas iniciais para o controle de insumos e fornecedores.
 
 -- Tabela para armazenar dados dos fornecedores.
-CREATE TABLE fornecedores (
+CREATE TABLE IF NOT EXISTS fornecedores (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now() NOT NULL,
   nome text NOT NULL,
@@ -13,6 +13,9 @@ CREATE TABLE fornecedores (
 -- Habilita RLS (Row Level Security) para a tabela de fornecedores.
 ALTER TABLE fornecedores ENABLE ROW LEVEL SECURITY;
 
+-- Remove política existente e cria novamente
+DROP POLICY IF EXISTS "Allow all for authenticated users" ON fornecedores;
+
 -- Política de acesso: Permite que usuários autenticados realizem todas as operações.
 CREATE POLICY "Allow all for authenticated users" ON fornecedores
   FOR ALL
@@ -21,7 +24,7 @@ CREATE POLICY "Allow all for authenticated users" ON fornecedores
 
 
 -- Tabela para o catálogo de insumos (matérias-primas).
-CREATE TABLE insumos (
+CREATE TABLE IF NOT EXISTS insumos (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now() NOT NULL,
   nome text NOT NULL UNIQUE,
@@ -32,6 +35,9 @@ CREATE TABLE insumos (
 -- Habilita RLS para a tabela de insumos.
 ALTER TABLE insumos ENABLE ROW LEVEL SECURITY;
 
+-- Remove política existente e cria novamente
+DROP POLICY IF EXISTS "Allow all for authenticated users" ON insumos;
+
 -- Política de acesso: Permite que usuários autenticados realizem todas as operações.
 CREATE POLICY "Allow all for authenticated users" ON insumos
   FOR ALL
@@ -40,7 +46,7 @@ CREATE POLICY "Allow all for authenticated users" ON insumos
 
 
 -- Tabela para rastrear cada lote de insumo que entra no estoque.
-CREATE TABLE lotes_insumos (
+CREATE TABLE IF NOT EXISTS lotes_insumos (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now() NOT NULL,
   insumo_id uuid NOT NULL REFERENCES insumos(id),
@@ -55,6 +61,9 @@ CREATE TABLE lotes_insumos (
 
 -- Habilita RLS para a tabela de lotes.
 ALTER TABLE lotes_insumos ENABLE ROW LEVEL SECURITY;
+
+-- Remove política existente e cria novamente
+DROP POLICY IF EXISTS "Allow all for authenticated users" ON lotes_insumos;
 
 -- Política de acesso: Permite que usuários autenticados realizem todas as operações.
 CREATE POLICY "Allow all for authenticated users" ON lotes_insumos

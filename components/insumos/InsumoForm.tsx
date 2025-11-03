@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { InsumoFormData, insumoSchema } from '@/lib/validations';
+import { InsumoFormData, insumoSchema, unidadesMedida } from '@/lib/validations/insumos';
 import Button from '@/components/Button';
 import { z } from 'zod';
+import CategoriaSelector from './CategoriaSelector';
 
 type Props = {
   onSubmit: (values: InsumoFormData) => Promise<void>;
@@ -15,23 +16,25 @@ type Props = {
 export default function InsumoForm({ onSubmit, onCancel, loading, initialValues }: Props) {
   const [formData, setFormData] = useState<InsumoFormData>({
     nome: initialValues?.nome ?? '',
-    unidade_medida: initialValues?.unidade_medida ?? '',
+    unidade_medida: initialValues?.unidade_medida ?? unidadesMedida[0],
     estoque_minimo_alerta: initialValues?.estoque_minimo_alerta ?? 0,
+    categoria_id: initialValues?.categoria_id ?? '',
+    atributos_dinamicos: initialValues?.atributos_dinamicos ?? {},
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: { target: { name: string; value: string; type: string } }) => {
     const { name, value, type } = e.target;
-    
-    setFormData(prev => ({
+
+    setFormData((prev) => ({
       ...prev,
       [name]: type === 'number' ? Number(value) : value,
     }));
 
     // Limpa o erro do campo quando o usuário começa a digitar
     if (errors[name]) {
-      setErrors(prev => {
+      setErrors((prev) => {
         const newErrors = { ...prev };
         delete newErrors[name];
         return newErrors;
@@ -47,7 +50,7 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
     } catch (err) {
       if (err instanceof z.ZodError) {
         const newErrors: Record<string, string> = {};
-        err.errors.forEach(error => {
+        err.errors.forEach((error) => {
           if (error.path[0]) {
             newErrors[error.path[0].toString()] = error.message;
           }
@@ -60,7 +63,7 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
 
     await onSubmit(formData);
@@ -69,7 +72,9 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="nome" className="block text-sm font-medium">Nome do Insumo</label>
+        <label htmlFor="nome" className="block text-sm font-medium">
+          Nome do Insumo
+        </label>
         <input
           type="text"
           id="nome"
@@ -82,14 +87,29 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
           required
           disabled={loading}
         />
-        {errors.nome && (
-          <p className="mt-1 text-sm text-red-500">{errors.nome}</p>
-        )}
+        {errors.nome && <p className="mt-1 text-sm text-red-500">{errors.nome}</p>}
       </div>
       <div>
-        <label htmlFor="unidade_medida" className="block text-sm font-medium">Unidade de Medida</label>
-        <input
-          type="text"
+        <label htmlFor="categoria_id" className="block text-sm font-medium">
+          Categoria
+        </label>
+        <CategoriaSelector
+          value={formData.categoria_id}
+          onChange={(value) =>
+            handleChange({ target: { name: 'categoria_id', value, type: 'text' } })
+          }
+          required
+          disabled={loading}
+          className={errors.categoria_id ? 'border-red-500' : 'border-gray-300'}
+        />
+        {errors.categoria_id && <p className="mt-1 text-sm text-red-500">{errors.categoria_id}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="unidade_medida" className="block text-sm font-medium">
+          Unidade de Medida
+        </label>
+        <select
           id="unidade_medida"
           name="unidade_medida"
           value={formData.unidade_medida}
@@ -97,16 +117,25 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
           className={`mt-1 block w-full rounded-md ${
             errors.unidade_medida ? 'border-red-500' : 'border-gray-300'
           } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
-          placeholder="Ex: kg, g, un, L"
           required
           disabled={loading}
-        />
+        >
+          <option value="">Selecione uma unidade</option>
+          <option value="Kg">Quilograma (Kg)</option>
+          <option value="g">Grama (g)</option>
+          <option value="ml">Mililitro (ml)</option>
+          <option value="Lt">Litro (Lt)</option>
+          <option value="un">Unidade (un)</option>
+          <option value="lata">Lata</option>
+        </select>
         {errors.unidade_medida && (
           <p className="mt-1 text-sm text-red-500">{errors.unidade_medida}</p>
         )}
       </div>
       <div>
-        <label htmlFor="estoque_minimo_alerta" className="block text-sm font-medium">Alerta de Estoque Mínimo</label>
+        <label htmlFor="estoque_minimo_alerta" className="block text-sm font-medium">
+          Alerta de Estoque Mínimo
+        </label>
         <input
           type="number"
           id="estoque_minimo_alerta"
@@ -131,10 +160,7 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
             Cancelar
           </Button>
         )}
-        <Button
-          type="submit"
-          disabled={loading || Object.keys(errors).length > 0}
-        >
+        <Button type="submit" disabled={loading || Object.keys(errors).length > 0}>
           {loading ? 'Salvando...' : initialValues ? 'Atualizar' : 'Cadastrar'}
         </Button>
       </div>

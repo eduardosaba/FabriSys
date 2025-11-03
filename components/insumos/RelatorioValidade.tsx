@@ -47,10 +47,11 @@ export default function RelatorioValidade({ diasAlerta = 30 }: RelatorioValidade
       try {
         setLoading(true);
         const dataLimite = addDays(new Date(), diasAlerta);
-        
+
         const { data, error } = await supabase
           .from('lotes_insumos')
-          .select(`
+          .select(
+            `
             id,
             insumo_id,
             quantidade_restante,
@@ -60,7 +61,8 @@ export default function RelatorioValidade({ diasAlerta = 30 }: RelatorioValidade
               nome,
               unidade_medida
             )
-          `)
+          `
+          )
           .gt('quantidade_restante', 0) // Apenas lotes com quantidade disponível
           .not('data_validade', 'is', null) // Apenas lotes com data de validade
           .order('data_validade');
@@ -68,17 +70,22 @@ export default function RelatorioValidade({ diasAlerta = 30 }: RelatorioValidade
         if (error) throw error;
 
         // Converter resposta para o formato correto
-        const lotesProcessados = (data as LoteResponse[]).map(lote => ({
+        const lotesProcessados = (data as LoteResponse[]).map((lote) => ({
           ...lote,
-          insumo: {
-            nome: lote.insumo[0].nome,
-            unidade_medida: lote.insumo[0].unidade_medida
-          }
+          insumo: lote.insumo?.[0]
+            ? {
+                nome: lote.insumo[0].nome,
+                unidade_medida: lote.insumo[0].unidade_medida,
+              }
+            : {
+                nome: 'Insumo não encontrado',
+                unidade_medida: '-',
+              },
         }));
 
         // Filtrar lotes que vencem dentro do período de alerta
-        const lotesProximosVencimento = lotesProcessados.filter(lote => 
-          lote.data_validade && isBefore(new Date(lote.data_validade), dataLimite)
+        const lotesProximosVencimento = lotesProcessados.filter(
+          (lote) => lote.data_validade && isBefore(new Date(lote.data_validade), dataLimite)
         );
 
         setLotes(lotesProximosVencimento);
@@ -126,7 +133,7 @@ export default function RelatorioValidade({ diasAlerta = 30 }: RelatorioValidade
       <Text variant="h3" weight="semibold">
         Lotes Próximos ao Vencimento
       </Text>
-      
+
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-900/50">
@@ -155,18 +162,19 @@ export default function RelatorioValidade({ diasAlerta = 30 }: RelatorioValidade
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
             {lotes.map((lote) => {
-              const isVencido = lote.data_validade && isBefore(new Date(lote.data_validade), new Date());
+              const isVencido =
+                lote.data_validade && isBefore(new Date(lote.data_validade), new Date());
               const badgeVariant = isVencido ? 'danger' : 'warning';
-              
+
               return (
-                <tr key={lote.id} className={
-                  isVencido ? 'bg-red-50 dark:bg-red-900/20' : ''
-                }>
+                <tr key={lote.id} className={isVencido ? 'bg-red-50 dark:bg-red-900/20' : ''}>
                   <td className="whitespace-nowrap px-6 py-4">
                     <Text variant="body-sm">{lote.insumo.nome}</Text>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
-                    <Text variant="body-sm" color="muted">{lote.numero_lote || '-'}</Text>
+                    <Text variant="body-sm" color="muted">
+                      {lote.numero_lote || '-'}
+                    </Text>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
                     <Text variant="body-sm">
@@ -174,9 +182,7 @@ export default function RelatorioValidade({ diasAlerta = 30 }: RelatorioValidade
                     </Text>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
-                    <Badge variant={badgeVariant}>
-                      {formatDate(lote.data_validade)}
-                    </Badge>
+                    <Badge variant={badgeVariant}>{formatDate(lote.data_validade)}</Badge>
                   </td>
                 </tr>
               );

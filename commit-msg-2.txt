@@ -1,0 +1,3 @@
+test(insumos): corrigir sintaxe em LotesTable.test.tsx e InsumosTable.old.tsx
+- Ajustar mock do Supabase nos testes (vi.mock)
+- Fechar corretamente map/capsulas no arquivo .old

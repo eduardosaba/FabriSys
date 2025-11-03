@@ -3,12 +3,23 @@
 @tailwind utilities;
 
 :root {
-  --background: var(--background-color, #ffffff);
-  --foreground: var(--text-color, #171717);
-  --primary: var(--primary-color, #2563eb);
-  --secondary: var(--secondary-color, #4f46e5);
-  --accent: var(--accent-color, #f97316);
+  /* Variáveis do 🌞 tema claro */
+  --background: var(--light-background, #ffffff);
+  --foreground: var(--light-text, #171717);
+  --primary: var(--light-primary, #2563eb);
+  --secondary: var(--light-secondary, #4f46e5);
+  --accent: var(--light-accent, #f97316);
   --radius: var(--border-radius, 0.5rem);
+
+  /* Cores dos gráficos */
+  --color-1: #2563eb;
+  --color-2: #16a34a;
+  --color-3: #dc2626;
+  --color-4: #9333ea;
+  --color-5: #ea580c;
+  --color-6: #0d9488;
+  --color-7: #be123c;
+  --color-8: #4f46e5;
 }
 
 @theme inline {
@@ -22,11 +33,23 @@
   --radius-default: var(--radius);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: var(--background-color, #0a0a0a);
-    --foreground: var(--text-color, #ededed);
-  }
+/* Aplica cores do 🌙 tema escuro quando a classe .dark estiver presente */
+.dark {
+  --background: var(--dark-background, #0a0a0a);
+  --foreground: var(--dark-text, #ededed);
+  --primary: var(--dark-primary, #3b82f6);
+  --secondary: var(--dark-secondary, #6366f1);
+  --accent: var(--dark-accent, #f97316);
+
+  /* Cores dos gráficos */
+  --color-1: #3b82f6;
+  --color-2: #22c55e;
+  --color-3: #ef4444;
+  --color-4: #a855f7;
+  --color-5: #f97316;
+  --color-6: #14b8a6;
+  --color-7: #e11d48;
+  --color-8: #6366f1;
 }
 
 body {

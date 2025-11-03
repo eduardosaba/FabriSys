@@ -5,31 +5,60 @@ export const themeSettingsSchema = z.object({
     .string()
     .min(3, 'Nome deve ter pelo menos 3 caracteres')
     .max(50, 'Nome deve ter no máximo 50 caracteres'),
-  logo_url: z
-    .string()
-    .url('URL do logo inválida'),
-  primary_color: z
+  logo_url: z.string().min(1, 'Logo é obrigatório'),
+  logo_scale: z
+    .number()
+    .min(0.1, 'Escala mínima é 0.1')
+    .max(2.0, 'Escala máxima é 2.0')
+    .default(1.0)
+    .transform((val) => val ?? 1.0),
+  colors: z.object({
+    light: z.object({
+      primary: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+      secondary: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+      accent: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+      background: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+      text: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+    }),
+    dark: z.object({
+      primary: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+      secondary: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+      accent: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+      background: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+      text: z
+        .string()
+        .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
+    }),
+  }),
+  font_family: z.string().min(1, 'Fonte é obrigatória').max(50, 'Nome da fonte muito longo'),
+  border_radius: z.string().regex(/^\d+(\.\d+)?rem$/, 'Raio da borda deve estar no formato 0.5rem'),
+  theme_mode: z.enum(['light', 'dark', 'system'], {
+    required_error: 'Selecione um modo de tema',
+  }),
+  sidebar_color: z
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
-  secondary_color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
-  accent_color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
-  background_color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
-  text_color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'Cor deve estar no formato hexadecimal (#RRGGBB)'),
-  font_family: z
-    .string()
-    .min(1, 'Fonte é obrigatória')
-    .max(50, 'Nome da fonte muito longo'),
-  border_radius: z
-    .string()
-    .regex(/^\d+(\.\d+)?rem$/, 'Raio da borda deve estar no formato 0.5rem')
+  density: z.enum(['comfortable', 'compact'], {
+    required_error: 'Selecione uma densidade',
+  }),
 });
 
 export const insumoSchema = z.object({
@@ -59,22 +88,17 @@ export const fornecedorSchema = z.object({
     .string()
     .regex(/^\d{14}$/, 'CNPJ deve conter 14 dígitos numéricos')
     .optional()
-    .transform(v => v === '' ? undefined : v),
+    .transform((v) => (v === '' ? undefined : v)),
   contato: z
     .string()
     .max(100, 'Contato deve ter no máximo 100 caracteres')
     .optional()
-    .transform(v => v === '' ? undefined : v),
+    .transform((v) => (v === '' ? undefined : v)),
 });
 
 export const loteInsumoSchema = z.object({
-  insumo_id: z
-    .string()
-    .uuid('ID do insumo inválido'),
-  fornecedor_id: z
-    .string()
-    .uuid('ID do fornecedor inválido')
-    .nullable(),
+  insumo_id: z.string().uuid('ID do insumo inválido'),
+  fornecedor_id: z.string().uuid('ID do fornecedor inválido').nullable(),
   quantidade_inicial: z
     .number()
     .min(0.01, 'Quantidade deve ser maior que zero')

@@ -11,16 +11,26 @@ export interface Profile {
   updated_at: string;
 }
 
+interface ThemeColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  text: string;
+}
+
 export interface ThemeSettings {
   name: string;
   logo_url: string;
-  primary_color: string;
-  secondary_color: string;
-  accent_color: string;
-  background_color: string;
-  text_color: string;
+  logo_scale: number;
   font_family: string;
   border_radius: string;
+  theme_mode: 'light' | 'dark' | 'system';
+  density: 'comfortable' | 'compact';
+  colors: {
+    light: ThemeColors;
+    dark: ThemeColors;
+  };
 }
 
 export interface SystemSettings {
@@ -31,34 +41,7 @@ export interface SystemSettings {
   updated_by: string | null;
 }
 
-export type Insumo = {
-  id: string;
-  created_at: string;
-  nome: string;
-  unidade_medida: string;
-  estoque_minimo_alerta: number;
-  estoque_atual?: number;
-};
-
-export type Fornecedor = {
-  id: string;
-  created_at: string;
-  nome: string;
-  cnpj: string | null;
-  contato: string | null;
-};
-
-export type LoteInsumo = {
-  id: string;
-  created_at: string;
-  insumo_id: string;
-  fornecedor_id: string | null;
-  quantidade_inicial: number;
-  quantidade_restante: number;
-  data_recebimento: string;
-  data_validade: string | null;
-  numero_lote: string | null;
-  numero_nota_fiscal: string | null;
-  insumo?: Insumo;
-  fornecedor?: Fornecedor;
-};
+// Re-exportando os tipos específicos
+export type { Insumo } from './types/insumos';
+export type { Fornecedor } from './types/fornecedores';
+export type { LoteInsumo } from './types/insumos';

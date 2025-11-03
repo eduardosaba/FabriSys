@@ -1,18 +1,32 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { supabase } from '@/lib/supabase';
+import { type Fornecedor } from '@/lib/types/fornecedores';
 import Button from '@/components/Button';
 import Modal from '@/components/Modal';
 import { Toaster, toast } from 'react-hot-toast';
+import Text from '@/components/ui/Text';
+import Card from '@/components/ui/Card';
+import StatusIcon from '@/components/ui/StatusIcon';
 
-interface Fornecedor {
-  id: string;
-  nome: string;
-  cnpj: string;
-  contato: string;
-  created_at: string;
-}
+const fornecedorSchema = z.object({
+  nome: z.string().min(1, 'Nome é obrigatório'),
+  cnpj: z.string().min(14, 'CNPJ inválido').max(14, 'CNPJ inválido'),
+  email: z.string().email('Email inválido').optional().nullish(),
+  telefone: z
+    .string()
+    .min(10, 'Telefone inválido')
+    .max(11, 'Telefone inválido')
+    .optional()
+    .nullish(),
+  endereco: z.string().optional().nullish(),
+});
+
+type FornecedorFormData = z.infer<typeof fornecedorSchema>;
 
 export default function FornecedoresPage() {
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
@@ -21,27 +35,49 @@ export default function FornecedoresPage() {
   const [saving, setSaving] = useState(false);
   const [editingFornecedor, setEditingFornecedor] = useState<Fornecedor | null>(null);
 
-  async function fetchFornecedores() {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('fornecedores')
-      .select('*')
-      .order('nome');
-
-    if (error) {
-      console.error('Erro ao buscar fornecedores:', error);
-      toast.error('Não foi possível carregar os fornecedores. Tente novamente.');
-    } else {
-      setFornecedores(data);
-    }
-    setLoading(false);
-  }
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<FornecedorFormData>({
+    resolver: zodResolver(fornecedorSchema),
+  });
 
   useEffect(() => {
     fetchFornecedores();
   }, []);
 
-  async function handleSave(values: { nome: string; cnpj?: string; contato?: string }) {
+  useEffect(() => {
+    if (editingFornecedor) {
+      reset({
+        nome: editingFornecedor.nome,
+        cnpj: editingFornecedor.cnpj ?? '',
+        email: editingFornecedor.email ?? undefined,
+        telefone: editingFornecedor.telefone ?? undefined,
+        endereco: editingFornecedor.endereco ?? undefined,
+      });
+    } else {
+      reset({});
+    }
+  }, [editingFornecedor, reset]);
+
+  async function fetchFornecedores() {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.from('fornecedores').select('*').order('nome');
+
+      if (error) throw error;
+      setFornecedores(data || []);
+    } catch (err) {
+      console.error('Erro ao buscar fornecedores:', err);
+      toast.error('Erro ao carregar fornecedores');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSave(values: FornecedorFormData) {
     try {
       setSaving(true);
       let error;
@@ -57,9 +93,7 @@ export default function FornecedoresPage() {
           toast.success('Fornecedor atualizado com sucesso!');
         }
       } else {
-        const result = await supabase
-          .from('fornecedores')
-          .insert(values);
+        const result = await supabase.from('fornecedores').insert(values);
         error = result.error;
 
         if (!error) {
@@ -68,12 +102,12 @@ export default function FornecedoresPage() {
       }
 
       if (error) throw error;
-      
+
       await fetchFornecedores();
       handleCloseModal();
     } catch (err) {
       console.error(err);
-      if (err?.code === '23505') {
+      if ((err as any)?.code === '23505') {
         toast.error('Já existe um fornecedor com este CNPJ.');
       } else {
         toast.error('Não foi possível salvar o fornecedor. Tente novamente.');
@@ -86,19 +120,18 @@ export default function FornecedoresPage() {
   async function handleDelete(fornecedor: Fornecedor) {
     try {
       setSaving(true);
-      const { error } = await supabase
-        .from('fornecedores')
-        .delete()
-        .eq('id', fornecedor.id);
-      
+      const { error } = await supabase.from('fornecedores').delete().eq('id', fornecedor.id);
+
       if (error) throw error;
-      
+
       toast.success('Fornecedor excluído com sucesso!');
       await fetchFornecedores();
     } catch (err) {
       console.error(err);
-      if (err?.code === '23503') {
-        toast.error('Este fornecedor não pode ser excluído pois está vinculado a um ou mais lotes.');
+      if ((err as any)?.code === '23503') {
+        toast.error(
+          'Este fornecedor não pode ser excluído pois está vinculado a um ou mais lotes.'
+        );
       } else {
         toast.error('Não foi possível excluir o fornecedor. Tente novamente.');
       }
@@ -121,7 +154,7 @@ export default function FornecedoresPage() {
           Gestão de Fornecedores
         </h1>
         <div className="mt-3 sm:mt-0">
-          <Button 
+          <Button
             onClick={() => {
               setEditingFornecedor(null);
               setIsModalOpen(true);
@@ -131,7 +164,7 @@ export default function FornecedoresPage() {
           </Button>
         </div>
       </div>
-      
+
       {loading ? (
         <div className="mt-6 flex items-center justify-center">
           <div className="flex items-center space-x-2">
@@ -149,40 +182,47 @@ export default function FornecedoresPage() {
           </p>
         </div>
       ) : (
-        <div className="mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-900/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Nome
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  CNPJ
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Contato
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-              {fornecedores.map((fornecedor) => (
-                <tr key={fornecedor.id}>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <div className="text-sm text-gray-900 dark:text-white">{fornecedor.nome}</div>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">{fornecedor.cnpj || '-'}</div>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">{fornecedor.contato || '-'}</div>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
-                    <div className="flex justify-end space-x-2">
+        <Card variant="default">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nome
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    CNPJ
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Email
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Telefone
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ações
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {fornecedores.map((fornecedor) => (
+                  <tr key={fornecedor.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {fornecedor.nome}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {fornecedor.cnpj}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {fornecedor.email || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {fornecedor.telefone || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <Button
                         variant="secondary"
+                        className="mr-2"
                         onClick={() => {
                           setEditingFornecedor(fornecedor);
                           setIsModalOpen(true);
@@ -190,20 +230,16 @@ export default function FornecedoresPage() {
                       >
                         Editar
                       </Button>
-                      <Button
-                        variant="danger"
-                        disabled={saving}
-                        onClick={() => handleDelete(fornecedor)}
-                      >
-                        Deletar
+                      <Button variant="primary" onClick={() => handleDelete(fornecedor)}>
+                        Excluir
                       </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       <Toaster position="top-right" />
@@ -213,71 +249,95 @@ export default function FornecedoresPage() {
         onClose={handleCloseModal}
         title={editingFornecedor ? 'Editar Fornecedor' : 'Novo Fornecedor'}
       >
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const formData = new FormData(e.currentTarget);
-            handleSave({
-              nome: formData.get('nome') as string,
-              cnpj: formData.get('cnpj') as string,
-              contato: formData.get('contato') as string,
-            });
-          }}
-          className="space-y-4"
-        >
+        <form onSubmit={handleSubmit((data) => handleSave(data))} className="space-y-4">
           <div>
-            <label htmlFor="nome" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+            <Text variant="body-sm" weight="semibold">
               Nome
-            </label>
+            </Text>
             <input
-              type="text"
-              name="nome"
-              id="nome"
-              required
+              {...register('nome')}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               defaultValue={editingFornecedor?.nome}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
             />
+            {errors.nome && (
+              <Text variant="caption" color="danger">
+                {errors.nome.message}
+              </Text>
+            )}
           </div>
 
           <div>
-            <label htmlFor="cnpj" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+            <Text variant="body-sm" weight="semibold">
               CNPJ
-            </label>
+            </Text>
             <input
-              type="text"
-              name="cnpj"
-              id="cnpj"
-              defaultValue={editingFornecedor?.cnpj}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
+              {...register('cnpj')}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              defaultValue={editingFornecedor?.cnpj || ''}
             />
+            {errors.cnpj && (
+              <Text variant="caption" color="danger">
+                {errors.cnpj.message}
+              </Text>
+            )}
           </div>
 
           <div>
-            <label htmlFor="contato" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-              Contato
-            </label>
+            <Text variant="body-sm" weight="semibold">
+              Email
+            </Text>
             <input
-              type="text"
-              name="contato"
-              id="contato"
-              defaultValue={editingFornecedor?.contato}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
+              type="email"
+              {...register('email')}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              defaultValue={editingFornecedor?.email || ''}
             />
+            {errors.email && (
+              <Text variant="caption" color="danger">
+                {errors.email.message}
+              </Text>
+            )}
+          </div>
+
+          <div>
+            <Text variant="body-sm" weight="semibold">
+              Telefone
+            </Text>
+            <input
+              type="tel"
+              {...register('telefone')}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              defaultValue={editingFornecedor?.telefone || ''}
+            />
+            {errors.telefone && (
+              <Text variant="caption" color="danger">
+                {errors.telefone.message}
+              </Text>
+            )}
+          </div>
+
+          <div>
+            <Text variant="body-sm" weight="semibold">
+              Endereço
+            </Text>
+            <textarea
+              {...register('endereco')}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              defaultValue={editingFornecedor?.endereco || ''}
+              rows={3}
+            />
+            {errors.endereco && (
+              <Text variant="caption" color="danger">
+                {errors.endereco.message}
+              </Text>
+            )}
           </div>
 
           <div className="mt-5 flex justify-end space-x-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleCloseModal}
-              disabled={saving}
-            >
+            <Button type="button" variant="secondary" onClick={handleCloseModal} disabled={saving}>
               Cancelar
             </Button>
-            <Button
-              type="submit"
-              disabled={saving}
-            >
+            <Button type="submit" disabled={saving}>
               {saving ? 'Salvando...' : 'Salvar'}
             </Button>
           </div>

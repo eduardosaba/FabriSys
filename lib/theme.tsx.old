@@ -1,0 +1,1344 @@
+'use client';
+
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { ThemeSettings } from '@/lib/types';
+import { supabase } from '@/lib/supabase';
+
+interface ThemeContextType {
+  theme: ThemeSettings;
+  loading: boolean;
+  error: Error | null;
+  resolvedTheme: 'light' | 'dark';
+  systemTheme: ThemeSettings;
+  updateTheme: (newTheme: Partial<ThemeSettings>, asDefault?: boolean) => Promise<void>;
+  resetToSystemTheme: () => Promise<void>;
+}
+
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
+const defaultTheme: ThemeSettings = {
+  name: 'Sistema Lari',
+  logo_url: '/logo.png',
+  logo_scale: 1.0,
+  font_family: 'Inter',
+  border_radius: '0.5rem',
+  theme_mode: 'light' as const,
+  colors: {
+    light: {
+      primary: '#2563eb',
+      secondary: '#4f46e5',
+      accent: '#f97316',
+      background: '#ffffff',
+      text: '#111827'
+    },
+    dark: {
+      primary: '#3b82f6',
+      secondary: '#6366f1',
+      accent: '#f97316',
+      background: '#1a1a1a',
+      text: '#f3f4f6'
+    }
+  }
+};
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<ThemeSettings>(defaultTheme);
+  const [systemTheme, setSystemTheme] = useState<ThemeSettings>(defaultTheme);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+
+  const applyTheme = useCallback((themeToApply: ThemeSettings) => {
+    if (typeof window === 'undefined') return;
+
+    const mode = themeToApply.theme_mode === 'system' ? 'light' : themeToApply.theme_mode;
+    const colors = themeToApply.colors[mode];
+
+    const root = document.documentElement;
+
+    root.style.setProperty('--primary', colors.primary);
+    root.style.setProperty('--secondary', colors.secondary);
+    root.style.setProperty('--accent', colors.accent);
+    root.style.setProperty('--background', colors.background);
+    root.style.setProperty('--text', colors.text);
+    root.style.setProperty('--border-radius', themeToApply.border_radius);
+    root.style.setProperty('--font-family', themeToApply.font_family);
+    root.style.setProperty('--logo-scale', themeToApply.logo_scale.toString());
+
+    setResolvedTheme(mode);
+  }, []);
+
+  const fetchTheme = useCallback(async (): Promise<ThemeSettings> => {
+    try {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'theme')
+        .single();
+
+      if (error) {
+        console.error('Erro ao buscar tema:', error);
+        return defaultTheme;
+      }
+
+      return data?.value as ThemeSettings || defaultTheme;
+    } catch (err) {
+      console.error('Erro ao carregar tema:', err);
+      return defaultTheme;
+    }
+  }, []);
+
+  const resetToSystemTheme = useCallback(async () => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('theme-preference');
+      }
+      setTheme(systemTheme);
+      applyTheme(systemTheme);
+    } catch (err) {
+      console.error('Erro ao resetar tema:', err);
+      setError(err instanceof Error ? err : new Error('Erro ao resetar tema'));
+    }
+  }, [systemTheme, applyTheme]);
+
+  const updateTheme = useCallback(async (newTheme: Partial<ThemeSettings>, asDefault = false) => {
+    try {
+      setLoading(true);
+      const updatedTheme = { ...theme, ...newTheme };
+
+      if (asDefault) {
+        const { error: updateError } = await supabase
+          .from('system_settings')
+          .upsert({
+            key: 'theme',
+            value: updatedTheme,
+            updated_at: new Date().toISOString()
+          });
+
+        if (updateError) throw updateError;
+        setSystemTheme(updatedTheme);
+
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem('theme-preference');
+        }
+      } else {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('theme-preference', JSON.stringify(updatedTheme));
+        }
+      }
+
+      setTheme(updatedTheme);
+      applyTheme(updatedTheme);
+    } catch (err) {
+      console.error('Erro ao atualizar tema:', err);
+      setError(err instanceof Error ? err : new Error('Erro ao atualizar tema'));
+    } finally {
+      setLoading(false);
+    }
+  }, [theme, applyTheme]);
+
+  useEffect(() => {
+    async function initializeTheme() {
+      try {
+        setLoading(true);
+        const systemTheme = await fetchTheme();
+        setSystemTheme(systemTheme);
+
+        let activeTheme = systemTheme;
+        if (typeof window !== 'undefined') {
+          const storedTheme = window.localStorage.getItem('theme-preference');
+          if (storedTheme) {
+            try {
+              activeTheme = JSON.parse(storedTheme);
+            } catch (err) {
+              console.error('Erro ao parse do tema local:', err);
+            }
+          }
+        }
+
+        setTheme(activeTheme);
+        applyTheme(activeTheme);
+      } catch (err) {
+        console.error('Erro ao inicializar tema:', err);
+        setError(err instanceof Error ? err : new Error('Erro ao inicializar tema'));
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    initializeTheme();
+  }, [applyTheme, fetchTheme]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const query = window.matchMedia('(prefers-color-scheme: dark)');
+
+      const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
+        if (theme.theme_mode === 'system') {
+          setResolvedTheme(e.matches ? 'dark' : 'light');
+        }
+      };
+
+      handleChange(query);
+      query.addEventListener('change', handleChange);
+
+      return () => query.removeEventListener('change', handleChange);
+    }
+  }, [theme.theme_mode]);
+
+  const value = {
+    theme,
+    loading,
+    error,
+    resolvedTheme,
+    systemTheme,
+    updateTheme,
+    resetToSystemTheme
+  };
+
+  return (
+    <ThemeContext.Provider value={value}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+  density: 'comfortable' as const,
+
+  const applyTheme = useCallback((themeToApply: ThemeSettings) => {
+
+    if (typeof window === 'undefined') return;  colors: {  resetToSystemTheme: () => Promise<void>;
+
+
+
+    const mode = themeToApply.theme_mode === 'system' ? 'light' : themeToApply.theme_mode;    light: {
+
+    const colors = themeToApply.colors[mode as 'light' | 'dark'];
+
+      primary: '#2563eb',}  theme: ThemeSettings;  theme: ThemeSettings;
+
+    const root = document.documentElement;
+
+    root.style.setProperty('--primary', colors.primary);      secondary: '#4f46e5',
+
+    root.style.setProperty('--secondary', colors.secondary);
+
+    root.style.setProperty('--accent', colors.accent);      accent: '#f97316',
+
+    root.style.setProperty('--background', colors.background);
+
+    root.style.setProperty('--text', colors.text);      background: '#ffffff',
+
+    root.style.setProperty('--border-radius', themeToApply.border_radius);
+
+    root.style.setProperty('--density', themeToApply.density);      text: '#111827'const ThemeContext = createContext<ThemeContextType | undefined>(undefined);  loading: boolean;  loading: boolean;
+
+    root.style.setProperty('--font-family', themeToApply.font_family);
+
+    root.style.setProperty('--logo-scale', themeToApply.logo_scale.toString());    },
+
+
+
+    setResolvedTheme(mode as 'light' | 'dark');    dark: {
+
+  }, []);
+
+      primary: '#3b82f6',
+
+  const fetchTheme = useCallback(async (): Promise<ThemeSettings> => {
+
+    try {      secondary: '#6366f1',const defaultTheme: ThemeSettings = {  error: Error | null;  error: Error | null;
+
+      const { data, error } = await supabase
+
+        .from('system_settings')      accent: '#f97316',
+
+        .select('value')
+
+        .eq('key', 'theme')      background: '#1a1a1a',  name: 'FabriSys',
+
+        .single();
+
+      text: '#f3f4f6'
+
+      if (error) {
+
+        console.error('Erro ao buscar tema:', error);    }  logo_url: '/logo.png',  resolvedTheme: 'light' | 'dark';  resolvedTheme: 'light' | 'dark';
+
+        return defaultTheme;
+
+      }  }
+
+
+
+      return data?.value as ThemeSettings || defaultTheme;};  logo_scale: 1.0,
+
+    } catch (err) {
+
+      console.error('Erro ao carregar tema:', err);
+
+      return defaultTheme;
+
+    }export function ThemeProvider({ children }: { children: React.ReactNode }) {  font_family: 'Inter',  systemTheme: ThemeSettings;  systemTheme: ThemeSettings;
+
+  }, []);
+
+  const [theme, setTheme] = useState<ThemeSettings>(defaultTheme);
+
+  const resetToSystemTheme = useCallback(async () => {
+
+    try {  const [systemTheme, setSystemTheme] = useState<ThemeSettings>(defaultTheme);  border_radius: '0.5rem',
+
+      if (typeof window !== 'undefined') {
+
+        window.localStorage.removeItem('theme-preference');  const [loading, setLoading] = useState(true);
+
+      }
+
+      setTheme(systemTheme);  const [error, setError] = useState<Error | null>(null);  theme_mode: 'light' as const,  updateTheme: (newTheme: Partial<ThemeSettings>, asDefault?: boolean) => Promise<void>;  updateTheme: (newTheme: Partial<ThemeSettings>, asDefault?: boolean) => Promise<void>;
+
+      applyTheme(systemTheme);
+
+    } catch (err) {  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+
+      console.error('Erro ao resetar tema:', err);
+
+      setError(err instanceof Error ? err : new Error('Erro ao resetar tema'));  density: 'comfortable' as const,
+
+    }
+
+  }, [systemTheme, applyTheme]);  // Aplicar tema ao DOM
+
+
+
+  const updateTheme = useCallback(async (newTheme: Partial<ThemeSettings>, asDefault = false) => {  const applyTheme = useCallback((themeToApply: ThemeSettings) => {  colors: {  resetToSystemTheme: () => Promise<void>;  resetToSystemTheme: () => Promise<void>;
+
+    try {
+
+      setLoading(true);    if (typeof window === 'undefined') return;
+
+      const updatedTheme = { ...theme, ...newTheme };
+
+    light: {
+
+      if (asDefault) {
+
+        const { error: updateError } = await supabase    const mode = themeToApply.theme_mode === 'system' ? 'light' : themeToApply.theme_mode;
+
+          .from('system_settings')
+
+          .upsert({    const colors = themeToApply.colors[mode as 'light' | 'dark'];      primary: '#2563eb',}}
+
+            key: 'theme',
+
+            value: updatedTheme,
+
+            updated_at: new Date().toISOString()
+
+          });    const root = document.documentElement;      secondary: '#4f46e5',
+
+
+
+        if (updateError) throw updateError;    root.style.setProperty('--primary', colors.primary);
+
+        setSystemTheme(updatedTheme);
+
+            root.style.setProperty('--secondary', colors.secondary);      accent: '#f97316',
+
+        if (typeof window !== 'undefined') {
+
+          window.localStorage.removeItem('theme-preference');    root.style.setProperty('--accent', colors.accent);
+
+        }
+
+            root.style.setProperty('--background', colors.background);      background: '#ffffff',
+
+        setTheme(updatedTheme);
+
+      } else {    root.style.setProperty('--text', colors.text);
+
+        if (typeof window !== 'undefined') {
+
+          window.localStorage.setItem('theme-preference', JSON.stringify(updatedTheme));    root.style.setProperty('--border-radius', themeToApply.border_radius);      text: '#111827'const ThemeContext = createContext<ThemeContextType | undefined>(undefined);const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
+        }
+
+        setTheme(updatedTheme);    root.style.setProperty('--density', themeToApply.density);
+
+      }
+
+    root.style.setProperty('--font-family', themeToApply.font_family);    },
+
+      applyTheme(updatedTheme);
+
+    } catch (err) {    root.style.setProperty('--logo-scale', themeToApply.logo_scale.toString());
+
+      console.error('Erro ao atualizar tema:', err);
+
+      setError(err instanceof Error ? err : new Error('Erro desconhecido ao atualizar tema'));    dark: {
+
+    } finally {
+
+      setLoading(false);    // Atualizar tema resolvido
+
+    }
+
+  }, [theme, applyTheme]);    setResolvedTheme(mode as 'light' | 'dark');      primary: '#3b82f6',
+
+
+
+  useEffect(() => {  }, []);
+
+    const initTheme = async () => {
+
+      try {      secondary: '#6366f1',const defaultTheme: ThemeSettings = {const defaultTheme: ThemeSettings = {
+
+        setLoading(true);
+
+        const systemThemeData = await fetchTheme();  // Buscar tema do sistema
+
+        setSystemTheme(systemThemeData);
+
+  const fetchTheme = useCallback(async (): Promise<ThemeSettings> => {      accent: '#f97316',
+
+        if (typeof window !== 'undefined') {
+
+          const savedTheme = window.localStorage.getItem('theme-preference');    try {
+
+          if (savedTheme) {
+
+            const parsedTheme = JSON.parse(savedTheme);      const { data, error } = await supabase      background: '#1a1a1a',  name: 'FabriSys',  name: 'FabriSys',
+
+            setTheme(parsedTheme);
+
+            applyTheme(parsedTheme);        .from('system_settings')
+
+            return;
+
+          }        .select('value')      text: '#f3f4f6'
+
+        }
+
+        .eq('key', 'theme')
+
+        setTheme(systemThemeData);
+
+        applyTheme(systemThemeData);        .single();    }  logo_url: '/logo.png',  logo_url: '/logo.png',
+
+      } catch (err) {
+
+        console.error('Erro ao inicializar tema:', err);
+
+        setError(err instanceof Error ? err : new Error('Erro ao inicializar tema'));
+
+      } finally {      if (error) {  }
+
+        setLoading(false);
+
+      }        console.error('Erro ao buscar tema:', error);
+
+    };
+
+        return defaultTheme;};  logo_scale: 1.0,  logo_scale: 1.0,
+
+    initTheme();
+
+  }, [fetchTheme, applyTheme]);      }
+
+
+
+  return (
+
+    <ThemeContext.Provider
+
+      value={{      const themeData = data?.value as ThemeSettings;
+
+        theme,
+
+        loading,export function ThemeProvider({ children }: { children: React.ReactNode }) {  font_family: 'Inter',  font_family: 'Inter',
+
+        error,
+
+        resolvedTheme,      // Validar campos necessários
+
+        systemTheme,
+
+        updateTheme,      const requiredFields = Object.keys(defaultTheme);  // Estados
+
+        resetToSystemTheme,
+
+      }}      const missingFields = requiredFields.filter(field => !(field in themeData));
+
+    >
+
+      {children}  const [theme, setTheme] = useState<ThemeSettings>(defaultTheme);  border_radius: '0.5rem',  border_radius: '0.5rem',
+
+    </ThemeContext.Provider>
+
+  );      if (missingFields.length > 0) {
+
+}
+
+        console.warn('Campos ausentes no tema:', missingFields);  const [systemTheme, setSystemTheme] = useState<ThemeSettings>(defaultTheme);
+
+export function useTheme() {
+
+  const context = useContext(ThemeContext);        return { ...defaultTheme, ...themeData };
+
+  if (context === undefined) {
+
+    throw new Error('useTheme deve ser usado dentro de um ThemeProvider');      }  const [loading, setLoading] = useState(true);  theme_mode: 'light' as const,  theme_mode: 'light' as const,
+
+  }
+
+  return context;
+
+}
+      return themeData;  const [error, setError] = useState<Error | null>(null);
+
+    } catch (err) {
+
+      console.error('Erro ao carregar tema:', err);  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');  density: 'comfortable' as const,  density: 'comfortable' as const,
+
+      setError(err instanceof Error ? err : new Error('Erro desconhecido ao carregar tema'));
+
+      return defaultTheme;
+
+    }
+
+  }, []);  // Aplicar tema ao DOM  colors: {  colors: {
+
+
+
+  // Resetar para o tema do sistema  const applyTheme = useCallback((themeToApply: ThemeSettings) => {
+
+  const resetToSystemTheme = useCallback(async () => {
+
+    try {    if (typeof window === 'undefined') return;    light: {    light: {
+
+      if (typeof window !== 'undefined') {
+
+        window.localStorage.removeItem('theme-preference');
+
+      }
+
+      setTheme(systemTheme);    const mode = themeToApply.theme_mode === 'system' ? 'light' : themeToApply.theme_mode;      primary: '#2563eb',      primary: '#2563eb',
+
+      applyTheme(systemTheme);
+
+    } catch (err) {    const colors = themeToApply.colors[mode as 'light' | 'dark'];
+
+      console.error('Erro ao resetar tema:', err);
+
+      setError(err instanceof Error ? err : new Error('Erro ao resetar tema'));      secondary: '#4f46e5',      secondary: '#4f46e5',
+
+    }
+
+  }, [systemTheme, applyTheme]);    const root = document.documentElement;
+
+
+
+  // Atualizar tema    root.style.setProperty('--primary', colors.primary);      accent: '#f97316',      accent: '#f97316',
+
+  const updateTheme = useCallback(async (newTheme: Partial<ThemeSettings>, asDefault = false) => {
+
+    try {    root.style.setProperty('--secondary', colors.secondary);
+
+      setLoading(true);
+
+      const updatedTheme = { ...theme, ...newTheme };    root.style.setProperty('--accent', colors.accent);      background: '#ffffff',      background: '#ffffff',
+
+
+
+      if (asDefault) {    root.style.setProperty('--background', colors.background);
+
+        // Atualizar tema do sistema
+
+        const { error: updateError } = await supabase    root.style.setProperty('--text', colors.text);      text: '#111827'      text: '#111827'
+
+          .from('system_settings')
+
+          .upsert({    root.style.setProperty('--border-radius', themeToApply.border_radius);
+
+            key: 'theme',
+
+            value: updatedTheme,    root.style.setProperty('--density', themeToApply.density);    },    },
+
+            updated_at: new Date().toISOString()
+
+          });    root.style.setProperty('--font-family', themeToApply.font_family);
+
+
+
+        if (updateError) throw updateError;    root.style.setProperty('--logo-scale', themeToApply.logo_scale.toString());    dark: {    dark: {
+
+        
+
+        setSystemTheme(updatedTheme);
+
+        setTheme(updatedTheme);
+
+            // Atualizar tema resolvido      primary: '#3b82f6',      primary: '#3b82f6',
+
+        // Remover preferência do usuário
+
+        if (typeof window !== 'undefined') {    setResolvedTheme(mode as 'light' | 'dark');
+
+          window.localStorage.removeItem('theme-preference');
+
+        }  }, []);      secondary: '#6366f1',      secondary: '#6366f1',
+
+      } else {
+
+        // Salvar como preferência do usuário
+
+        if (typeof window !== 'undefined') {
+
+          window.localStorage.setItem('theme-preference', JSON.stringify(updatedTheme));  // Buscar tema do sistema      accent: '#f97316',      accent: '#f97316',
+
+        }
+
+        setTheme(updatedTheme);  const fetchTheme = useCallback(async (): Promise<ThemeSettings> => {
+
+      }
+
+    try {      background: '#1a1a1a',      background: '#1a1a1a',
+
+      applyTheme(updatedTheme);
+
+    } catch (err) {      const { data, error } = await supabase
+
+      console.error('Erro ao atualizar tema:', err);
+
+      setError(err instanceof Error ? err : new Error('Erro desconhecido ao atualizar tema'));        .from('system_settings')      text: '#f3f4f6'      text: '#f3f4f6'
+
+    } finally {
+
+      setLoading(false);        .select('value')
+
+    }
+
+  }, [theme, applyTheme]);        .eq('key', 'theme')    }    }
+
+
+
+  // Inicializar tema        .single();
+
+  useEffect(() => {
+
+    const initTheme = async () => {  }  }
+
+      try {
+
+        setLoading(true);      if (error) {
+
+        
+
+        // Buscar tema do sistema        console.error('Erro ao buscar tema:', error);};};
+
+        const systemThemeData = await fetchTheme();
+
+        setSystemTheme(systemThemeData);        return defaultTheme;
+
+
+
+        // Verificar preferência do usuário      }
+
+        if (typeof window !== 'undefined') {
+
+          const savedTheme = window.localStorage.getItem('theme-preference');
+
+          if (savedTheme) {
+
+            const parsedTheme = JSON.parse(savedTheme);      const themeData = data?.value as ThemeSettings;export function ThemeProvider({ children }: { children: React.ReactNode }) {export function ThemeProvider({ children }: { children: React.ReactNode }) {
+
+            setTheme(parsedTheme);
+
+            applyTheme(parsedTheme);
+
+            return;
+
+          }      // Validar campos necessários  // Estados  const [theme, setTheme] = useState<ThemeSettings>(defaultTheme);
+
+        }
+
+      const requiredFields = Object.keys(defaultTheme);
+
+        // Se não houver preferência, usar tema do sistema
+
+        setTheme(systemThemeData);      const missingFields = requiredFields.filter(field => !(field in themeData));  const [theme, setTheme] = useState<ThemeSettings>(defaultTheme);  const [systemTheme, setSystemTheme] = useState<ThemeSettings>(defaultTheme);
+
+        applyTheme(systemThemeData);
+
+      } catch (err) {
+
+        console.error('Erro ao inicializar tema:', err);
+
+        setError(err instanceof Error ? err : new Error('Erro ao inicializar tema'));      if (missingFields.length > 0) {  const [systemTheme, setSystemTheme] = useState<ThemeSettings>(defaultTheme);  const [loading, setLoading] = useState(true);
+
+      } finally {
+
+        setLoading(false);        console.warn('Campos ausentes no tema:', missingFields);
+
+      }
+
+    };        return { ...defaultTheme, ...themeData };  const [loading, setLoading] = useState(true);  const [error, setError] = useState<Error | null>(null);
+
+
+
+    initTheme();      }
+
+  }, [fetchTheme, applyTheme]);
+
+  const [error, setError] = useState<Error | null>(null);  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+
+  return (
+
+    <ThemeContext.Provider      return themeData;
+
+      value={{
+
+        theme,    } catch (err) {  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+
+        loading,
+
+        error,      console.error('Erro ao carregar tema:', err);
+
+        resolvedTheme,
+
+        systemTheme,      setError(err instanceof Error ? err : new Error('Erro desconhecido ao carregar tema'));  // Atualiza o modo do tema (light/dark) apenas no DOM
+
+        updateTheme,
+
+        resetToSystemTheme,      return defaultTheme;
+
+      }}
+
+    >    }  // Aplicar tema ao DOM  const updateThemeMode = useCallback((mode: 'light' | 'dark') => {
+
+      {children}
+
+    </ThemeContext.Provider>  }, []);
+
+  );
+
+}  const applyTheme = useCallback((themeToApply: ThemeSettings) => {    if (typeof window === 'undefined') return;
+
+
+
+export function useTheme() {  // Resetar para o tema do sistema
+
+  const context = useContext(ThemeContext);
+
+  if (context === undefined) {  const resetToSystemTheme = useCallback(async () => {    if (typeof window === 'undefined') return;    document.body.classList.remove('light', 'dark');
+
+    throw new Error('useTheme deve ser usado dentro de um ThemeProvider');
+
+  }    try {
+
+  return context;
+
+}      if (typeof window !== 'undefined') {    document.body.classList.add(mode);
+
+        window.localStorage.removeItem('theme-preference');
+
+      }    const mode = themeToApply.theme_mode === 'system' ? 'light' : themeToApply.theme_mode;    setResolvedTheme(mode);
+
+      setTheme(systemTheme);
+
+      applyTheme(systemTheme);    const colors = themeToApply.colors[mode as 'light' | 'dark'];  }, []);
+
+    } catch (err) {
+
+      console.error('Erro ao resetar tema:', err);
+
+      setError(err instanceof Error ? err : new Error('Erro ao resetar tema'));
+
+    }    const root = document.documentElement;  // Atualiza as cores do tema atual no DOM
+
+  }, [systemTheme, applyTheme]);
+
+    root.style.setProperty('--primary', colors.primary);  const updateThemeColors = useCallback((colors: ThemeSettings['colors'], mode: 'light' | 'dark') => {
+
+  // Atualizar tema
+
+  const updateTheme = useCallback(async (newTheme: Partial<ThemeSettings>, asDefault = false) => {    root.style.setProperty('--secondary', colors.secondary);    if (typeof window === 'undefined') return;
+
+    try {
+
+      setLoading(true);    root.style.setProperty('--accent', colors.accent);    const root = document.documentElement;
+
+      const updatedTheme = { ...theme, ...newTheme };
+
+    root.style.setProperty('--background', colors.background);    const currentColors = colors[mode];
+
+      if (asDefault) {
+
+        // Atualizar tema do sistema    root.style.setProperty('--text', colors.text);    Object.entries(currentColors).forEach(([key, value]) => {
+
+        const { error: updateError } = await supabase
+
+          .from('system_settings')    root.style.setProperty('--border-radius', themeToApply.border_radius);      root.style.setProperty(`--${key}`, value);
+
+          .upsert({
+
+            key: 'theme',    root.style.setProperty('--density', themeToApply.density);    });
+
+            value: updatedTheme,
+
+            updated_at: new Date().toISOString()    root.style.setProperty('--font-family', themeToApply.font_family);  }, []);
+
+          });
+
+    root.style.setProperty('--logo-scale', themeToApply.logo_scale.toString());
+
+        if (updateError) throw updateError;
+
+          // Aplica o tema completo no DOM
+
+        setSystemTheme(updatedTheme);
+
+        setTheme(updatedTheme);    // Atualizar tema resolvido  const applyTheme = useCallback((themeToApply: ThemeSettings) => {
+
+        
+
+        // Remover preferência do usuário    setResolvedTheme(mode as 'light' | 'dark');    if (typeof window === 'undefined') return;
+
+        if (typeof window !== 'undefined') {
+
+          window.localStorage.removeItem('theme-preference');  }, []);
+
+        }
+
+      } else {    try {
+
+        // Salvar como preferência do usuário
+
+        if (typeof window !== 'undefined') {  // Buscar tema do sistema      const root = document.documentElement;
+
+          window.localStorage.setItem('theme-preference', JSON.stringify(updatedTheme));
+
+        }  const fetchTheme = useCallback(async (): Promise<ThemeSettings> => {      
+
+        setTheme(updatedTheme);
+
+      }    try {      // Determinar e aplicar o modo do tema
+
+
+
+      applyTheme(updatedTheme);      const { data, error } = await supabase      const mode = themeToApply.theme_mode === 'system'
+
+    } catch (err) {
+
+      console.error('Erro ao atualizar tema:', err);        .from('system_settings')        ? window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+
+      setError(err instanceof Error ? err : new Error('Erro desconhecido ao atualizar tema'));
+
+    } finally {        .select('value')        : themeToApply.theme_mode === 'dark' ? 'dark' : 'light';
+
+      setLoading(false);
+
+    }        .eq('key', 'theme')      
+
+  }, [theme, applyTheme]);
+
+        .single();      updateThemeMode(mode);
+
+  // Inicializar tema
+
+  useEffect(() => {      updateThemeColors(themeToApply.colors, mode);
+
+    const initTheme = async () => {
+
+      try {      if (error) {      
+
+        setLoading(true);
+
+                console.error('Erro ao buscar tema:', error);      // Atualizar outras propriedades
+
+        // Buscar tema do sistema
+
+        const systemThemeData = await fetchTheme();        return defaultTheme;      root.style.setProperty('--font-family', themeToApply.font_family);
+
+        setSystemTheme(systemThemeData);
+
+      }      root.style.setProperty('--border-radius', themeToApply.border_radius);
+
+        // Verificar preferência do usuário
+
+        if (typeof window !== 'undefined') {      root.dataset.density = themeToApply.density;
+
+          const savedTheme = window.localStorage.getItem('theme-preference');
+
+          if (savedTheme) {      const themeData = data?.value as ThemeSettings;    } catch (error) {
+
+            const parsedTheme = JSON.parse(savedTheme);
+
+            setTheme(parsedTheme);      console.error('Erro ao aplicar tema:', error);
+
+            applyTheme(parsedTheme);
+
+            return;      // Validar campos necessários    }
+
+          }
+
+        }      const requiredFields = Object.keys(defaultTheme);  }, [updateThemeMode, updateThemeColors]);
+
+
+
+        // Se não houver preferência, usar tema do sistema      const missingFields = requiredFields.filter(field => !(field in themeData));
+
+        setTheme(systemThemeData);
+
+        applyTheme(systemThemeData);  // Efeito para inicializar o tema
+
+      } catch (err) {
+
+        console.error('Erro ao inicializar tema:', err);      if (missingFields.length > 0) {  useEffect(() => {
+
+        setError(err instanceof Error ? err : new Error('Erro ao inicializar tema'));
+
+      } finally {        console.warn('Campos ausentes no tema:', missingFields);    const initTheme = async () => {
+
+        setLoading(false);
+
+      }        return { ...defaultTheme, ...themeData };      if (typeof window === 'undefined') return;
+
+    };
+
+      }
+
+    initTheme();
+
+  }, [fetchTheme, applyTheme]);      try {
+
+
+
+  return (      return themeData;        // Tentar carregar do localStorage
+
+    <ThemeContext.Provider
+
+      value={{    } catch (err) {        const savedTheme = window.localStorage.getItem('theme');
+
+        theme,
+
+        loading,      console.error('Erro ao carregar tema:', err);        if (savedTheme) {
+
+        error,
+
+        resolvedTheme,      setError(err instanceof Error ? err : new Error('Erro desconhecido ao carregar tema'));          try {
+
+        systemTheme,
+
+        updateTheme,      return defaultTheme;            const parsedTheme = JSON.parse(savedTheme) as ThemeSettings;
+
+        resetToSystemTheme,
+
+      }}    }            setTheme(parsedTheme);
+
+    >
+
+      {children}  }, []);          } catch (e) {
+
+    </ThemeContext.Provider>
+
+  );            console.error('Erro ao processar tema do localStorage:', e);
+
+}
+
+  // Resetar para o tema do sistema            const newTheme = await fetchTheme();
+
+export function useTheme() {
+
+  const context = useContext(ThemeContext);  const resetToSystemTheme = useCallback(async () => {            setTheme(newTheme);
+
+  if (context === undefined) {
+
+    throw new Error('useTheme deve ser usado dentro de um ThemeProvider');    try {          }
+
+  }
+
+  return context;      if (typeof window !== 'undefined') {        } else {
+
+}
+        window.localStorage.removeItem('theme-preference');          const newTheme = await fetchTheme();
+
+      }          setTheme(newTheme);
+
+      setTheme(systemTheme);        }
+
+      applyTheme(systemTheme);      } catch (e) {
+
+    } catch (err) {        console.error('Erro ao inicializar tema:', e);
+
+      console.error('Erro ao resetar tema:', err);        setTheme(defaultTheme);
+
+      setError(err instanceof Error ? err : new Error('Erro ao resetar tema'));      }
+
+    }    };
+
+  }, [systemTheme, applyTheme]);
+
+    initTheme();
+
+  // Atualizar tema  }, []);
+
+  const updateTheme = useCallback(async (newTheme: Partial<ThemeSettings>, asDefault = false) => {
+
+    try {
+
+      setLoading(true);
+
+      const updatedTheme = { ...theme, ...newTheme };  // Função para carregar tema do banco
+
+  const loadThemeFromDB = useCallback(async () => {
+
+      if (asDefault) {    try {
+
+        // Atualizar tema do sistema      const { data, error } = await supabase
+
+        const { error: updateError } = await supabase        .from('system_settings')
+
+          .from('system_settings')        .select('value')
+
+          .upsert({        .eq('key', 'theme')
+
+            key: 'theme',        .maybeSingle();
+
+            value: updatedTheme,
+
+            updated_at: new Date().toISOString()      if (error) throw error;
+
+          });      return data?.value as ThemeSettings || defaultTheme;
+
+    } catch (err) {
+
+        if (updateError) throw updateError;      console.error('Erro ao carregar tema do banco:', err);
+
+              return defaultTheme;
+
+        setSystemTheme(updatedTheme);    }
+
+        setTheme(updatedTheme);  }, []);
+
+        
+
+        // Remover preferência do usuário  // Aplica o tema no DOM
+
+        if (typeof window !== 'undefined') {  const applyTheme = useCallback((themeToApply: ThemeSettings) => {
+
+          window.localStorage.removeItem('theme-preference');    if (typeof window === 'undefined') return;
+
+        }
+
+      } else {    const mode = themeToApply.theme_mode === 'system' ? 'light' : themeToApply.theme_mode;
+
+        // Salvar como preferência do usuário    const colors = themeToApply.colors[mode];
+
+        if (typeof window !== 'undefined') {
+
+          window.localStorage.setItem('theme-preference', JSON.stringify(updatedTheme));    const root = document.documentElement;
+
+        }    root.style.setProperty('--primary', colors.primary);
+
+        setTheme(updatedTheme);    root.style.setProperty('--secondary', colors.secondary);
+
+      }    root.style.setProperty('--accent', colors.accent);
+
+    root.style.setProperty('--background', colors.background);
+
+      applyTheme(updatedTheme);    root.style.setProperty('--text', colors.text);
+
+    } catch (err) {    root.style.setProperty('--border-radius', themeToApply.border_radius);
+
+      console.error('Erro ao atualizar tema:', err);    root.style.setProperty('--density', themeToApply.density);
+
+      setError(err instanceof Error ? err : new Error('Erro desconhecido ao atualizar tema'));    root.style.setProperty('--font-family', themeToApply.font_family);
+
+    } finally {    root.style.setProperty('--logo-scale', themeToApply.logo_scale.toString());
+
+      setLoading(false);
+
+    }    // Atualizar tema resolvido
+
+  }, [theme, applyTheme]);    setResolvedTheme(mode);
+
+  }, []);
+
+  // Inicializar tema
+
+  useEffect(() => {  // Buscar tema do sistema
+
+    const initTheme = async () => {  useEffect(() => {
+
+      try {    const syncTheme = async () => {
+
+        setLoading(true);      if (theme && !loading && typeof window !== 'undefined') {
+
+                try {
+
+        // Buscar tema do sistema          // Salvar no localStorage
+
+        const systemThemeData = await fetchTheme();          window.localStorage.setItem('theme', JSON.stringify(theme));
+
+        setSystemTheme(systemThemeData);          
+
+          // Salvar no banco de dados
+
+        // Verificar preferência do usuário          const { error } = await supabase
+
+        if (typeof window !== 'undefined') {            .from('system_settings')
+
+          const savedTheme = window.localStorage.getItem('theme-preference');            .upsert({
+
+          if (savedTheme) {              key: 'theme',
+
+            const parsedTheme = JSON.parse(savedTheme);              value: theme,
+
+            setTheme(parsedTheme);              updated_at: new Date().toISOString()
+
+            applyTheme(parsedTheme);            });
+
+            return;
+
+          }          if (error) throw error;
+
+        }        } catch (err) {
+
+          console.error('Erro ao sincronizar tema:', err);
+
+        // Se não houver preferência, usar tema do sistema          setError(err instanceof Error ? err : new Error('Erro desconhecido ao sincronizar tema'));
+
+        setTheme(systemThemeData);        }
+
+        applyTheme(systemThemeData);      }
+
+      } catch (err) {    };
+
+        console.error('Erro ao inicializar tema:', err);
+
+        setError(err instanceof Error ? err : new Error('Erro ao inicializar tema'));    syncTheme();
+
+      } finally {  }, [theme, loading]);
+
+        setLoading(false);
+
+      }  // Resetar para o tema do sistema
+
+    };  const resetToSystemTheme = useCallback(async () => {
+
+    try {
+
+    initTheme();      if (typeof window !== 'undefined') {
+
+  }, [fetchTheme, applyTheme]);        window.localStorage.removeItem('theme-preference');
+
+      }
+
+  return (      setTheme(systemTheme);
+
+    <ThemeContext.Provider      applyTheme(systemTheme);
+
+      value={{    } catch (err) {
+
+        theme,      console.error('Erro ao resetar tema:', err);
+
+        loading,      setError(err instanceof Error ? err : new Error('Erro ao resetar tema'));
+
+        error,    }
+
+        resolvedTheme,  }, [systemTheme, applyTheme]);
+
+        systemTheme,
+
+        updateTheme,  // Atualizar tema
+
+        resetToSystemTheme,  const updateTheme = useCallback(async (newTheme: Partial<ThemeSettings>, asDefault: boolean = false) => {
+
+      }}    try {
+
+    >      setLoading(true);
+
+      {children}      const updatedTheme = { ...theme, ...newTheme };
+
+    </ThemeContext.Provider>
+
+  );      if (asDefault) {
+
+}        // Atualizar tema do sistema
+
+        const { error } = await supabase
+
+export function useTheme() {          .from('system_settings')
+
+  const context = useContext(ThemeContext);          .upsert({
+
+  if (context === undefined) {            key: 'theme',
+
+    throw new Error('useTheme deve ser usado dentro de um ThemeProvider');            value: updatedTheme,
+
+  }            updated_at: new Date().toISOString()
+
+  return context;          });
+
+}          
+        if (error) throw error;
+        setSystemTheme(updatedTheme);
+        
+        // Remover preferência do usuário
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem('theme-preference');
+        }
+        
+        setTheme(updatedTheme);
+      } else {
+        // Salvar como preferência do usuário
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('theme-preference', JSON.stringify(updatedTheme));
+        }
+        setTheme(updatedTheme);
+      }
+
+      applyTheme(updatedTheme);
+    } catch (err) {
+      console.error('Erro ao atualizar tema:', err);
+      setError(err instanceof Error ? err : new Error('Erro desconhecido ao atualizar tema'));
+    } finally {
+      setLoading(false);
+    }
+  }, [theme, applyTheme]);
+
+  async function fetchTheme(): Promise<ThemeSettings> {
+    try {
+      setLoading(true);
+      // Por enquanto não verificamos autenticação
+      // TODO: Adicionar verificação de autenticação quando implementar login
+
+      // Buscar o tema nas configurações
+      const { data: existingData, error: checkError } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'theme')
+        .maybeSingle();
+
+      if (checkError) {
+        if (checkError.code === 'PGRST116') {
+          console.warn('Tabela system_settings não encontrada, usando tema padrão');
+          return defaultTheme;
+        }
+        throw checkError;
+      }
+
+      // Se não existe, cria o tema padrão
+      if (!existingData) {
+        const { error: insertError } = await supabase
+          .from('system_settings')
+          .insert({
+            key: 'theme',
+            value: defaultTheme,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+        if (insertError) {
+          console.error('Erro ao criar tema padrão:', insertError);
+          if (insertError.code === 'PGRST116') {
+            console.warn('Tabela system_settings não encontrada, usando tema padrão');
+            return defaultTheme;
+          }
+          throw insertError;
+        }
+
+        return defaultTheme;
+      }
+
+      // Se existe, usa o tema existente
+      try {
+        const themeData = existingData.value as ThemeSettings;
+        // Valida se todos os campos necessários existem
+        const requiredFields = Object.keys(defaultTheme);
+        const missingFields = requiredFields.filter(field => !(field in themeData));
+        
+        if (missingFields.length > 0) {
+          console.warn('Campos ausentes no tema:', missingFields);
+          // Mescla o tema existente com os valores padrão para os campos ausentes
+          return { ...defaultTheme, ...themeData };
+        }
+        
+        return themeData;
+      } catch (parseError) {
+        console.error('Erro ao processar tema:', parseError);
+        return defaultTheme;
+      }
+    } catch (err) {
+      console.error('Erro ao carregar tema:', err);
+      setError(err instanceof Error ? err : new Error('Erro desconhecido ao carregar tema'));
+      return defaultTheme;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Função privada para atualização inicial do tema
+  const _updateInitialTheme = useCallback(async () => {
+    try {
+      const fetchedTheme = await fetchTheme();
+      setSystemTheme(fetchedTheme);
+      
+      // Verifica se existe preferência do usuário
+      if (typeof window !== 'undefined') {
+        const savedTheme = window.localStorage.getItem('theme-preference');
+        if (savedTheme) {
+          const parsedTheme = JSON.parse(savedTheme);
+          setTheme(parsedTheme);
+          applyTheme(parsedTheme);
+          return;
+        }
+      }
+      
+      // Se não houver preferência, usa o tema do sistema
+      setTheme(fetchedTheme);
+      applyTheme(fetchedTheme);
+    } catch (err) {
+      console.error('Erro ao inicializar tema:', err);
+      setError(err instanceof Error ? err : new Error('Erro ao inicializar tema'));
+    }
+      }
+
+      // Atualiza o tema no banco
+      const { error } = await supabase
+        .from('system_settings')
+        .upsert({
+          key: 'theme',
+          value: updatedTheme,
+          updated_at: new Date().toISOString()
+        });
+          
+      if (error) throw error;
+      
+      // Atualiza o estado e aplica o tema
+      setTheme(updatedTheme);
+      applyTheme(updatedTheme);
+    } catch (err) {
+      console.error('Erro ao atualizar tema:', err);
+      setError(err instanceof Error ? err : new Error('Erro desconhecido ao atualizar tema'));
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <ThemeContext.Provider value={{ theme, loading, error, resolvedTheme, updateTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme() {
+  const context = useContext(ThemeContext);
+  if (context === undefined) {
+    throw new Error('useTheme deve ser usado dentro de um ThemeProvider');
+  }
+  return context;
+}

@@ -1,0 +1,2 @@
+configuracoes: remover legado theme-settings.tsx e consolidar ThemeConfigurator compartilhado
+lint: remover var reset nao usada

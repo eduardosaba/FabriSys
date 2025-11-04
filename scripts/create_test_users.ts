@@ -10,7 +10,7 @@
  * - Se seu ambiente Supabase não permitir ações de Admin via service_role, use o painel ou uma alternativa segura.
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 type UserSpec = {
   id: string;
@@ -41,7 +41,7 @@ async function main() {
     process.stdout.write(`Processando ${u.email}... `);
     try {
       // Tenta criar o usuário via Admin API
-      // @ts-ignore - admin namespace exists on client in runtime
+      // @ts-expect-error - admin namespace exists on client in runtime
       const createRes = await (supabase.auth as any).admin.createUser({
         id: u.id,
         email: u.email,
@@ -58,14 +58,14 @@ async function main() {
           // tenta atualizar
           console.log('já existe — tentando atualizar.');
           try {
-            // @ts-ignore
+            // @ts-expect-error - admin namespace exists on client in runtime
             const upd = await (supabase.auth as any).admin.updateUserById(u.id, { password: u.password, user_metadata: { nome: u.nome } });
             if (upd && !upd.error) console.log('auth user atualizado.'); else console.log('falha ao atualizar auth user', upd?.error || upd);
-          } catch (e) {
+          } catch {
             console.log('erro ao atualizar usuário (tentativa direta por id falhou). Tentando localizar por email.');
             // Tenta localizar por email (lista de usuários) e atualizar
             try {
-              // @ts-ignore
+              // @ts-expect-error - admin namespace exists on client in runtime
               const list = await (supabase.auth as any).admin.listUsers();
               const found = list && list.data && Array.isArray(list.data) ? list.data.find((x: any) => x.email === u.email) : null;
               const userId = found?.id;

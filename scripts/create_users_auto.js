@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.local' });
 
-async function checkUserExists(userId) {
+async function _checkUserExists(userId) {
   try {
     const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
       headers: {
@@ -12,7 +12,7 @@ async function checkUserExists(userId) {
     });
 
     return response.ok;
-  } catch (err) {
+  } catch {
     return false;
   }
 }
@@ -77,7 +77,7 @@ async function createUser(userData) {
       let parsed;
       try {
         parsed = JSON.parse(bodyText);
-      } catch (e) {
+      } catch {
         parsed = null;
       }
 

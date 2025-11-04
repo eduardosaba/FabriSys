@@ -2,17 +2,20 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import Card from '@/components/ui/Card';
 import Text from '@/components/ui/Text';
 import Button from '@/components/Button';
 import { toast } from 'react-hot-toast';
+import { useTheme } from '@/lib/theme';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { theme } = useTheme();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,10 +67,40 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
       <Card className="w-full max-w-md">
         <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <div className="relative w-32 h-32">
+              <Image
+                src={theme.logo_url || '/logo.png'}
+                alt={`Logo ${theme.name || 'Sistema Lari'}`}
+                fill
+                className="object-contain"
+                style={{ transform: `scale(${theme.logo_scale || 1})` }}
+                priority
+              />
+            </div>
+          </div>
           <Text variant="h2" className="mb-2">
-            Sistema Lari
+            {theme.name || 'Sistema Lari'}
           </Text>
           <Text color="muted">Entre com suas credenciais</Text>
+
+          {/* Instruções temporárias */}
+          <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900 rounded-md">
+            <Text className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+              🔑 Credenciais temporárias:
+            </Text>
+            <div className="space-y-1 text-left">
+              <Text className="text-sm text-blue-700 dark:text-blue-300 font-mono">
+                Admin: sababrtv@gmail.com / admin123
+              </Text>
+              <Text className="text-sm text-blue-700 dark:text-blue-300 font-mono">
+                Fábrica: eduardosaba.rep@gmail.com / fabrica123
+              </Text>
+              <Text className="text-sm text-blue-700 dark:text-blue-300 font-mono">
+                PDV: eduardosaba@uol.com / pdv123
+              </Text>
+            </div>
+          </div>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
@@ -111,6 +144,16 @@ export default function LoginPage() {
             {loading ? 'Entrando...' : 'Entrar'}
           </Button>
         </form>
+
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => router.push('/reset-password')}
+            className="text-sm text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+          >
+            Esqueci minha senha
+          </button>
+        </div>
       </Card>
     </div>
   );

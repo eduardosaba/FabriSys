@@ -21,9 +21,27 @@ type UserSpec = {
 };
 
 const USERS: UserSpec[] = [
-  { id: '550e8400-e29b-41d4-a716-446655440000', email: 'sababrtv@gmail.com', password: 'admin123', nome: 'Administrador', role: 'admin' },
-  { id: '550e8400-e29b-41d4-a716-446655440001', email: 'eduardosaba.rep@gmail.com', password: 'fabrica123', nome: 'Usuario Fabrica', role: 'fabrica' },
-  { id: '550e8400-e29b-41d4-a716-446655440002', email: 'eduardosaba@uol.com', password: 'pdv123', nome: 'Usuario PDV', role: 'pdv' }
+  {
+    id: '550e8400-e29b-41d4-a716-446655440000',
+    email: 'sababrtv@gmail.com',
+    password: 'admin123',
+    nome: 'Administrador',
+    role: 'admin',
+  },
+  {
+    id: '550e8400-e29b-41d4-a716-446655440001',
+    email: 'eduardosaba.rep@gmail.com',
+    password: 'fabrica123',
+    nome: 'Usuario Fabrica',
+    role: 'fabrica',
+  },
+  {
+    id: '550e8400-e29b-41d4-a716-446655440002',
+    email: 'eduardosaba@uol.com',
+    password: 'pdv123',
+    nome: 'Usuario PDV',
+    role: 'pdv',
+  },
 ];
 
 async function main() {
@@ -47,34 +65,52 @@ async function main() {
         email: u.email,
         password: u.password,
         email_confirm: true,
-        user_metadata: { nome: u.nome }
+        user_metadata: { nome: u.nome },
       });
 
       if (createRes && !createRes.error) {
         console.log('auth user criado.');
       } else if (createRes && createRes.error) {
         const msg = String(createRes.error.message || createRes.error);
-        if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('user already exists')) {
+        if (
+          msg.toLowerCase().includes('already exists') ||
+          msg.toLowerCase().includes('user already exists')
+        ) {
           // tenta atualizar
           console.log('já existe — tentando atualizar.');
           try {
             // @ts-expect-error - admin namespace exists on client in runtime
-            const upd = await (supabase.auth as any).admin.updateUserById(u.id, { password: u.password, user_metadata: { nome: u.nome } });
-            if (upd && !upd.error) console.log('auth user atualizado.'); else console.log('falha ao atualizar auth user', upd?.error || upd);
+            const upd = await (supabase.auth as any).admin.updateUserById(u.id, {
+              password: u.password,
+              user_metadata: { nome: u.nome },
+            });
+            if (upd && !upd.error) console.log('auth user atualizado.');
+            else console.log('falha ao atualizar auth user', upd?.error || upd);
           } catch {
-            console.log('erro ao atualizar usuário (tentativa direta por id falhou). Tentando localizar por email.');
+            console.log(
+              'erro ao atualizar usuário (tentativa direta por id falhou). Tentando localizar por email.'
+            );
             // Tenta localizar por email (lista de usuários) e atualizar
             try {
               // @ts-expect-error - admin namespace exists on client in runtime
               const list = await (supabase.auth as any).admin.listUsers();
-              const found = list && list.data && Array.isArray(list.data) ? list.data.find((x: any) => x.email === u.email) : null;
+              const found =
+                list && list.data && Array.isArray(list.data)
+                  ? list.data.find((x: any) => x.email === u.email)
+                  : null;
               const userId = found?.id;
               if (userId) {
-                // @ts-ignore
-                const upd2 = await (supabase.auth as any).admin.updateUserById(userId, { password: u.password, user_metadata: { nome: u.nome } });
-                if (upd2 && !upd2.error) console.log('auth user atualizado (por lookup).'); else console.log('falha ao atualizar auth user (lookup):', upd2?.error || upd2);
+                const upd2 = await (supabase.auth as any).admin.updateUserById(userId, {
+                  password: u.password,
+                  user_metadata: { nome: u.nome },
+                });
+                if (upd2 && !upd2.error) console.log('auth user atualizado (por lookup).');
+                else console.log('falha ao atualizar auth user (lookup):', upd2?.error || upd2);
               } else {
-                console.log('Não foi possível localizar usuário existente para atualizar. Resposta create:', createRes.error);
+                console.log(
+                  'Não foi possível localizar usuário existente para atualizar. Resposta create:',
+                  createRes.error
+                );
               }
             } catch (e2) {
               console.log('Erro listando usuários:', e2);
@@ -84,7 +120,6 @@ async function main() {
           console.log('falha criando usuário auth:', createRes.error);
         }
       }
-
     } catch (err) {
       console.log('Erro ao criar/atualizar usuário via Admin API:', err);
     }
@@ -92,9 +127,17 @@ async function main() {
     // Upsert profile usando PostgREST via client from().upsert
     try {
       const now = new Date().toISOString();
-      const { error: upsertErr } = await supabase
-        .from('profiles')
-        .upsert({ id: u.id, role: u.role, nome: u.nome, email: u.email, created_at: now, updated_at: now }, { onConflict: 'id' });
+      const { error: upsertErr } = await supabase.from('profiles').upsert(
+        {
+          id: u.id,
+          role: u.role,
+          nome: u.nome,
+          email: u.email,
+          created_at: now,
+          updated_at: now,
+        },
+        { onConflict: 'id' }
+      );
 
       if (!upsertErr) {
         console.log('profile inserido/atualizado.');
@@ -109,4 +152,7 @@ async function main() {
   console.log('Concluído.');
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

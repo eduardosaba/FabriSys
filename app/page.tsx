@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import Button from '@/components/Button';
@@ -8,6 +8,24 @@ import Button from '@/components/Button';
 export default function Home() {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
+  const [cards] = useState([
+    { id: 1, title: 'Receita', value: 5000, type: 'positive' },
+    { id: 2, title: 'Despesas', value: 3000, type: 'negative' },
+    { id: 3, title: 'Perdas', value: 500, type: 'loss' },
+  ]);
+
+  const getCardColor = (type) => {
+    switch (type) {
+      case 'positive':
+        return 'bg-green-500';
+      case 'negative':
+        return 'bg-red-500';
+      case 'loss':
+        return 'bg-orange-500';
+      default:
+        return 'bg-gray-200';
+    }
+  };
 
   useEffect(() => {
     if (loading) return;
@@ -52,6 +70,14 @@ export default function Home() {
           <Button onClick={() => router.push('/login')}>Fazer Login</Button>
         </div>
       </main>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-8">
+        {cards.map((card) => (
+          <div key={card.id} className={`p-4 rounded shadow text-white ${getCardColor(card.type)}`}>
+            <h2 className="text-xl font-bold">{card.title}</h2>
+            <p className="text-lg">R$ {card.value}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -46,6 +46,7 @@ export default function Header({ onMenuClick }: Props) {
                     sizes="32px"
                     className="object-contain rounded"
                     unoptimized
+                    loading="eager"
                     onError={(e) => {
                       const systemName = theme?.name || 'Sys Lari';
                       const initials = systemName

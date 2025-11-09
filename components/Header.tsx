@@ -1,7 +1,7 @@
 import React from 'react';
 import Image from 'next/image';
-import { useTheme } from '@/lib/theme';
-import Text from '@/components/ui/Text';
+import { useTheme } from '../lib/theme';
+import Text from '../components/ui/Text';
 
 type Props = {
   onMenuClick?: () => void;
@@ -42,11 +42,12 @@ export default function Header({ onMenuClick }: Props) {
                   <Image
                     src={theme.logo_url}
                     alt={theme?.name || 'Logo'}
-                    fill
-                    sizes="32px"
+                    width={32}
+                    height={32}
                     className="object-contain rounded"
                     unoptimized
                     loading="eager"
+                    style={{ width: '32px', height: 'auto' }}
                     onError={(e) => {
                       const systemName = theme?.name || 'Sys Lari';
                       const initials = systemName

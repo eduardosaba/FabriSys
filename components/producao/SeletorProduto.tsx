@@ -27,28 +27,25 @@ export default function SeletorProduto({ value, onChange }: SeletorProdutoProps)
   const { toast } = useToast();
 
   useEffect(() => {
-    loadProdutos();
-  }, []);
+    const load = async () => {
+      try {
+        const { data, error }: { data: ProdutoFinal[] | null; error: { message?: string } | null } =
+          await supabase.from('produtos_finais').select('*').eq('ativo', true).order('nome');
 
-  async function loadProdutos() {
-    try {
-      const { data, error } = await supabase
-        .from('produtos_finais')
-        .select('*')
-        .eq('ativo', true)
-        .order('nome');
+        if (error && error.message) throw new Error(error.message);
 
-      if (error) throw error;
+        setProdutos(data || []);
+      } catch {
+        toast({
+          title: 'Erro ao carregar produtos',
+          description: 'Não foi possível carregar a lista de produtos.',
+          variant: 'error',
+        });
+      }
+    };
 
-      setProdutos(data || []);
-    } catch (err) {
-      toast({
-        title: 'Erro ao carregar produtos',
-        description: 'Não foi possível carregar a lista de produtos.',
-        variant: 'error',
-      });
-    }
-  }
+    void load();
+  }, [toast]);
 
   const selectedProduct = produtos.find((p) => p.id === value);
 

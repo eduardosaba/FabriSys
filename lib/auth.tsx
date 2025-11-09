@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { supabase } from './supabase';
 
 export type UserRole = 'admin' | 'fabrica' | 'pdv';
 
@@ -32,14 +32,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Buscar sessão inicial
     const getInitialSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
+      const res = await supabase.auth.getSession();
+      const sessionRes = res?.data?.session ?? null;
+      setSession(sessionRes);
+      setUser(sessionRes?.user ?? null);
 
-      if (session?.user) {
-        await fetchProfile(session.user.id);
+      if (sessionRes?.user) {
+        await fetchProfile(sessionRes.user.id);
       }
 
       setLoading(false);
@@ -48,9 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void getInitialSession();
 
     // Escutar mudanças de auth
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const onAuth = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -63,18 +60,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    const subscription = onAuth?.data?.subscription;
+
+    return () => subscription?.unsubscribe?.();
   }, []);
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      const res = await supabase.from('profiles').select('*').eq('id', userId).single();
 
-      if (error) throw error;
+      if (res?.error && (res.error as { message?: string }).message) {
+        throw new Error((res.error as { message?: string }).message as string);
+      }
 
-      setProfile(data as Profile);
+      setProfile((res?.data as Profile) ?? { id: userId, role: 'pdv' });
     } catch (error) {
-      console.error('Erro ao buscar perfil:', error);
+      if (error instanceof Error) console.error('Erro ao buscar perfil:', error.message);
+      else console.error('Erro ao buscar perfil:', error);
       // Fallback para role pdv se não encontrar perfil
       setProfile({ id: userId, role: 'pdv' });
     }

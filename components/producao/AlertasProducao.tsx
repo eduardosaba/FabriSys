@@ -64,7 +64,7 @@ export default function AlertasProducao() {
       if (error) throw error;
 
       setAlertas(data || []);
-    } catch (_err) {
+    } catch {
       toast({
         title: 'Erro ao carregar alertas',
         description: 'Não foi possível carregar os alertas de produção.',
@@ -105,7 +105,7 @@ export default function AlertasProducao() {
         description: 'O alerta foi marcado como resolvido.',
         variant: 'success',
       });
-    } catch (_err) {
+    } catch {
       toast({
         title: 'Erro ao resolver',
         description: 'Não foi possível marcar o alerta como resolvido.',

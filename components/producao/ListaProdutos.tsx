@@ -116,7 +116,8 @@ export default function ListaProdutos({ produtos, onUpdate }: ListaProdutosProps
                           <Image
                             src={produto.imagem_url}
                             alt={produto.nome}
-                            fill
+                            width={40}
+                            height={40}
                             className="rounded-full object-cover"
                           />
                         </div>

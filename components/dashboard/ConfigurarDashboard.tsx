@@ -19,10 +19,9 @@ const tiposWidget = [
   { value: 'kpis', label: 'Indicadores (KPIs)' },
   { value: 'grafico-producao', label: 'Gráfico de Produção' },
   { value: 'ranking-produtos', label: 'Ranking de Produtos' },
-  { value: 'avaliacao', label: 'Avaliação do Sistema' },
 ];
 
-export function ConfigurarDashboard({ widgets, onAddWidget }: ConfigurarDashboardProps) {
+export function ConfigurarDashboard({ widgets: _widgets, onAddWidget }: ConfigurarDashboardProps) {
   const [open, setOpen] = useState(false);
   const [novoWidget, setNovoWidget] = useState<{
     title: string;

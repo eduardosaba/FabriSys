@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { Database } from './supabase';
 
 // Enums e Constantes
@@ -20,7 +19,9 @@ export const PrioridadeOP = {
 type Tables = Database['public']['Tables'];
 
 // Produtos Finais
-export type ProdutoFinal = Tables['produtos_finais']['Row'];
+export type ProdutoFinal = Tables['produtos_finais']['Row'] & {
+  tipo?: 'final' | 'semi_acabado';
+};
 export type ProdutoFinalInsert = Tables['produtos_finais']['Insert'];
 export type ProdutoFinalUpdate = Tables['produtos_finais']['Update'];
 
@@ -29,8 +30,36 @@ export type FichaTecnica = Tables['ficha_tecnica']['Row'];
 export type FichaTecnicaInsert = Tables['ficha_tecnica']['Insert'];
 export type FichaTecnicaUpdate = Tables['ficha_tecnica']['Update'];
 
+// Tipos para insumos teóricos e reais
+export interface InsumoTeorico {
+  insumo_id: string;
+  nome_insumo: string;
+  quantidade_uc: number; // Quantidade em Unidade de Consumo
+  unidade_consumo: string;
+  quantidade_ue: number; // Quantidade convertida para Unidade de Estoque
+  unidade_estoque: string;
+  custo_total: number;
+  fator_conversao: number;
+}
+
+export interface InsumoReal {
+  insumo_id: string;
+  quantidade_ue_consumida: number; // Quantidade real baixada do estoque
+  unidade_estoque: string;
+}
+
 // Ordens de Produção
-export type OrdemProducao = Tables['ordens_producao']['Row'];
+export type OrdemProducao = Tables['ordens_producao']['Row'] & {
+  // Novos campos para sistema de 3 fases
+  quantidade_real_produzida?: number;
+  custo_real_unitario?: number;
+  custo_total_real?: number;
+  percentual_perda_ganho?: number;
+  insumos_teoricos?: InsumoTeorico[]; // JSONB com cálculo teórico
+  insumos_reais?: InsumoReal[]; // JSONB com consumo real
+  observacoes_producao?: string;
+  supervisor_producao?: string;
+};
 export type OrdemProducaoInsert = Tables['ordens_producao']['Insert'];
 export type OrdemProducaoUpdate = Tables['ordens_producao']['Update'];
 

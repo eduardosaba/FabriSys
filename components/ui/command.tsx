@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { Command as CommandPrimitive } from 'cmdk';
-import { DialogProps } from '@radix-ui/react-dialog';
+// DialogProps removed — not used in this file
 import { cn } from '@/lib/utils';
 
 const Command = React.forwardRef<

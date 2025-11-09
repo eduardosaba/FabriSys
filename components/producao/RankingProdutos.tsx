@@ -24,16 +24,19 @@ export default function RankingProdutos({ config }: RankingProdutosProps) {
 
   const loadRanking = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc('obter_ranking_produtos', {
+      const res = await supabase.rpc('obter_ranking_produtos', {
         p_periodo: config?.config?.periodo || 'mes',
         p_limite: config?.config?.limite || 5,
       });
 
-      if (error) throw error;
+      if (res?.error && (res.error as { message?: string }).message) {
+        throw new Error((res.error as { message?: string }).message as string);
+      }
 
-      setRanking((data as ProdutoRanking[]) || []);
+      setRanking((res?.data as ProdutoRanking[]) || []);
     } catch (error) {
-      console.error('Erro ao carregar ranking:', error);
+      if (error instanceof Error) console.error('Erro ao carregar ranking:', error.message);
+      else console.error('Erro ao carregar ranking:', error);
       toast({
         title: 'Erro ao carregar ranking',
         description: 'Não foi possível carregar o ranking de produtos.',

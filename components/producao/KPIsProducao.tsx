@@ -21,12 +21,13 @@ export default function KPIsProducao() {
 
   const loadKPIs = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc('calcular_kpis_producao');
+      const res = await supabase.rpc('calcular_kpis_producao');
+      if (res?.error && (res.error as { message?: string }).message) {
+        throw new Error((res.error as { message?: string }).message as string);
+      }
 
-      if (error) throw error;
-
-      setKpis(data);
-    } catch (error) {
+      setKpis(res?.data as KPIData | null);
+    } catch {
       toast({
         title: 'Erro ao carregar KPIs',
         description: 'Não foi possível carregar os indicadores de produção.',

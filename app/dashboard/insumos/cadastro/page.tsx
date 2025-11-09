@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Insumo } from '@/lib/types';
-import { InsumoFormData } from '@/lib/validations/insumos';
+// Import type for form data
 import Button from '@/components/Button';
 import Modal from '@/components/Modal';
 import InsumoForm from '@/components/insumos/InsumoForm';
 import { unidadesMedida } from '@/lib/validations/insumos';
+import { InsumoFormData } from '@/lib/validations';
 import InsumosTable from '@/components/insumos/InsumosTable';
 import { Toaster, toast } from 'react-hot-toast';
 import Panel from '@/components/ui/Panel';
@@ -31,7 +32,7 @@ export default function InsumosPage() {
   async function fetchInsumos() {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const res = await supabase
         .from('insumos')
         .select(
           `
@@ -44,11 +45,19 @@ export default function InsumosPage() {
         )
         .order('nome');
 
-      if (error) throw error;
-      setInsumos(data || []);
+      if (res?.error && (res.error as { message?: string }).message) {
+        throw new Error((res.error as { message?: string }).message as string);
+      }
+
+      setInsumos((res?.data as Insumo[]) || []);
     } catch (err) {
-      console.error('Erro ao buscar insumos:', err);
-      toast.error('Erro ao carregar insumos');
+      if (err instanceof Error) {
+        console.error('Erro ao buscar insumos:', err.message);
+        toast.error(err.message);
+      } else {
+        console.error('Erro desconhecido:', err);
+        toast.error('Erro desconhecido ao carregar insumos');
+      }
     } finally {
       setLoading(false);
     }
@@ -66,28 +75,34 @@ export default function InsumosPage() {
       setLoading(true);
 
       // Verificar se há lotes associados
-      const { data: lotes, error: lotesError } = await supabase
+      const resLotes = await supabase
         .from('lotes_insumos')
         .select('id')
         .eq('insumo_id', insumo.id)
         .limit(1);
 
-      if (lotesError) throw lotesError;
+      if (resLotes?.error && (resLotes.error as { message?: string }).message)
+        throw new Error((resLotes.error as { message?: string }).message as string);
 
-      if (lotes && lotes.length > 0) {
+      if (resLotes?.data && resLotes.data.length > 0) {
         toast.error('Não é possível excluir este insumo pois existem lotes associados.');
         return;
       }
 
-      const { error } = await supabase.from('insumos').delete().eq('id', insumo.id);
-
-      if (error) throw error;
+      const resDelete = await supabase.from('insumos').delete().eq('id', insumo.id);
+      if (resDelete?.error && (resDelete.error as { message?: string }).message)
+        throw new Error((resDelete.error as { message?: string }).message as string);
 
       toast.success('Insumo excluído com sucesso!');
       await fetchInsumos();
     } catch (err) {
-      console.error('Erro ao excluir insumo:', err);
-      toast.error('Não foi possível excluir o insumo. Tente novamente.');
+      if (err instanceof Error) {
+        console.error('Erro ao excluir insumo:', err.message);
+        toast.error(err.message);
+      } else {
+        console.error('Erro desconhecido ao excluir insumo:', err);
+        toast.error('Não foi possível excluir o insumo. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -97,43 +112,34 @@ export default function InsumosPage() {
     try {
       setSaving(true);
 
-      if (editingInsumo) {
-        const { error } = await supabase
-          .from('insumos')
-          .update({
-            nome: values.nome,
-            unidade_medida: values.unidade_medida,
-            estoque_minimo_alerta: values.estoque_minimo_alerta,
-            categoria_id: values.categoria_id,
-            atributos_dinamicos: values.atributos_dinamicos,
-          })
-          .eq('id', editingInsumo.id);
+      const safeValues = {
+        nome: String(values.nome ?? ''),
+        unidade_medida: String(values.unidade_medida ?? 'un'),
+        estoque_minimo_alerta: Number(values.estoque_minimo_alerta ?? 0),
+        categoria_id: String(values.categoria_id ?? ''),
+        atributos_dinamicos: (values.atributos_dinamicos as Record<string, unknown>) ?? {},
+        custo_por_ue: Number(values.custo_por_ue) || undefined,
+        unidade_estoque: String(values.unidade_estoque ?? (unidadesMedida[0] as string)),
+        unidade_consumo: String(values.unidade_consumo ?? (unidadesMedida[0] as string)),
+        fator_conversao: Number(values.fator_conversao ?? 1),
+      };
 
-        if (error) throw error;
-        toast.success('Insumo atualizado com sucesso!');
-      } else {
-        const { error } = await supabase.from('insumos').insert({
-          nome: values.nome,
-          unidade_medida: values.unidade_medida,
-          estoque_minimo_alerta: values.estoque_minimo_alerta,
-        });
-
-        if (error) throw error;
-        toast.success('Insumo cadastrado com sucesso!');
-      }
-
-      await fetchInsumos();
-      handleCloseModal();
+      const resInsert = await supabase.from('insumos').insert(safeValues);
+      if (resInsert?.error && (resInsert.error as { message?: string }).message)
+        throw new Error((resInsert.error as { message?: string }).message as string);
+      toast.success('Insumo salvo com sucesso!');
     } catch (err) {
-      console.error(err);
-      toast.error(
-        `Não foi possível ${editingInsumo ? 'atualizar' : 'cadastrar'} o insumo. Tente novamente.`
-      );
+      if (err instanceof Error) {
+        console.error('Erro ao salvar insumo:', err.message);
+        toast.error(err.message);
+      } else {
+        console.error('Erro desconhecido ao salvar insumo:', err);
+        toast.error('Não foi possível salvar o insumo. Tente novamente.');
+      }
     } finally {
       setSaving(false);
     }
   }
-
   return (
     <>
       <Panel variant="default" className="mb-6">
@@ -186,21 +192,24 @@ export default function InsumosPage() {
           onSubmit={handleSave}
           onCancel={handleCloseModal}
           loading={saving}
-          initialValues={
-            editingInsumo
-              ? {
-                  nome: editingInsumo.nome,
-                  unidade_medida: (unidadesMedida as readonly string[]).includes(
-                    editingInsumo.unidade_medida
-                  )
-                    ? (editingInsumo.unidade_medida as (typeof unidadesMedida)[number])
-                    : 'un',
-                  estoque_minimo_alerta: editingInsumo.estoque_minimo_alerta,
-                  categoria_id: editingInsumo.categoria_id,
-                  atributos_dinamicos: editingInsumo.atributos_dinamicos ?? {},
-                }
-              : undefined
-          }
+          initialValues={(() => {
+            if (!editingInsumo) return undefined;
+
+            // Garantir tipos explícitos antes de passar para o formulário
+            const unidade = (unidadesMedida as readonly string[]).includes(
+              editingInsumo.unidade_medida
+            )
+              ? (editingInsumo.unidade_medida as (typeof unidadesMedida)[number])
+              : 'un';
+
+            return {
+              nome: String(editingInsumo.nome),
+              unidade_medida: unidade,
+              estoque_minimo_alerta: editingInsumo.estoque_minimo_alerta,
+              categoria_id: editingInsumo.categoria_id,
+              atributos_dinamicos: editingInsumo.atributos_dinamicos ?? {},
+            } as InsumoFormData;
+          })()}
         />
       </Modal>
     </>

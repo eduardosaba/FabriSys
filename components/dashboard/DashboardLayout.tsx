@@ -10,7 +10,7 @@ import {
   DraggableProvided,
   DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
-import { Widget } from './Widget';
+import { Card } from './Card';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
 
@@ -201,13 +201,14 @@ export function DashboardLayout({
                       {...provided.dragHandleProps}
                       className={DASHBOARD_STYLES.widget} // Aplicando o estilo centralizado
                     >
-                      <Widget
+                      <Card
                         title={widget.title}
                         isDragging={snapshot.isDragging}
+                        dragHandleProps={provided.dragHandleProps}
                         onRemove={() => removeWidget(widget.id)}
                       >
                         <WidgetComponent config={widget} />
-                      </Widget>
+                      </Card>
                     </div>
                   )}
                 </Draggable>

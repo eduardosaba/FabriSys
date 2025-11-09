@@ -19,6 +19,9 @@ export default function EditarProdutoPage() {
 
   useEffect(() => {
     const loadProduto = async () => {
+      console.log('=== DEBUG LOAD PRODUTO ===');
+      console.log('ID do produto:', params.id);
+
       try {
         const { data, error } = (await supabase
           .from('produtos_finais')
@@ -26,15 +29,23 @@ export default function EditarProdutoPage() {
           .eq('id', params.id)
           .single()) as { data: ProdutoFinal | null; error: Error | null };
 
-        if (error) throw error;
+        console.log('Resposta do Supabase:', { data: data ? 'encontrado' : null, error });
+
+        if (error) {
+          console.error('Erro ao buscar produto:', error);
+          throw error;
+        }
 
         if (!data) {
+          console.log('Produto não encontrado, redirecionando...');
           router.push('/dashboard/producao/produtos');
           return;
         }
 
+        console.log('Produto encontrado:', data);
         setProduto(data);
       } catch (err) {
+        console.error('Erro geral ao carregar produto:', err);
         toast({
           title: 'Erro ao carregar produto',
           description: 'Não foi possível carregar as informações do produto.',

@@ -23,6 +23,7 @@ export const produtoFinalSchema = z.object({
     z.string().url('URL da imagem inválida').nullable()
   ),
   codigo_interno: z.preprocess((val) => (val === '' ? null : val), z.string().nullable()),
+  tipo: z.enum(['final', 'semi_acabado']).default('final'),
   created_at: z.string().datetime().optional(),
   updated_at: z.string().datetime().optional(),
 });

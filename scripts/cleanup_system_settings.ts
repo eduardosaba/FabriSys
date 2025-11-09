@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
-import { readFileSync } from 'fs';
 import { join } from 'path';
 
 // Load environment variables from .env.local
@@ -23,14 +22,18 @@ async function cleanupDuplicateSettings() {
     console.log('Checking system_settings entries...');
 
     // Get all records
-    const { data: allSettings, error: allError } = await supabase
+    const res = await supabase
       .from('system_settings')
       .select('key, id, updated_at, value')
       .order('key', { ascending: true });
 
-    if (allError) throw allError;
+    if (res?.error && (res.error as { message?: string }).message)
+      throw new Error((res.error as { message?: string }).message as string);
 
-    if (!allSettings) {
+    const allSettings =
+      (res?.data as Array<{ key: string; id: string; updated_at: string; value: unknown }>) || [];
+
+    if (allSettings.length === 0) {
       console.log('No system_settings found');
       return;
     }
@@ -52,7 +55,10 @@ async function cleanupDuplicateSettings() {
     }
 
     // Group by key and find duplicates
-    const keyGroups: Record<string, typeof allSettings> = {};
+    const keyGroups: Record<
+      string,
+      Array<{ key: string; id: string; updated_at: string; value: unknown }>
+    > = {};
     allSettings.forEach((setting) => {
       if (!keyGroups[setting.key]) {
         keyGroups[setting.key] = [];
@@ -78,7 +84,7 @@ async function cleanupDuplicateSettings() {
     for (const { key, records } of duplicates) {
       const sortedRecords = records.sort(
         (a, b) =>
-          new Date(b.updated_at as string).getTime() - new Date(a.updated_at as string).getTime()
+          new Date(String(b.updated_at)).getTime() - new Date(String(a.updated_at)).getTime()
       );
       const toDelete = sortedRecords.slice(1); // All except the first (most recent)
 

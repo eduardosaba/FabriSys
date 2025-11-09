@@ -41,7 +41,7 @@ export function OrdemProducaoProvider({ children }: { children: React.ReactNode 
       if (error) throw error;
 
       setOrdens(data);
-    } catch (err) {
+    } catch {
       toast({
         title: 'Erro ao carregar ordens',
         description: 'Não foi possível carregar as ordens de produção.',
@@ -66,7 +66,7 @@ export function OrdemProducaoProvider({ children }: { children: React.ReactNode 
           description: 'O status da ordem foi atualizado com sucesso.',
           variant: 'success',
         });
-      } catch (err) {
+      } catch {
         toast({
           title: 'Erro ao atualizar',
           description: 'Não foi possível atualizar o status da ordem.',

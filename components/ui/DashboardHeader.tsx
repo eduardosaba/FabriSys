@@ -30,8 +30,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 export default function DashboardHeader() {
+  const _router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAISearch, setShowAISearch] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
@@ -49,6 +51,7 @@ export default function DashboardHeader() {
   const handleSignOut = async () => {
     setShowUserMenu(false);
     await signOut();
+    window.location.href = '/login';
   };
 
   const [showQuickMenu, setShowQuickMenu] = useState(false);

@@ -25,10 +25,10 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting: _isSubmitting },
     setValue,
     watch,
-    control,
+    control: _control,
   } = useForm({
     resolver: zodResolver(ordemProducaoSchema),
     defaultValues: ordem || {
@@ -43,9 +43,10 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
       setLoading(true);
 
       if (ordem) {
-        const { error } = await supabase.from('ordens_producao').update(data).eq('id', ordem.id);
-
-        if (error) throw error;
+        const res = await supabase.from('ordens_producao').update(data).eq('id', ordem.id);
+        if (res?.error && (res.error as { message?: string }).message) {
+          throw new Error((res.error as { message?: string }).message as string);
+        }
 
         toast({
           title: 'Ordem atualizada',
@@ -53,9 +54,10 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
           variant: 'success',
         });
       } else {
-        const { error } = await supabase.from('ordens_producao').insert(data);
-
-        if (error) throw error;
+        const res = await supabase.from('ordens_producao').insert(data);
+        if (res?.error && (res.error as { message?: string }).message) {
+          throw new Error((res.error as { message?: string }).message as string);
+        }
 
         toast({
           title: 'Ordem criada',
@@ -70,6 +72,9 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
         router.push('/dashboard/producao/ordens');
       }
     } catch (err) {
+      if (err instanceof Error) console.error('Erro ao salvar ordem de produção:', err.message);
+      else console.error('Erro ao salvar ordem de produção:', err);
+
       toast({
         title: 'Erro ao salvar',
         description: 'Ocorreu um erro ao salvar a ordem de produção.',
@@ -82,6 +87,15 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
 
   const produto_id = watch('produto_id');
 
+  function getFieldErrorMessage(fieldError: unknown) {
+    if (!fieldError) return '';
+    if (typeof fieldError === 'string') return fieldError;
+    if (typeof fieldError === 'object' && fieldError !== null && 'message' in fieldError) {
+      return String((fieldError as { message?: unknown }).message ?? '');
+    }
+    return String(fieldError);
+  }
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -91,7 +105,7 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
             <SeletorProduto value={produto_id} onChange={(id) => setValue('produto_id', id)} />
           </div>
           {errors.produto_id && (
-            <p className="mt-1 text-sm text-red-600">{errors.produto_id.message?.toString()}</p>
+            <p className="mt-1 text-sm text-red-600">{getFieldErrorMessage(errors.produto_id)}</p>
           )}
         </div>
 
@@ -106,7 +120,7 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
           />
           {errors.quantidade_planejada && (
             <p className="mt-1 text-sm text-red-600">
-              {errors.quantidade_planejada.message?.toString()}
+              {getFieldErrorMessage(errors.quantidade_planejada)}
             </p>
           )}
         </div>
@@ -125,7 +139,9 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
             />
           </div>
           {errors.data_prevista && (
-            <p className="mt-1 text-sm text-red-600">{errors.data_prevista.message?.toString()}</p>
+            <p className="mt-1 text-sm text-red-600">
+              {getFieldErrorMessage(errors.data_prevista)}
+            </p>
           )}
         </div>
 

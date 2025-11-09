@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 import { Upload } from 'lucide-react';
-import Image from 'next/image';
 import Button from '@/components/Button';
 import { useToast } from '@/hooks/useToast';
 import { supabase } from '@/lib/supabase';
 import { ProdutoFinal } from '@/lib/types/producao';
 import { produtoFinalSchema } from '@/lib/validations/producao';
+import { useAuth } from '@/lib/auth';
 
 type ProdutoFormData = z.infer<typeof produtoFinalSchema>;
 
@@ -54,11 +55,17 @@ const unformatCurrency = (value: string): number => {
 export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const { user, profile } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(produto?.imagem_url || null);
   const [precoDisplay, setPrecoDisplay] = useState<string>(
     produto?.preco_venda ? formatCurrency(produto.preco_venda) : ''
   );
+
+  console.log('=== DEBUG PRODUTO FORM RENDER ===');
+  console.log('Produto prop:', produto);
+  console.log('Image preview:', imagePreview);
+  console.log('Preço display:', precoDisplay);
 
   const {
     register,
@@ -67,21 +74,27 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
     setValue,
     trigger,
   } = useForm({
-    // Temporariamente removendo validação para testar
-    // resolver: zodResolver(produtoFinalSchema),
-    defaultValues: produto
-      ? {
-          ...produto,
-          descricao: produto.descricao || '',
-          codigo_interno: produto.codigo_interno || '',
-        }
-      : {
-          ativo: true,
-          imagem_url: null,
-          codigo_interno: null,
-          descricao: null,
-        },
+    resolver: zodResolver(produtoFinalSchema),
+    defaultValues: produto || {
+      ativo: true,
+      imagem_url: null,
+      codigo_interno: null,
+      descricao: null,
+      tipo: 'final',
+    },
   });
+  console.log('=== DEBUG FORM INITIALIZATION ===');
+  console.log(
+    'Default values:',
+    produto || {
+      ativo: true,
+      imagem_url: null,
+      codigo_interno: null,
+      descricao: null,
+    }
+  );
+  console.log('Form errors:', errors);
+  console.log('Is submitting:', isSubmitting);
 
   // Atualizar precoDisplay quando produto muda
   useEffect(() => {
@@ -89,6 +102,28 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
       setPrecoDisplay(formatCurrency(produto.preco_venda));
     }
   }, [produto?.preco_venda]);
+
+  // Reset form values when produto changes (for edit mode)
+  useEffect(() => {
+    if (produto) {
+      console.log('=== RESETTING FORM FOR EDIT MODE ===');
+      console.log('Produto data:', produto);
+
+      // Reset all form values with produto data
+      setValue('nome', produto.nome);
+      setValue('preco_venda', produto.preco_venda);
+      setValue('imagem_url', produto.imagem_url || null);
+      setValue('codigo_interno', produto.codigo_interno || null);
+      setValue('descricao', produto.descricao || null);
+      setValue('ativo', produto.ativo);
+      setValue('tipo', produto.tipo || 'final');
+
+      // Update image preview
+      setImagePreview(produto.imagem_url || null);
+
+      console.log('Form values reset completed');
+    }
+  }, [produto, setValue]);
 
   async function handleImageUpload(file: File) {
     try {
@@ -138,21 +173,22 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
   };
 
   const onSubmit = async (data: ProdutoFormData) => {
-    console.log('🎯 onSubmit FOI CHAMADA! Dados:', data);
-    alert('onSubmit foi chamada! Verifique o console para mais detalhes.');
-    alert('onSubmit foi chamada! Verifique o console para mais detalhes.');
+    console.log('=== DEBUG PRODUTO FORM SUBMIT ===');
+    console.log('Data recebida:', data);
+    console.log('Produto existente:', produto);
+    console.log('Usuário autenticado:', user);
+    console.log('Perfil do usuário:', profile);
 
     // Validar todos os campos antes de tentar salvar
     const isValid = await trigger();
-    console.log('Validação passou:', isValid);
+    console.log('Formulário válido:', isValid);
+    console.log('Erros de validação:', errors);
 
     if (!isValid) {
       const errorMessages = Object.values(errors)
         .map((error) => error?.message)
         .filter(Boolean)
         .join('. ');
-
-      console.log('Mensagens de erro:', errorMessages);
 
       toast({
         title: 'Dados obrigatórios faltando',
@@ -163,47 +199,40 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
     }
 
     const cleanedData = cleanData(data);
-    const dataToUse = cleanedData;
-    console.log('Dados limpos:', dataToUse);
+    console.log('Dados limpos:', cleanedData);
 
     try {
-      if (produto) {
-        console.log('=== MODO EDIÇÃO ===');
-        console.log('ID do produto:', produto.id);
-        console.log('Dados que serão enviados para update:', cleanedData);
+      console.log('Tentando salvar produto...');
 
-        const { error, data: updateResult } = await supabase
+      if (produto) {
+        console.log('Fazendo UPDATE do produto ID:', produto.id);
+        const { error } = await supabase
           .from('produtos_finais')
           .update(cleanedData)
-          .eq('id', produto.id)
-          .select();
+          .eq('id', produto.id);
 
         if (error) {
-          console.error('=== ERRO NO UPDATE ===');
-          console.error('Erro retornado pelo Supabase:', error);
-          console.error('Código do erro:', error.code);
-          console.error('Mensagem do erro:', error.message);
-          console.error('Detalhes do erro:', error.details);
-          console.error('Dica do erro:', error.hint);
+          console.error('Erro no UPDATE:', error);
           throw error;
         }
 
-        console.log('=== UPDATE REALIZADO COM SUCESSO ===');
-        console.log('Resultado do update:', updateResult);
+        console.log('UPDATE realizado com sucesso!');
         toast({
           title: 'Produto atualizado',
           description: 'As alterações foram salvas com sucesso.',
           variant: 'success',
         });
-
-        // Temporário: alert para confirmar que chegou aqui
-        alert('✅ Produto atualizado com sucesso! Redirecionando...');
       } else {
+        console.log('Fazendo INSERT de novo produto');
         // Inserção: data já contém valores transformados (strings vazias -> null)
         const { error } = await supabase.from('produtos_finais').insert(cleanedData);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Erro no INSERT:', error);
+          throw error;
+        }
 
+        console.log('INSERT realizado com sucesso!');
         toast({
           title: 'Produto cadastrado',
           description: 'O novo produto foi cadastrado com sucesso.',
@@ -218,6 +247,11 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
       }
     } catch (error: unknown) {
       console.error('Erro ao salvar produto:', error);
+      console.error('Tipo do erro:', typeof error);
+      console.error(
+        'Propriedades do erro:',
+        error && typeof error === 'object' ? Object.keys(error) : 'N/A'
+      );
 
       let errorMessage = 'Ocorreu um erro ao salvar o produto.';
 
@@ -232,8 +266,10 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
         error.message.includes('violates row-level security policy')
       ) {
         errorMessage =
-          'Você não tem permissão para criar produtos. Faça login com uma conta de administrador.';
+          'Você não tem permissão para editar produtos. Faça login com uma conta de administrador.';
       }
+
+      console.error('Mensagem de erro final:', errorMessage);
 
       toast({
         title: 'Erro ao salvar',
@@ -244,11 +280,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit(onSubmit)}
-      className="space-y-6"
-      onSubmitCapture={() => console.log('📝 FORM SUBMIT CAPTURADO')}
-    >
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
         <p className="text-sm text-blue-800">
           <span className="font-medium">Campos obrigatórios:</span> Nome e Preço de venda são
@@ -274,6 +306,28 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
               <span>⚠️</span> {errors.nome.message}
             </p>
           )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Tipo de Produto <span className="text-red-500">*</span>
+          </label>
+          <select
+            {...register('tipo')}
+            className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm
+              ${errors.tipo ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
+          >
+            <option value="final">Produto Final (vendido ao cliente)</option>
+            <option value="semi_acabado">Produto Semi-Acabado (massa, intermediário)</option>
+          </select>
+          {errors.tipo && (
+            <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+              <span>⚠️</span> {errors.tipo.message}
+            </p>
+          )}
+          <p className="mt-1 text-xs text-gray-500">
+            Produtos semi-acabados podem ser usados como insumos em outras receitas
+          </p>
         </div>
 
         <div>
@@ -349,9 +403,13 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
                 <Image
                   src={imagePreview}
                   alt="Preview"
-                  fill
-                  sizes="128px"
+                  width={128}
+                  height={128}
                   className="rounded-lg object-cover"
+                  onError={() => {
+                    // fallback: limpar preview para mostrar placeholder
+                    setImagePreview(null);
+                  }}
                 />
               </div>
             ) : (
@@ -390,15 +448,8 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
         <Button
           type="submit"
           loading={isSubmitting}
-          // Temporariamente removendo desabilitação por erros
-          // disabled={Object.keys(errors).length > 0}
-          // className={Object.keys(errors).length > 0 ? 'opacity-50 cursor-not-allowed' : ''}
-          onClick={() =>
-            console.log('🖱️ BOTÃO SALVAR CLICADO!', {
-              errors,
-              hasErrors: Object.keys(errors).length > 0,
-            })
-          }
+          disabled={Object.keys(errors).length > 0}
+          className={Object.keys(errors).length > 0 ? 'opacity-50 cursor-not-allowed' : ''}
         >
           {produto ? 'Salvar Alterações' : 'Cadastrar Produto'}
         </Button>

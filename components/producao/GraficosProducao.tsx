@@ -42,32 +42,29 @@ export default function GraficosProducao({ periodo }: GraficoProducaoProps) {
   const loadDados = useCallback(async () => {
     try {
       setLoading(true);
-
       // Carrega dados de produção diária
-      const { data: producao, error: errorProducao } = (await supabase.rpc(
-        'obter_dados_producao_diaria',
-        {
-          periodo_ref: periodo,
-        }
-      )) as { data: DadosProducao[]; error: Error | null };
+      const resProducao = await supabase.rpc('obter_dados_producao_diaria', {
+        periodo_ref: periodo,
+      });
 
-      if (errorProducao) throw errorProducao;
-
-      if (producao) {
-        setDadosProducao(producao);
+      if (resProducao?.error && (resProducao.error as { message?: string }).message) {
+        throw new Error((resProducao.error as { message?: string }).message as string);
       }
+
+      setDadosProducao((resProducao?.data as DadosProducao[]) || []);
 
       // Carrega ranking de produtos
-      const { data: ranking, error: errorRanking } = (await supabase.rpc('obter_ranking_produtos', {
+      const resRanking = await supabase.rpc('obter_ranking_produtos', {
         periodo_ref: periodo,
-      })) as { data: RankingProdutos[]; error: Error | null };
+      });
 
-      if (errorRanking) throw errorRanking;
-
-      if (ranking) {
-        setRankingProdutos(ranking);
+      if (resRanking?.error && (resRanking.error as { message?: string }).message) {
+        throw new Error((resRanking.error as { message?: string }).message as string);
       }
-    } catch (_err) {
+
+      setRankingProdutos((resRanking?.data as RankingProdutos[]) || []);
+    } catch (err) {
+      console.error('Erro ao carregar gráficos de produção:', err);
       toast({
         title: 'Erro ao carregar dados',
         description: 'Não foi possível carregar os gráficos de produção.',
@@ -101,11 +98,11 @@ export default function GraficosProducao({ periodo }: GraficoProducaoProps) {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
                 dataKey="data"
-                tickFormatter={(value) => new Date(value).toLocaleDateString('pt-BR')}
+                tickFormatter={(value) => new Date(String(value)).toLocaleDateString('pt-BR')}
               />
               <YAxis />
               <Tooltip
-                labelFormatter={(value) => new Date(value).toLocaleDateString('pt-BR')}
+                labelFormatter={(value) => new Date(String(value)).toLocaleDateString('pt-BR')}
                 formatter={(value: number) => [value, 'Quantidade']}
               />
               <Legend />

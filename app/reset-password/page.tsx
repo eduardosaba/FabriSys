@@ -81,15 +81,15 @@ export default function ResetPasswordPage() {
         <div className="text-center">
           <div className="mx-auto h-16 w-16 relative mb-4">
             {theme.logo_url ? (
-              <Image
-                src={theme.logo_url}
-                alt={theme.name || 'Sistema Lari'}
-                fill
-                className="object-contain"
-                style={{
-                  transform: `scale(${theme.logo_scale || 1})`,
-                }}
-              />
+              <div style={{ transform: `scale(${theme.logo_scale || 1})` }}>
+                <Image
+                  src={theme.logo_url}
+                  alt={theme.name || 'Sistema Lari'}
+                  fill
+                  sizes="64px"
+                  className="object-contain"
+                />
+              </div>
             ) : (
               <div className="h-full w-full bg-blue-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-xl">SL</span>

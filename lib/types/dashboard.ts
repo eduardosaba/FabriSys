@@ -1,10 +1,3 @@
-import {
-  DroppableProvided,
-  DraggableProvided,
-  DraggableStateSnapshot,
-  DropResult,
-} from '@hello-pangea/dnd';
-
 export interface WidgetBaseProps {
   config?: WidgetConfig;
 }
@@ -33,13 +26,7 @@ export interface WidgetConfig {
   };
 }
 
-export type WidgetType =
-  | 'producao'
-  | 'alertas'
-  | 'kpis'
-  | 'grafico-producao'
-  | 'ranking-produtos'
-  | 'avaliacao';
+export type WidgetType = 'producao' | 'alertas' | 'kpis' | 'grafico-producao' | 'ranking-produtos';
 
 export interface DashboardContextType {
   widgets: WidgetConfig[];

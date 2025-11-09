@@ -27,28 +27,30 @@ export default function UpdatePasswordPage() {
     console.log('Parâmetros da URL:', {
       accessToken: !!accessToken,
       refreshToken: !!refreshToken,
-      type
+      type,
     });
 
     if (accessToken && refreshToken) {
       // Para reset de senha, usar setSession diretamente
-      void supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      }).then(({ data, error }) => {
-        console.log('Sessão configurada:', {
-          user: !!data.user,
-          session: !!data.session,
-          error
-        });
+      void supabase.auth
+        .setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        .then(({ data, error }) => {
+          console.log('Sessão configurada:', {
+            user: !!data.user,
+            session: !!data.session,
+            error,
+          });
 
-        if (error) {
-          console.error('Erro ao configurar sessão:', error);
-          toast.error('Link de recuperação inválido ou expirado.');
-        } else if (data.session) {
-          toast.success('Sessão de recuperação configurada. Você pode alterar sua senha.');
-        }
-      });
+          if (error) {
+            console.error('Erro ao configurar sessão:', error);
+            toast.error('Link de recuperação inválido ou expirado.');
+          } else if (data.session) {
+            toast.success('Sessão de recuperação configurada. Você pode alterar sua senha.');
+          }
+        });
     } else if (type === 'recovery') {
       // Se não há tokens mas type=recovery, pode ser um fluxo diferente
       console.log('Tipo recovery detectado, verificando sessão atual...');
@@ -90,7 +92,7 @@ export default function UpdatePasswordPage() {
 
       console.log('Tentando atualizar senha...');
       const { data, error } = await supabase.auth.updateUser({
-        password: password
+        password: password,
       });
 
       console.log('Resultado da atualização:', { data, error });
@@ -104,10 +106,10 @@ export default function UpdatePasswordPage() {
       setTimeout(() => {
         router.push('/login');
       }, 1000);
-
     } catch (error: unknown) {
       console.error('Erro ao atualizar senha:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Erro ao atualizar senha. Tente novamente.';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Erro ao atualizar senha. Tente novamente.';
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -120,15 +122,15 @@ export default function UpdatePasswordPage() {
         <div className="text-center">
           <div className="mx-auto h-16 w-16 relative mb-4">
             {theme.logo_url ? (
-              <Image
-                src={theme.logo_url}
-                alt={theme.name || 'Sistema Lari'}
-                fill
-                className="object-contain"
-                style={{
-                  transform: `scale(${theme.logo_scale || 1})`,
-                }}
-              />
+              <div style={{ transform: `scale(${theme.logo_scale || 1})` }}>
+                <Image
+                  src={theme.logo_url}
+                  alt={theme.name || 'Sistema Lari'}
+                  fill
+                  sizes="64px"
+                  className="object-contain"
+                />
+              </div>
             ) : (
               <div className="h-full w-full bg-blue-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-xl">SL</span>

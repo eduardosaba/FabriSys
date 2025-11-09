@@ -44,7 +44,7 @@ export default function StatusProducao() {
       if (error) throw error;
 
       setOrdens(data || []);
-    } catch (error) {
+    } catch {
       toast({
         title: 'Erro ao carregar ordens',
         description: 'Não foi possível carregar o status da produção.',

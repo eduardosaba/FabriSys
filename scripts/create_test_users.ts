@@ -55,23 +55,39 @@ async function main() {
 
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
+  // Tipagem local para o namespace admin (não exposto nas typings oficiais do cliente aqui)
+  const admin = (
+    supabase.auth as unknown as {
+      admin: {
+        createUser: (
+          opts: unknown
+        ) => Promise<{ error?: { message?: string } | null; data?: unknown }>;
+        updateUserById: (
+          id: string,
+          body: unknown
+        ) => Promise<{ error?: { message?: string } | null; data?: unknown }>;
+        listUsers: () => Promise<{ data?: unknown[]; error?: { message?: string } | null }>;
+      };
+    }
+  ).admin;
+
   for (const u of USERS) {
     process.stdout.write(`Processando ${u.email}... `);
     try {
       // Tenta criar o usuário via Admin API
-      // @ts-expect-error - admin namespace exists on client in runtime
-      const createRes = await (supabase.auth as any).admin.createUser({
+      // admin namespace is not typed here; assert a narrow runtime shape to avoid `any` spreading
+      const createRes = (await admin.createUser({
         id: u.id,
         email: u.email,
         password: u.password,
         email_confirm: true,
         user_metadata: { nome: u.nome },
-      });
+      })) as { error?: { message?: string } | null; data?: unknown };
 
       if (createRes && !createRes.error) {
         console.log('auth user criado.');
       } else if (createRes && createRes.error) {
-        const msg = String(createRes.error.message || createRes.error);
+        const msg = String(createRes.error.message ?? JSON.stringify(createRes.error));
         if (
           msg.toLowerCase().includes('already exists') ||
           msg.toLowerCase().includes('user already exists')
@@ -79,11 +95,10 @@ async function main() {
           // tenta atualizar
           console.log('já existe — tentando atualizar.');
           try {
-            // @ts-expect-error - admin namespace exists on client in runtime
-            const upd = await (supabase.auth as any).admin.updateUserById(u.id, {
+            const upd = (await admin.updateUserById(u.id, {
               password: u.password,
               user_metadata: { nome: u.nome },
-            });
+            })) as { error?: { message?: string } | null; data?: unknown };
             if (upd && !upd.error) console.log('auth user atualizado.');
             else console.log('falha ao atualizar auth user', upd?.error || upd);
           } catch {
@@ -92,18 +107,36 @@ async function main() {
             );
             // Tenta localizar por email (lista de usuários) e atualizar
             try {
-              // @ts-expect-error - admin namespace exists on client in runtime
-              const list = await (supabase.auth as any).admin.listUsers();
+              const list = (await admin.listUsers()) as {
+                data?: unknown[];
+                error?: { message?: string } | null;
+              };
               const found =
-                list && list.data && Array.isArray(list.data)
-                  ? list.data.find((x: any) => x.email === u.email)
+                list && Array.isArray(list.data)
+                  ? list.data.find((x) => {
+                      return !!(
+                        x &&
+                        typeof x === 'object' &&
+                        'email' in (x as Record<string, unknown>) &&
+                        (x as Record<string, unknown>).email === u.email
+                      );
+                    })
                   : null;
-              const userId = found?.id;
+
+              let userId: string | undefined;
+              if (
+                found &&
+                typeof found === 'object' &&
+                'id' in (found as Record<string, unknown>)
+              ) {
+                userId = String((found as Record<string, unknown>).id);
+              }
+
               if (userId) {
-                const upd2 = await (supabase.auth as any).admin.updateUserById(userId, {
+                const upd2 = (await admin.updateUserById(userId, {
                   password: u.password,
                   user_metadata: { nome: u.nome },
-                });
+                })) as { error?: { message?: string } | null; data?: unknown };
                 if (upd2 && !upd2.error) console.log('auth user atualizado (por lookup).');
                 else console.log('falha ao atualizar auth user (lookup):', upd2?.error || upd2);
               } else {
@@ -127,7 +160,7 @@ async function main() {
     // Upsert profile usando PostgREST via client from().upsert
     try {
       const now = new Date().toISOString();
-      const { error: upsertErr } = await supabase.from('profiles').upsert(
+      const resUpsert = await supabase.from('profiles').upsert(
         {
           id: u.id,
           role: u.role,
@@ -139,10 +172,10 @@ async function main() {
         { onConflict: 'id' }
       );
 
-      if (!upsertErr) {
+      if (!resUpsert?.error) {
         console.log('profile inserido/atualizado.');
       } else {
-        console.log('falha ao inserir profile:', upsertErr);
+        console.log('falha ao inserir profile:', resUpsert.error);
       }
     } catch (err) {
       console.log('Erro ao upsert profile:', err);

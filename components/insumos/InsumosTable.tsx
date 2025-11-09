@@ -103,6 +103,11 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
                       Estoque Mínimo
                     </Text>
                   </th>
+                  <th scope="col" className="px-6 py-3 text-left">
+                    <Text variant="caption" weight="medium" color="muted">
+                      Valor
+                    </Text>
+                  </th>
                   <th scope="col" className="px-6 py-3 text-right">
                     <Text variant="caption" weight="medium" color="muted">
                       Ações
@@ -146,6 +151,13 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
                     <td className="whitespace-nowrap px-6 py-4">
                       <Text variant="body-sm" color="muted">
                         {insumo.estoque_minimo_alerta} {insumo.unidade_medida}
+                      </Text>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <Text variant="body-sm" weight="medium">
+                        {typeof insumo.ultimo_valor === 'number'
+                          ? `R$ ${insumo.ultimo_valor.toFixed(2)}`
+                          : 'N/A'}
                       </Text>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">

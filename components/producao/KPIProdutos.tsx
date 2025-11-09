@@ -37,7 +37,7 @@ export default function KPIProdutos({ periodo = 'mes' }: KPIProdutosProps) {
       if (producao) {
         setData(producao);
       }
-    } catch (_err) {
+    } catch {
       toast({
         title: 'Erro ao carregar KPIs',
         description: 'Não foi possível carregar os indicadores de produção.',

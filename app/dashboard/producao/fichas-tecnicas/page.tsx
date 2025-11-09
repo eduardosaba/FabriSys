@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
 import { Plus, Eye, Edit, FileText } from 'lucide-react';
@@ -20,6 +21,7 @@ interface FichaTecnica {
 }
 
 export default function FichasTecnicasPage() {
+  const router = useRouter();
   const [fichas, setFichas] = useState<FichaTecnica[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -73,7 +75,7 @@ export default function FichasTecnicasPage() {
           <h1 className="text-2xl font-bold text-gray-900">Fichas Técnicas</h1>
           <p className="text-gray-600">Gerenciamento das fichas técnicas de produtos finais</p>
         </div>
-        <Button onClick={() => (window.location.href = '/dashboard/producao/fichas-tecnicas/nova')}>
+        <Button onClick={() => router.push('/dashboard/producao/fichas-tecnicas/nova')}>
           <Plus className="w-4 h-4 mr-2" />
           Nova Ficha Técnica
         </Button>
@@ -92,9 +94,7 @@ export default function FichasTecnicasPage() {
               As fichas técnicas definem as receitas e custos para produzir seus produtos finais.
             </p>
             <div className="mt-6">
-              <Button
-                onClick={() => (window.location.href = '/dashboard/producao/fichas-tecnicas/nova')}
-              >
+              <Button onClick={() => router.push('/dashboard/producao/fichas-tecnicas/nova')}>
                 <Plus className="w-4 h-4 mr-2" />
                 Criar primeira ficha técnica
               </Button>

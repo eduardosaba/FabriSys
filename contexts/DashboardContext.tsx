@@ -17,74 +17,89 @@ export function DashboardProvider({
   const [widgets, setWidgets] = useState<WidgetConfig[]>(defaultLayout);
   const { toast } = useToast();
 
-  const saveLayout = async (newLayout: WidgetConfig[]) => {
-    try {
-      const { error } = await supabase.from('system_settings').upsert({
-        key: 'dashboard_layout',
-        value: newLayout,
+  const saveLayout = useCallback(
+    async (newLayout: WidgetConfig[]) => {
+      try {
+        const { error } = await supabase.from('system_settings').upsert({
+          key: 'dashboard_layout',
+          value: newLayout,
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: 'Layout salvo',
+          description: 'As alterações foram salvas com sucesso.',
+          variant: 'success',
+        });
+      } catch (error) {
+        console.error('Erro ao salvar layout:', error);
+        toast({
+          title: 'Erro ao salvar',
+          description: 'Não foi possível salvar as alterações do layout.',
+          variant: 'error',
+        });
+      }
+    },
+    [toast]
+  );
+
+  const addWidget = useCallback(
+    (widget: Omit<WidgetConfig, 'id' | 'ordem'>) => {
+      setWidgets((prev) => {
+        const newWidget: WidgetConfig = {
+          ...widget,
+          id: crypto.randomUUID(),
+          ordem: prev.length,
+        };
+        const newLayout = [...prev, newWidget];
+        void saveLayout(newLayout);
+        return newLayout;
       });
+    },
+    [saveLayout]
+  );
 
-      if (error) throw error;
-
-      toast({
-        title: 'Layout salvo',
-        description: 'As alterações foram salvas com sucesso.',
-        variant: 'success',
+  const removeWidget = useCallback(
+    (id: string) => {
+      setWidgets((prev) => {
+        const newLayout = prev.filter((w) => w.id !== id);
+        void saveLayout(newLayout);
+        return newLayout;
       });
-    } catch (error) {
-      console.error('Erro ao salvar layout:', error);
-      toast({
-        title: 'Erro ao salvar',
-        description: 'Não foi possível salvar as alterações do layout.',
-        variant: 'error',
+    },
+    [saveLayout]
+  );
+
+  const updateWidget = useCallback(
+    (id: string, config: Partial<WidgetConfig>) => {
+      setWidgets((prev) => {
+        const newLayout = prev.map((w) => (w.id === id ? { ...w, ...config } : w));
+        void saveLayout(newLayout);
+        return newLayout;
       });
-    }
-  };
+    },
+    [saveLayout]
+  );
 
-  const addWidget = useCallback((widget: Omit<WidgetConfig, 'id' | 'ordem'>) => {
-    setWidgets((prev) => {
-      const newWidget: WidgetConfig = {
-        ...widget,
-        id: crypto.randomUUID(),
-        ordem: prev.length,
-      };
-      const newLayout = [...prev, newWidget];
-      void saveLayout(newLayout);
-      return newLayout;
-    });
-  }, []);
+  const moveWidget = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      setWidgets((prev) => {
+        const newWidgets = Array.from(prev);
+        const [reorderedWidget] = newWidgets.splice(fromIndex, 1);
+        newWidgets.splice(toIndex, 0, reorderedWidget);
 
-  const removeWidget = useCallback((id: string) => {
-    setWidgets((prev) => {
-      const newLayout = prev.filter((w) => w.id !== id);
-      void saveLayout(newLayout);
-      return newLayout;
-    });
-  }, []);
+        const updatedWidgets = newWidgets.map((widget, index) => ({
+          ...widget,
+          ordem: index,
+        }));
 
-  const updateWidget = useCallback((id: string, config: Partial<WidgetConfig>) => {
-    setWidgets((prev) => {
-      const newLayout = prev.map((w) => (w.id === id ? { ...w, ...config } : w));
-      void saveLayout(newLayout);
-      return newLayout;
-    });
-  }, []);
-
-  const moveWidget = useCallback((fromIndex: number, toIndex: number) => {
-    setWidgets((prev) => {
-      const newWidgets = Array.from(prev);
-      const [reorderedWidget] = newWidgets.splice(fromIndex, 1);
-      newWidgets.splice(toIndex, 0, reorderedWidget);
-
-      const updatedWidgets = newWidgets.map((widget, index) => ({
-        ...widget,
-        ordem: index,
-      }));
-
-      void saveLayout(updatedWidgets);
-      return updatedWidgets;
-    });
-  }, []);
+        void saveLayout(updatedWidgets);
+        return updatedWidgets;
+      });
+    },
+    [saveLayout]
+  );
 
   return (
     <DashboardContext.Provider

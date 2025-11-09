@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { ThemeSettings } from '@/lib/types';
-import { supabase } from '@/lib/supabase';
+import { supabase } from './supabase';
 
 interface ThemeContextType {
   theme: ThemeSettings;
@@ -83,18 +83,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const fetchTheme = useCallback(async (): Promise<ThemeSettings> => {
     try {
-      const { data, error } = await supabase
+      const res = await supabase
         .from('system_settings')
         .select('value')
         .eq('key', 'theme')
         .single();
 
-      if (error) {
-        console.error('Erro ao buscar tema:', error);
+      if (res.error) {
+        console.error('Erro ao buscar tema:', res.error);
         return defaultTheme;
       }
 
-      const themeData = (data?.value as ThemeSettings) || defaultTheme;
+      const themeData = (res.data?.value as ThemeSettings) || defaultTheme;
       const requiredFields = Object.keys(defaultTheme);
       const missingFields = requiredFields.filter((field) => !(field in themeData));
 

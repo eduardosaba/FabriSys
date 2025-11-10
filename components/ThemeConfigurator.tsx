@@ -41,6 +41,7 @@ type FormData = z.infer<typeof themeSettingsSchema>;
 export default function ThemeConfigurator() {
   const [saving, setSaving] = useState(false);
   const [loadingTheme, setLoadingTheme] = useState(true);
+  const [previewImageError, setPreviewImageError] = useState(false);
   const { resolvedTheme } = useTheme();
 
   // 🎨 Valores padrão iniciais
@@ -133,14 +134,17 @@ export default function ThemeConfigurator() {
             <div>
               <label className="block text-sm font-medium">Logo</label>
               <div className="flex items-center gap-4 mt-2">
-                {watchedValues.logo_url && (
+                {watchedValues.logo_url && !previewImageError ? (
                   <Image
                     src={watchedValues.logo_url}
                     alt="Logo"
                     width={48}
                     height={48}
                     className="object-contain rounded"
+                    onError={() => setPreviewImageError(true)}
                   />
+                ) : (
+                  <div className="w-12 h-12 bg-gray-100 rounded" />
                 )}
                 <input
                   type="file"
@@ -151,14 +155,13 @@ export default function ThemeConfigurator() {
                     if (file.size > 2 * 1024 * 1024) return toast.error('Máximo de 2MB');
                     const fileExt = file.name.split('.').pop();
                     const fileName = `${Date.now()}.${fileExt}`;
-                    const { data, error } = await supabase.storage
+                    const res = await supabase.storage
                       .from('logos')
                       .upload(fileName, file, { upsert: true });
-                    if (error) return toast.error('Erro ao enviar logo');
-                    const { data: urlData } = supabase.storage
-                      .from('logos')
-                      .getPublicUrl(data.path);
-                    setValue('logo_url', urlData.publicUrl);
+                    if (res.error) return toast.error('Erro ao enviar logo');
+                    const urlRes = supabase.storage.from('logos').getPublicUrl(res.data.path);
+                    setValue('logo_url', urlRes.data.publicUrl);
+                    setPreviewImageError(false);
                     toast.success('Logo atualizada!');
                   }}
                 />
@@ -285,6 +288,7 @@ function PreviewCard({ data, themeMode }: { data: FormData; themeMode?: string }
           width={Math.round(48 * (data.logo_scale || 1))}
           height={Math.round(48 * (data.logo_scale || 1))}
           className="object-contain"
+          priority
         />
         <h2 className="text-2xl font-bold">{data.name}</h2>
       </div>

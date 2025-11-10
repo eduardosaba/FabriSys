@@ -4,22 +4,266 @@ import Card from '@/components/ui/Card';
 import Panel from '@/components/ui/Panel';
 import Text from '@/components/ui/Text';
 import Link from 'next/link';
-import { Package, ShoppingCart, AlertTriangle, Truck, Plus, List, BarChart } from 'lucide-react';
+import {
+  Package,
+  ShoppingCart,
+  AlertTriangle,
+  Truck,
+  Plus,
+  List,
+  BarChart,
+  EyeOff,
+} from 'lucide-react';
 import { KPISection } from '@/components/ui/KPICards';
 import Chart from '@/components/ui/Charts';
 import Button from '@/components/Button';
-import AlertasEstoque from '@/components/insumos/AlertasEstoque';
-import { useState } from 'react';
+import AlertasEstoque from '@/components/insumos/Alertas';
+import { useState, useCallback, useMemo } from 'react';
 
 export default function ProducaoDashboard() {
-  const [showAlertasEstoque, setShowAlertasEstoque] = useState(true);
+  // Tipos para filtros inteligentes
+  type KpisData = {
+    producaoTotal: number;
+    eficiencia: number;
+    produtividade: number;
+    perdas: number;
+  };
+
+  type FiltrosAtuais = {
+    dataInicial: string;
+    dataFinal: string;
+    filialSelecionada: string;
+    categoriaSelecionada: string;
+    periodoSelecionado: string;
+  };
+
+  // Estados para filtros inteligentes
+  const [filtrosAtuais, setFiltrosAtuais] = useState<FiltrosAtuais>({
+    dataInicial: '2025-01-01',
+    dataFinal: new Date().toISOString().split('T')[0],
+    filialSelecionada: 'Geral',
+    categoriaSelecionada: 'all',
+    periodoSelecionado: 'personalizado',
+  });
+
+  const [isLoadingKpis, setIsLoadingKpis] = useState(false);
+  const [kpisData, setKpisData] = useState<KpisData | null>({
+    producaoTotal: 15234,
+    eficiencia: 87.5,
+    produtividade: 42.8,
+    perdas: 1.8,
+  });
+
+  // Estados existentes mantidos
+  const [hiddenCards, setHiddenCards] = useState<string[]>([]);
+  const [hiddenChartCards, setHiddenChartCards] = useState<string[]>([]);
+  const [inventoryData, _setInventoryData] = useState({
+    produtos: 245,
+    fornecedores: 12,
+    alertas: 8,
+    valorEstoque: 125000,
+  });
+
+  // Função para calcular datas baseado no período selecionado
+  const calcularDatasPorPeriodo = useCallback((periodo: string) => {
+    const hoje = new Date();
+    const ano = hoje.getFullYear();
+    const mes = hoje.getMonth();
+    const dia = hoje.getDate();
+    const diaSemana = hoje.getDay(); // 0 = Domingo, 1 = Segunda, etc.
+
+    let dataInicial: Date;
+    let dataFinal: Date;
+
+    switch (periodo) {
+      case 'hoje': {
+        dataInicial = new Date(ano, mes, dia);
+        dataFinal = new Date(ano, mes, dia);
+        break;
+      }
+      case 'ontem': {
+        dataInicial = new Date(ano, mes, dia - 1);
+        dataFinal = new Date(ano, mes, dia - 1);
+        break;
+      }
+      case 'amanha': {
+        dataInicial = new Date(ano, mes, dia + 1);
+        dataFinal = new Date(ano, mes, dia + 1);
+        break;
+      }
+      case 'esta-semana': {
+        // Domingo desta semana até hoje
+        const diasAteDomingo = diaSemana;
+        dataInicial = new Date(ano, mes, dia - diasAteDomingo);
+        dataFinal = new Date(ano, mes, dia);
+        break;
+      }
+      case 'ultimos-7-dias': {
+        dataInicial = new Date(ano, mes, dia - 6);
+        dataFinal = new Date(ano, mes, dia);
+        break;
+      }
+      case 'semana-passada': {
+        // Domingo da semana passada até sábado da semana passada
+        const diasAteDomingoPassado = diaSemana + 7;
+        dataInicial = new Date(ano, mes, dia - diasAteDomingoPassado);
+        dataFinal = new Date(ano, mes, dia - diasAteDomingoPassado + 6);
+        break;
+      }
+      case 'este-mes': {
+        dataInicial = new Date(ano, mes, 1);
+        dataFinal = new Date(ano, mes, dia);
+        break;
+      }
+      case 'ultimos-30-dias': {
+        dataInicial = new Date(ano, mes, dia - 29);
+        dataFinal = new Date(ano, mes, dia);
+        break;
+      }
+      case 'mes-passado': {
+        const mesPassado = mes - 1;
+        const anoMesPassado = mesPassado < 0 ? ano - 1 : ano;
+        const mesAjustado = mesPassado < 0 ? 11 : mesPassado;
+        dataInicial = new Date(anoMesPassado, mesAjustado, 1);
+        dataFinal = new Date(anoMesPassado, mesAjustado + 1, 0); // Último dia do mês
+        break;
+      }
+      case 'ano': {
+        dataInicial = new Date(ano, 0, 1);
+        dataFinal = new Date(ano, mes, dia);
+        break;
+      }
+      default:
+        // personalizado - manter as datas atuais
+        return;
+    }
+
+    const dataInicialStr = dataInicial.toISOString().split('T')[0];
+    const dataFinalStr = dataFinal.toISOString().split('T')[0];
+
+    setFiltrosAtuais((prev) => ({
+      ...prev,
+      dataInicial: dataInicialStr,
+      dataFinal: dataFinalStr,
+      periodoSelecionado: periodo,
+    }));
+  }, []);
+
+  // Função para aplicar filtros inteligentes
+  const aplicarFiltroDashboard = useCallback(async () => {
+    try {
+      // 3. ESTADO DE LOADING: Definir loading como TRUE
+      setIsLoadingKpis(true);
+
+      // 4. CHAMADA À API: Fazer requisição para o endpoint
+      const queryParams = new URLSearchParams({
+        dataInicial: filtrosAtuais.dataInicial,
+        dataFinal: filtrosAtuais.dataFinal,
+        filialSelecionada: filtrosAtuais.filialSelecionada,
+        categoriaSelecionada: filtrosAtuais.categoriaSelecionada,
+      });
+
+      const response = await fetch(`/api/dashboard/kpis?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as KpisData;
+        // 5. ATUALIZAÇÃO DE DADOS: Atualizar estado com novos valores
+        setKpisData(data);
+      } else {
+        throw new Error('Erro ao buscar dados dos KPIs');
+      }
+    } catch (error) {
+      // 6. TRATAMENTO DE ERRO: Lidar com erros
+      console.error('Erro ao aplicar filtros:', error);
+      // Aqui poderia usar uma função de notificação como toast
+      alert('Erro ao carregar dados. Tente novamente.');
+    } finally {
+      // 7. FIM DO LOADING: Garantir que loading seja FALSE
+      setIsLoadingKpis(false);
+    }
+  }, [filtrosAtuais]);
+
+  // Dados de gráficos integrados com filtros
+  const chartData = useMemo(() => {
+    const baseData = [
+      { name: 'Jan', Produto1: 400, Produto2: 300, Produto3: 200 },
+      { name: 'Fev', Produto1: 500, Produto2: 400, Produto3: 250 },
+      { name: 'Mar', Produto1: 450, Produto2: 350, Produto3: 220 },
+      { name: 'Abr', Produto1: 600, Produto2: 500, Produto3: 300 },
+      { name: 'Mai', Produto1: 550, Produto2: 450, Produto3: 280 },
+      { name: 'Jun', Produto1: 700, Produto2: 600, Produto3: 350 },
+    ];
+
+    // Aplicar filtros aos dados
+    const multiplier =
+      filtrosAtuais.filialSelecionada === 'Geral'
+        ? 1
+        : filtrosAtuais.filialSelecionada === 'Matriz'
+          ? 0.7
+          : filtrosAtuais.filialSelecionada === 'Filial1'
+            ? 0.8
+            : 0.6;
+
+    return baseData.map((item) => ({
+      ...item,
+      Produto1: Math.round(item.Produto1 * multiplier),
+      Produto2: Math.round(item.Produto2 * multiplier),
+      Produto3: Math.round(item.Produto3 * multiplier),
+    }));
+  }, [filtrosAtuais.filialSelecionada]);
+
+  const productionChartData = useMemo(() => {
+    const baseData = [
+      { mes: 'Jan', producao: 900 },
+      { mes: 'Fev', producao: 1150 },
+      { mes: 'Mar', producao: 1020 },
+      { mes: 'Abr', producao: 1300 },
+      { mes: 'Mai', producao: 1180 },
+      { mes: 'Jun', producao: 1450 },
+    ];
+
+    const multiplier =
+      filtrosAtuais.categoriaSelecionada === 'all'
+        ? 1
+        : filtrosAtuais.categoriaSelecionada === 'produtos'
+          ? 0.9
+          : filtrosAtuais.categoriaSelecionada === 'insumos'
+            ? 1.1
+            : 0.8;
+
+    return baseData.map((item) => ({
+      ...item,
+      producao: Math.round(item.producao * multiplier),
+    }));
+  }, [filtrosAtuais.categoriaSelecionada]);
+
+  const toggleCardVisibility = (cardKey: string) => {
+    if (hiddenCards.includes(cardKey)) {
+      setHiddenCards(hiddenCards.filter((key) => key !== cardKey));
+    } else {
+      setHiddenCards([...hiddenCards, cardKey]);
+    }
+  };
+
+  const toggleChartCardVisibility = (cardKey: string) => {
+    if (hiddenChartCards.includes(cardKey)) {
+      setHiddenChartCards(hiddenChartCards.filter((key) => key !== cardKey));
+    } else {
+      setHiddenChartCards([...hiddenChartCards, cardKey]);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <Panel>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <Text variant="h2" weight="semibold">
-            Dashboard de Produção
+            Dashboard de Mercadoria
           </Text>
           <div className="flex gap-2">
             <Link href="/dashboard/insumos/cadastro">
@@ -38,203 +282,405 @@ export default function ProducaoDashboard() {
         </div>
       </Panel>
 
-      {/* Cards de Ação Rápida */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link href="/dashboard/insumos/cadastro">
-          <Card variant="default" className="hover:border-primary transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <Text variant="h4" weight="medium">
-                  Cadastrar Produto
-                </Text>
-                <Text color="muted" className="text-sm">
-                  Adicionar novo produto
-                </Text>
-              </div>
-            </div>
-          </Card>
-        </Link>
+      {/* Filtros Interativos Inteligentes */}
+      <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 items-stretch lg:items-end">
+          <div className="flex-1 min-w-0">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Período
+            </label>
+            <select
+              value={filtrosAtuais.periodoSelecionado}
+              onChange={(e) => calcularDatasPorPeriodo(e.target.value)}
+              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="personalizado">Personalizado</option>
+              <option value="hoje">Hoje</option>
+              <option value="ontem">Ontem</option>
+              <option value="amanha">Amanhã</option>
+              <option value="esta-semana">Esta semana (dom até hoje)</option>
+              <option value="ultimos-7-dias">Últimos 7 dias</option>
+              <option value="semana-passada">Semana passada</option>
+              <option value="este-mes">Este mês</option>
+              <option value="ultimos-30-dias">Últimos 30 dias</option>
+              <option value="mes-passado">Mês passado</option>
+              <option value="ano">Ano</option>
+            </select>
+          </div>
 
-        <Link href="/dashboard/insumos/lotes">
-          <Card variant="default" className="hover:border-primary transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
-                <ShoppingCart className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <Text variant="h4" weight="medium">
-                  Estoque
-                </Text>
-                <Text color="muted" className="text-sm">
-                  Gerenciar estoque
-                </Text>
-              </div>
-            </div>
-          </Card>
-        </Link>
+          <div className="flex-1 min-w-0">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Data Inicial
+            </label>
+            <input
+              type="date"
+              value={filtrosAtuais.dataInicial}
+              onChange={(e) =>
+                setFiltrosAtuais((prev) => ({
+                  ...prev,
+                  dataInicial: e.target.value,
+                  periodoSelecionado: 'personalizado',
+                }))
+              }
+              disabled={filtrosAtuais.periodoSelecionado !== 'personalizado'}
+              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
+            />
+          </div>
 
-        <Link href="/dashboard/insumos/alertas">
-          <Card variant="default" className="hover:border-primary transition-colors p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg">
-                <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <div>
-                <Text variant="h4" weight="medium">
-                  Alertas
-                </Text>
-                <Text color="muted" className="text-sm">
-                  Ver alertas ativos
-                </Text>
-              </div>
-            </div>
-          </Card>
-        </Link>
+          <div className="flex-1 min-w-0">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Data Final
+            </label>
+            <input
+              type="date"
+              value={filtrosAtuais.dataFinal}
+              onChange={(e) =>
+                setFiltrosAtuais((prev) => ({
+                  ...prev,
+                  dataFinal: e.target.value,
+                  periodoSelecionado: 'personalizado',
+                }))
+              }
+              disabled={filtrosAtuais.periodoSelecionado !== 'personalizado'}
+              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
+            />
+          </div>
 
-        <Link href="/dashboard/fornecedores">
-          <Card variant="default" className="hover:border-primary transition-colors p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
-                <Truck className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <Text variant="h4" weight="medium">
-                  Fornecedores
-                </Text>
-                <Text color="muted" className="text-sm">
-                  Gerenciar fornecedores
-                </Text>
-              </div>
-            </div>
-          </Card>
-        </Link>
+          <div className="flex-1 min-w-0">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Filial
+            </label>
+            <select
+              value={filtrosAtuais.filialSelecionada}
+              onChange={(e) =>
+                setFiltrosAtuais((prev) => ({ ...prev, filialSelecionada: e.target.value }))
+              }
+              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="Geral">Todas as Filiais</option>
+              <option value="Matriz">Matriz</option>
+              <option value="Filial1">Filial Centro</option>
+              <option value="Filial2">Filial Norte</option>
+            </select>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Categoria
+            </label>
+            <select
+              value={filtrosAtuais.categoriaSelecionada}
+              onChange={(e) =>
+                setFiltrosAtuais((prev) => ({ ...prev, categoriaSelecionada: e.target.value }))
+              }
+              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="all">Todas as Categorias</option>
+              <option value="produtos">Produtos</option>
+              <option value="insumos">Insumos</option>
+              <option value="materias-primas">Matérias-Primas</option>
+              <option value="embalagens">Embalagens</option>
+            </select>
+          </div>
+
+          <div className="lg:flex-shrink-0">
+            <button
+              onClick={aplicarFiltroDashboard}
+              disabled={isLoadingKpis}
+              className="w-full lg:w-auto px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+            >
+              {isLoadingKpis ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Carregando...
+                </>
+              ) : (
+                <>🔍 Aplicar</>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Cards de Ação Rápida */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {(
+          [
+            {
+              title: 'Cadastrar Produto',
+              key: 'cadastrarProduto',
+              icon: Package,
+              color: 'blue',
+              description: 'Adicionar novo produto',
+            },
+            {
+              title: 'Estoque',
+              key: 'estoque',
+              icon: ShoppingCart,
+              color: 'green',
+              description: `${inventoryData.produtos} produtos ativos`,
+            },
+            {
+              title: 'Alertas',
+              key: 'alertas',
+              icon: AlertTriangle,
+              color: 'yellow',
+              description: `${inventoryData.alertas} alertas ativos`,
+            },
+            {
+              title: 'Fornecedores',
+              key: 'fornecedores',
+              icon: Truck,
+              color: 'purple',
+              description: `${inventoryData.fornecedores} fornecedores`,
+            },
+          ] as const
+        ).map(
+          (card) =>
+            !hiddenCards.includes(card.key) && (
+              <Card key={card.key} className="hover:border-primary transition-colors relative">
+                <button
+                  className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+                  onClick={() => toggleCardVisibility(card.key)}
+                  title="Ocultar card"
+                >
+                  <EyeOff className="h-4 w-4 text-gray-600" />
+                </button>
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`p-2 bg-${card.color}-100 dark:bg-${card.color}-900/50 rounded-lg`}
+                  >
+                    <card.icon
+                      className={`h-6 w-6 text-${card.color}-600 dark:text-${card.color}-400`}
+                    />
+                  </div>
+                  <div>
+                    <Text variant="h4" weight="medium">
+                      {card.title}
+                    </Text>
+                    <Text color="muted" className="text-sm">
+                      {card.description}
+                    </Text>
+                  </div>
+                </div>
+              </Card>
+            )
+        )}
+      </div>
+
+      {/* Botão para reexibir todos os cards ocultados */}
+      {hiddenCards.length > 0 && (
+        <div className="mt-6 flex items-center gap-4">
+          <button
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+            onClick={() => setHiddenCards([])}
+          >
+            <EyeOff className="h-4 w-4" />
+            Reexibir Todos ({hiddenCards.length} oculto{hiddenCards.length > 1 ? 's' : ''})
+          </button>
+          <span className="text-sm text-gray-600">Cards ocultos: {hiddenCards.join(', ')}</span>
+        </div>
+      )}
 
       {/* KPIs */}
       <KPISection
-        kpis={{
-          producaoTotal: 15234,
-          eficiencia: 87.5,
-          produtividade: 42.8,
-          perdas: 1.8,
-        }}
+        kpis={
+          kpisData || {
+            producaoTotal: 15234,
+            eficiencia: 87.5,
+            produtividade: 42.8,
+            perdas: 1.8,
+          }
+        }
+        isLoading={isLoadingKpis}
       />
 
       {/* Gráficos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-6">
         {/* Produção Mensal por Produto */}
-        <Card className="p-4">
-          <Text variant="h3" weight="medium" className="mb-4">
-            Produção Mensal por Produto
-          </Text>
-          <Chart
-            type="bar"
-            height={300}
-            data={[
-              { name: 'Jan', Produto1: 400, Produto2: 300, Produto3: 200 },
-              { name: 'Fev', Produto1: 500, Produto2: 400, Produto3: 250 },
-              { name: 'Mar', Produto1: 450, Produto2: 350, Produto3: 220 },
-              // ... adicione mais dados mensais
-            ]}
-            series={[{ dataKey: 'Produto1', name: 'Produto 1' }]}
-          />
-        </Card>
+        {!hiddenChartCards.includes('producao-mensal') && (
+          <Card className="p-4 relative">
+            <button
+              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              onClick={() => toggleChartCardVisibility('producao-mensal')}
+              title="Ocultar gráfico"
+            >
+              <EyeOff className="h-4 w-4 text-gray-600" />
+            </button>
+            <Text variant="h3" weight="medium" className="mb-4">
+              Produção Mensal por Produto
+            </Text>
+            {isLoadingKpis ? (
+              <div className="animate-pulse">
+                <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              </div>
+            ) : (
+              <Chart
+                type="bar"
+                height={300}
+                data={chartData}
+                series={[{ dataKey: 'Produto1', name: 'Produto 1' }]}
+              />
+            )}
+          </Card>
+        )}
 
         {/* Análise de Produção Anual */}
-        <Card className="p-4">
-          <Text variant="h3" weight="medium" className="mb-4">
-            Análise de Produção Anual
-          </Text>
-          <Chart
-            type="line"
-            height={300}
-            data={[
-              { mes: 'Jan', producao: 900 },
-              { mes: 'Fev', producao: 1150 },
-              { mes: 'Mar', producao: 1020 },
-              // ... adicione mais dados mensais
-            ]}
-            series={[{ dataKey: 'producao', name: 'Produção' }]}
-            xAxisKey="mes"
-          />
-        </Card>
+        {!hiddenChartCards.includes('analise-producao') && (
+          <Card className="p-4 relative">
+            <button
+              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              onClick={() => toggleChartCardVisibility('analise-producao')}
+              title="Ocultar gráfico"
+            >
+              <EyeOff className="h-4 w-4 text-gray-600" />
+            </button>
+            <Text variant="h3" weight="medium" className="mb-4">
+              Análise de Produção Anual
+            </Text>
+            {isLoadingKpis ? (
+              <div className="animate-pulse">
+                <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              </div>
+            ) : (
+              <Chart
+                type="line"
+                height={300}
+                data={productionChartData}
+                series={[{ dataKey: 'producao', name: 'Produção' }]}
+                xAxisKey="mes"
+              />
+            )}
+          </Card>
+        )}
 
         {/* Alertas de Estoque */}
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <Text variant="h3" weight="medium">
+        {!hiddenChartCards.includes('alertas-estoque') && (
+          <Card className="p-4 relative">
+            <button
+              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              onClick={() => toggleChartCardVisibility('alertas-estoque')}
+              title="Ocultar card"
+            >
+              <EyeOff className="h-4 w-4 text-gray-600" />
+            </button>
+            <Text variant="h3" weight="medium" className="mb-4">
               Alertas de Estoque
             </Text>
-            <Button
-              variant="secondary"
-              className="text-sm"
-              onClick={() => setShowAlertasEstoque(!showAlertasEstoque)}
-            >
-              {showAlertasEstoque ? 'Ocultar' : 'Mostrar'}
-            </Button>
-          </div>
-          {showAlertasEstoque && <AlertasEstoque />}
-        </Card>
+            <AlertasEstoque />
+          </Card>
+        )}
 
         {/* Resumo de Produtos */}
-        <Card className="p-4">
-          <Text variant="h3" weight="medium" className="mb-4">
-            Resumo de Produtos
-          </Text>
-          <div className="space-y-4">
-            {/* TODO: Adicionar gráficos e estatísticas de produtos */}
-            <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <Text variant="h4" weight="medium">
-                Estatísticas em breve...
-              </Text>
-              <Text color="muted">Gráficos e análises detalhadas serão adicionados em breve.</Text>
+        {!hiddenChartCards.includes('resumo-produtos') && (
+          <Card className="p-4 relative">
+            <button
+              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              onClick={() => toggleChartCardVisibility('resumo-produtos')}
+              title="Ocultar card"
+            >
+              <EyeOff className="h-4 w-4 text-gray-600" />
+            </button>
+            <Text variant="h3" weight="medium" className="mb-4">
+              Resumo de Produtos
+            </Text>
+            <div className="space-y-4">
+              {/* TODO: Adicionar gráficos e estatísticas de produtos */}
+              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <Text variant="h4" weight="medium">
+                  Estatísticas em breve...
+                </Text>
+                <Text color="muted">
+                  Gráficos e análises detalhadas serão adicionados em breve.
+                </Text>
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         {/* Lista de Compras */}
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <Text variant="h3" weight="medium">
-              Lista de Compras
-            </Text>
-            <Button variant="secondary" className="text-sm flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Nova Lista
-            </Button>
-          </div>
-          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <Text variant="h4" weight="medium">
-              Lista de Compras em breve...
-            </Text>
-            <Text color="muted">Sistema de lista de compras será implementado em breve.</Text>
-          </div>
-        </Card>
+        {!hiddenChartCards.includes('lista-compras') && (
+          <Card className="p-4 relative">
+            <button
+              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              onClick={() => toggleChartCardVisibility('lista-compras')}
+              title="Ocultar card"
+            >
+              <EyeOff className="h-4 w-4 text-gray-600" />
+            </button>
+            <div className="flex items-center justify-between mb-4">
+              <Text variant="h3" weight="medium">
+                Lista de Compras
+              </Text>
+              <Button variant="secondary" className="text-sm flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Nova Lista
+              </Button>
+            </div>
+            <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <Text variant="h4" weight="medium">
+                Lista de Compras em breve...
+              </Text>
+              <Text color="muted">Sistema de lista de compras será implementado em breve.</Text>
+            </div>
+          </Card>
+        )}
 
         {/* Relatórios Rápidos */}
-        <Card className="p-4">
-          <Text variant="h3" weight="medium" className="mb-4">
-            Relatórios Rápidos
-          </Text>
-          <div className="grid grid-cols-2 gap-4">
-            <Link href="/dashboard/relatorios/validade">
-              <Button variant="secondary" className="w-full flex items-center gap-2 justify-center">
-                <BarChart className="h-4 w-4" />
-                Relatório de Validade
-              </Button>
-            </Link>
-            <Link href="/dashboard/relatorios/estoque">
-              <Button variant="secondary" className="w-full flex items-center gap-2 justify-center">
-                <List className="h-4 w-4" />
-                Relatório de Estoque
-              </Button>
-            </Link>
-          </div>
-        </Card>
+        {!hiddenChartCards.includes('relatorios-rapidos') && (
+          <Card className="p-4 relative">
+            <button
+              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              onClick={() => toggleChartCardVisibility('relatorios-rapidos')}
+              title="Ocultar card"
+            >
+              <EyeOff className="h-4 w-4 text-gray-600" />
+            </button>
+            <Text variant="h3" weight="medium" className="mb-4">
+              Relatórios Rápidos
+            </Text>
+            <div className="grid grid-cols-2 gap-4">
+              <Link href="/dashboard/relatorios/validade">
+                <Button
+                  variant="secondary"
+                  className="w-full flex items-center gap-2 justify-center"
+                >
+                  <BarChart className="h-4 w-4" />
+                  Relatório de Validade
+                </Button>
+              </Link>
+              <Link href="/dashboard/relatorios/estoque">
+                <Button
+                  variant="secondary"
+                  className="w-full flex items-center gap-2 justify-center"
+                >
+                  <List className="h-4 w-4" />
+                  Relatório de Estoque
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        )}
       </div>
+
+      {/* Botão para reexibir todos os cards de gráficos ocultados */}
+      {hiddenChartCards.length > 0 && (
+        <div className="mt-6 flex items-center gap-4">
+          <button
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+            onClick={() => setHiddenChartCards([])}
+          >
+            <EyeOff className="h-4 w-4" />
+            Reexibir Todos os Gráficos ({hiddenChartCards.length} oculto
+            {hiddenChartCards.length > 1 ? 's' : ''})
+          </button>
+          <span className="text-sm text-gray-600">
+            Gráficos ocultos: {hiddenChartCards.join(', ')}
+          </span>
+        </div>
+      )}
+
+      {/* Filtros Modernos */}
     </div>
   );
 }

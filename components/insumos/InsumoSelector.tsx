@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '@/lib/supabase';
 import Text from '@/components/ui/Text';
 
 import Button from '@/components/Button';
@@ -18,7 +18,6 @@ export default function InsumoSelector({ onSelect }: InsumoSelectorProps) {
   const [quantidade, setQuantidade] = useState(1);
   const [insumoSelecionado, setInsumoSelecionado] = useState<Insumo | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const supabase = createClientComponentClient();
 
   useEffect(() => {
     if (!busca) {
@@ -45,7 +44,7 @@ export default function InsumoSelector({ onSelect }: InsumoSelectorProps) {
     };
 
     void buscarInsumos();
-  }, [busca, supabase]);
+  }, [busca]);
 
   const handleSubmit = () => {
     if (insumoSelecionado && quantidade > 0) {

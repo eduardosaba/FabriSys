@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import StatusIcon from '@/components/ui/StatusIcon';
-import Text from '@/components/ui/Text';
-import Button from '@/components/Button';
+import StatusIcon from '../ui/StatusIcon';
+import Text from '../ui/Text';
+import Button from '../Button';
 
 interface Lote {
   id: string;

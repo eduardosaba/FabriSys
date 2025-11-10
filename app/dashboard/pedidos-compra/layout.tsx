@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import DashboardHeader from '@/components/ui/DashboardHeader';
+import PageHeader from '@/components/ui/PageHeader';
 import Panel from '@/components/ui/Panel';
 
 export const metadata: Metadata = {
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function PedidosCompraLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="space-y-6">
-      <DashboardHeader
+      <PageHeader
         title="Pedidos de Compra"
         description="Gerencie os pedidos de compra de insumos"
       />

@@ -17,6 +17,39 @@ interface ThemeColors {
   accent: string;
   background: string;
   text: string;
+  // Cores adicionais para customização completa
+  tituloPaginas: string;
+  hover3Submenu: string;
+  textoGeralHover: string;
+  bordasHeaderPerfil: string;
+  bordasSelecaoListagens: string;
+  barraDashboard: string;
+  barraDashboardHover: string;
+  receitasGraficos: string;
+  receitasGraficosSecundaria: string;
+  despesasGraficos: string;
+  despesasGraficosSecundaria: string;
+  barraRolagem: string;
+  barraRolagemFundo: string;
+  fundoLinkEAD: string;
+  textoLinkEAD: string;
+  botaoSalvar: string;
+  botaoSalvarAtivo: string;
+  botaoSalvarDesabilitado: string;
+  botaoCancelar: string;
+  botaoCancelarAtivo: string;
+  botaoCancelarDesabilitado: string;
+  botaoPesquisar: string;
+  botaoPesquisarAtivo: string;
+  botaoPesquisarDesabilitado: string;
+  camposObrigatorios: string;
+  camposNaoObrigatorios: string;
+  barraSuperiorMenu: string;
+  textoIconeAjuda: string;
+  iconeAjuda: string;
+  // Configurações de logo para usuários admin
+  logo_url?: string;
+  logo_scale?: number;
 }
 
 export interface ThemeSettings {

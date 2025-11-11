@@ -8,6 +8,7 @@ import Modal from '@/components/Modal';
 import Panel from '@/components/ui/Panel';
 import Text from '@/components/ui/Text';
 import { toast } from 'sonner';
+import { Edit, Trash2 } from 'lucide-react';
 
 interface CategoriaFormData {
   nome: string;
@@ -124,20 +125,27 @@ export default function CategoriasPage() {
                 className="flex justify-between items-center py-4 px-6 first:pt-2 last:pb-2"
               >
                 <Text>{categoria.nome}</Text>
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => handleOpenModal(categoria)}>
-                    Editar
-                  </Button>
-                  <Button
-                    variant="secondary"
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => handleOpenModal(categoria)}
+                    className="inline-flex items-center justify-center w-8 h-8 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                    aria-label={`Editar categoria ${categoria.nome}`}
+                    title="Editar"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
                     onClick={() => {
                       if (confirm(`Deseja realmente excluir a categoria "${categoria.nome}"?`)) {
                         void handleDelete(categoria);
                       }
                     }}
+                    className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                    aria-label={`Excluir categoria ${categoria.nome}`}
+                    title="Excluir"
                   >
-                    Excluir
-                  </Button>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             ))}

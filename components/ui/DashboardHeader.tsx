@@ -51,7 +51,7 @@ export default function DashboardHeader() {
   const handleSignOut = async () => {
     setShowUserMenu(false);
     await signOut();
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   const [showQuickMenu, setShowQuickMenu] = useState(false);

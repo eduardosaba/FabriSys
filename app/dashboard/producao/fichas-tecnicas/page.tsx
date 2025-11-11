@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
-import { Plus, Eye, Edit, FileText } from 'lucide-react';
+import { Plus, Eye, Edit, FileText, Loader2 } from 'lucide-react';
+import { useTableFilters } from '@/hooks/useTableFilters';
+import TableControls from '@/components/ui/TableControls';
+import EmptyState from '@/components/ui/EmptyState';
 
 interface FichaTecnicaRaw {
   id: string;
@@ -24,6 +27,10 @@ export default function FichasTecnicasPage() {
   const router = useRouter();
   const [fichas, setFichas] = useState<FichaTecnica[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(fichas, [
+    'produto_final.nome',
+  ]);
 
   useEffect(() => {
     void loadFichasTecnicas();
@@ -82,74 +89,90 @@ export default function FichasTecnicasPage() {
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        {fichas.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="mx-auto h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-              <FileText className="h-6 w-6 text-blue-600" />
-            </div>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">
-              Nenhuma ficha técnica cadastrada
-            </h3>
-            <p className="mt-1 text-sm text-gray-500">
-              As fichas técnicas definem as receitas e custos para produzir seus produtos finais.
-            </p>
-            <div className="mt-6">
-              <Button onClick={() => router.push('/dashboard/producao/fichas-tecnicas/nova')}>
-                <Plus className="w-4 h-4 mr-2" />
-                Criar primeira ficha técnica
-              </Button>
-            </div>
+        <TableControls
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          searchPlaceholder="Buscar fichas por produto..."
+        />{' '}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-gray-600">Carregando fichas técnicas...</span>
           </div>
+        ) : filteredItems.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title={
+              fichas.length === 0 ? 'Nenhuma ficha técnica cadastrada' : 'Nenhuma ficha encontrada'
+            }
+            description={
+              fichas.length === 0
+                ? 'As fichas técnicas definem as receitas e custos para produzir seus produtos finais.'
+                : 'Tente ajustar os filtros de busca para encontrar o que procura.'
+            }
+            action={
+              fichas.length === 0
+                ? {
+                    label: 'Criar primeira ficha técnica',
+                    onClick: () => router.push('/dashboard/producao/fichas-tecnicas/nova'),
+                  }
+                : undefined
+            }
+          />
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Produto Final
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Criado em
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {fichas.map((ficha) => (
-                <tr key={ficha.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {ficha.produto_final?.nome || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(ficha.created_at).toLocaleDateString('pt-BR')}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() =>
-                          (window.location.href = `/dashboard/producao/fichas-tecnicas/${ficha.id}`)
-                        }
-                        className="text-blue-600 hover:text-blue-900"
-                        title="Visualizar"
-                      >
-                        <Eye className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() =>
-                          (window.location.href = `/dashboard/producao/fichas-tecnicas/${ficha.id}/editar`)
-                        }
-                        className="text-yellow-600 hover:text-yellow-900"
-                        title="Editar"
-                      >
-                        <Edit className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Produto Final
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Criado em
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ações
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredItems.map((ficha) => (
+                  <tr key={ficha.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {ficha.produto_final?.nome || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(ficha.created_at).toLocaleDateString('pt-BR')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() =>
+                            (window.location.href = `/dashboard/producao/fichas-tecnicas/${ficha.id}`)
+                          }
+                          className="inline-flex items-center justify-center w-8 h-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                          aria-label={`Visualizar ficha técnica de ${ficha.produto_final?.nome || 'produto'}`}
+                          title="Visualizar"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            (window.location.href = `/dashboard/producao/fichas-tecnicas/${ficha.id}/editar`)
+                          }
+                          className="inline-flex items-center justify-center w-8 h-8 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                          aria-label={`Editar ficha técnica de ${ficha.produto_final?.nome || 'produto'}`}
+                          title="Editar"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

@@ -4,10 +4,14 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { format, addDays, isBefore } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Search } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Text from '@/components/ui/Text';
 import StatusIcon from '@/components/ui/StatusIcon';
 import Badge from '@/components/ui/Badge';
+import { useTableFilters } from '@/hooks/useTableFilters';
+import TableControls from '@/components/ui/TableControls';
+import EmptyState from '@/components/ui/EmptyState';
 
 interface Lote {
   id: string;
@@ -41,6 +45,12 @@ interface RelatorioValidadeProps {
 export default function RelatorioValidade({ diasAlerta = 30 }: RelatorioValidadeProps) {
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Usar o hook de filtros
+  const filters = useTableFilters(lotes, {
+    searchFields: ['insumo.nome', 'numero_lote'],
+    statusField: 'status',
+  });
 
   useEffect(() => {
     async function fetchLotes() {
@@ -134,62 +144,85 @@ export default function RelatorioValidade({ diasAlerta = 30 }: RelatorioValidade
         Lotes Próximos ao Vencimento
       </Text>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-900/50">
-            <tr>
-              <th className="px-6 py-3 text-left">
-                <Text variant="caption" weight="medium" color="muted">
-                  Insumo
-                </Text>
-              </th>
-              <th className="px-6 py-3 text-left">
-                <Text variant="caption" weight="medium" color="muted">
-                  Lote
-                </Text>
-              </th>
-              <th className="px-6 py-3 text-left">
-                <Text variant="caption" weight="medium" color="muted">
-                  Quantidade Restante
-                </Text>
-              </th>
-              <th className="px-6 py-3 text-left">
-                <Text variant="caption" weight="medium" color="muted">
-                  Validade
-                </Text>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-            {lotes.map((lote) => {
-              const isVencido =
-                lote.data_validade && isBefore(new Date(lote.data_validade), new Date());
-              const badgeVariant = isVencido ? 'danger' : 'warning';
+      {/* Controles de busca e filtro */}
+      {lotes.length > 0 && (
+        <TableControls
+          filters={filters}
+          searchPlaceholder="Buscar lotes..."
+          showStatusFilter={false}
+        />
+      )}
 
-              return (
-                <tr key={lote.id} className={isVencido ? 'bg-red-50 dark:bg-red-900/20' : ''}>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <Text variant="body-sm">{lote.insumo.nome}</Text>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <Text variant="body-sm" color="muted">
-                      {lote.numero_lote || '-'}
-                    </Text>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <Text variant="body-sm">
-                      {lote.quantidade_restante} {lote.insumo.unidade_medida}
-                    </Text>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <Badge variant={badgeVariant}>{formatDate(lote.data_validade)}</Badge>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {filters.filteredItems.length === 0 && lotes.length > 0 ? (
+        <EmptyState
+          type="no-results"
+          title="Nenhum lote encontrado"
+          description="Tente ajustar os filtros de busca."
+        />
+      ) : filters.filteredItems.length === 0 ? (
+        <EmptyState
+          type="no-data"
+          title="Nenhum lote próximo ao vencimento"
+          description={`Nenhum lote próximo ao vencimento nos próximos ${diasAlerta} dias.`}
+        />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-900/50">
+              <tr>
+                <th className="px-6 py-3 text-left">
+                  <Text variant="caption" weight="medium" color="muted">
+                    Insumo
+                  </Text>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <Text variant="caption" weight="medium" color="muted">
+                    Lote
+                  </Text>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <Text variant="caption" weight="medium" color="muted">
+                    Quantidade Restante
+                  </Text>
+                </th>
+                <th className="px-6 py-3 text-left">
+                  <Text variant="caption" weight="medium" color="muted">
+                    Validade
+                  </Text>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {filters.filteredItems.map((lote) => {
+                const isVencido =
+                  lote.data_validade && isBefore(new Date(lote.data_validade), new Date());
+                const badgeVariant = isVencido ? 'danger' : 'warning';
+
+                return (
+                  <tr key={lote.id} className={isVencido ? 'bg-red-50 dark:bg-red-900/20' : ''}>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <Text variant="body-sm">{lote.insumo.nome}</Text>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <Text variant="body-sm" color="muted">
+                        {lote.numero_lote || '-'}
+                      </Text>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <Text variant="body-sm">
+                        {lote.quantidade_restante} {lote.insumo.unidade_medida}
+                      </Text>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <Badge variant={badgeVariant}>{formatDate(lote.data_validade)}</Badge>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Card>
   );
 }

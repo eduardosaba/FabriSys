@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../lib/auth';
 
@@ -13,10 +12,42 @@ import { toast } from 'react-hot-toast';
 import { useTheme } from '../lib/theme';
 import { Eye, EyeOff } from 'lucide-react';
 
+import { useEffect, useState } from 'react';
+
 function SplashScreen() {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    let current = 0;
+    const interval = setInterval(() => {
+      current += Math.random() * 15 + 5; // avança de 5 a 20 por tick
+      if (current >= 100) {
+        current = 100;
+        clearInterval(interval);
+      }
+      setProgress(Math.floor(current));
+    }, 120);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-primary p-4">
-      <img src="/logo.png" alt="Logo FabriSys" className="w-32 h-32 mb-6 drop-shadow-lg" />
+    <div className="flex flex-col items-center justify-center min-h-screen bg-primary p-4 relative">
+      {/* Logo com efeito animado */}
+      <div className="w-32 h-32 mb-8 flex items-center justify-center">
+        <img
+          src="/logo.png"
+          alt="Logo FabriSys"
+          className="w-full h-full drop-shadow-lg animate-logo-bounce"
+        />
+      </div>
+      {/* Barra de progresso real abaixo da logo */}
+      <div className="w-32 h-3 bg-gray-200 rounded-full overflow-hidden mb-4">
+        <div
+          className="h-full bg-gradient-to-r from-blue-400 via-primary to-blue-600 transition-all duration-200"
+          style={{ width: `${progress}%` }}
+        ></div>
+      </div>
+      <span className="text-white text-xs font-mono mb-2">Carregando... {progress}%</span>
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
     </div>
   );
@@ -28,22 +59,33 @@ function OnboardingLogin() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const router = useRouter();
   const { theme } = useTheme();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setProgress(0);
+    let current = 0;
+    const interval = setInterval(() => {
+      current += Math.random() * 20 + 10;
+      if (current >= 90) current = 90;
+      setProgress(Math.floor(current));
+    }, 120);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       if (data.user) {
+        setProgress(95);
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', data.user.id)
           .single();
         if (profileError) throw profileError;
+        setProgress(100);
+        clearInterval(interval);
         const role = (profile as { role: string } | null)?.role || 'pdv';
         switch (role) {
           case 'admin':
@@ -59,6 +101,8 @@ function OnboardingLogin() {
         toast.success('Login realizado com sucesso!');
       }
     } catch (error) {
+      clearInterval(interval);
+      setProgress(0);
       let errorMessage = 'Email ou senha incorretos';
       if (
         error &&
@@ -76,6 +120,7 @@ function OnboardingLogin() {
       }
       toast.error(errorMessage);
     } finally {
+      clearInterval(interval);
       setLoading(false);
     }
   };
@@ -134,6 +179,20 @@ function OnboardingLogin() {
               </div>
             </div>
           </div>
+          {/* Barra de progresso durante login */}
+          {loading && (
+            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-4">
+              <div
+                className="h-full bg-gradient-to-r from-blue-400 via-primary to-blue-600 transition-all duration-200"
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+          )}
+          {loading && (
+            <span className="text-blue-700 dark:text-blue-300 text-xs font-mono mb-2 block">
+              Carregando... {progress}%
+            </span>
+          )}
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label
@@ -234,10 +293,13 @@ export default function Home() {
     }
   }, [user, profile, loading, router]);
 
-  if (loading || showSplash) {
+  if (showSplash || loading) {
     return <SplashScreen />;
   }
-
   // Se não logado, mostra Onboarding/Login
-  return <OnboardingLogin onLogin={() => router.push('/login')} />;
+  if (!user || !profile) {
+    return <OnboardingLogin />;
+  }
+  // Se logado, redireciona conforme perfil
+  return null;
 }

@@ -24,9 +24,9 @@ export function KPICard({
   const isTrendPositive = trend && trend > 0;
   const trendIcon = trend ? (
     isTrendPositive ? (
-      <TrendingUp className="h-4 w-4 text-green-500" />
+      <TrendingUp className="h-4 w-4 text-trend-positive" />
     ) : (
-      <TrendingDown className="h-4 w-4 text-red-500" />
+      <TrendingDown className="h-4 w-4 text-trend-negative" />
     )
   ) : null;
 
@@ -44,7 +44,9 @@ export function KPICard({
             {trend && (
               <div className="flex items-center gap-1">
                 {trendIcon}
-                <Text className={`text-sm ${isTrendPositive ? 'text-green-500' : 'text-red-500'}`}>
+                <Text
+                  className={`text-sm ${isTrendPositive ? 'text-trend-positive' : 'text-trend-negative'}`}
+                >
                   {Math.abs(trend)}%
                 </Text>
               </div>

@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import Button from '@/components/Button';
 import ThemeConfigurator from '@/components/ThemeConfigurator';
+import CustomizacaoTab from './CustomizacaoTab';
 
 export default function ConfiguracoesPage() {
-  const [activeTab, setActiveTab] = useState<'visual' | 'sistema'>('visual');
+  const [activeTab, setActiveTab] = useState<'visual' | 'sistema' | 'customizacao'>('visual');
 
   return (
     <div className="container py-6 space-y-6">
@@ -27,11 +28,17 @@ export default function ConfiguracoesPage() {
         >
           Sistema
         </Button>
+        <Button
+          variant={activeTab === 'customizacao' ? 'primary' : 'outline'}
+          onClick={() => setActiveTab('customizacao')}
+        >
+          Customização
+        </Button>
       </div>
 
       <div className="grid gap-6">
         {activeTab === 'visual' && <ThemeConfigurator />}
-
+        {activeTab === 'customizacao' && <CustomizacaoTab />}
         {activeTab === 'sistema' && (
           <Card>
             <Card.Header>

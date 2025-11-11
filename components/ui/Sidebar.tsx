@@ -107,10 +107,7 @@ export default function Sidebar() {
     <>
       {/* Overlay for mobile */}
       {!isCollapsed && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 lg:hidden z-40"
-          onClick={toggleSidebar}
-        />
+        <div className="fixed inset-0 bg-overlay-mobile lg:hidden z-40" onClick={toggleSidebar} />
       )}
 
       {/* Sidebar */}
@@ -205,7 +202,7 @@ export default function Sidebar() {
                       ${!isCollapsed ? 'space-x-2' : 'justify-center w-full'}
                       ${
                         isActive(displayHref)
-                          ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400'
+                          ? 'bg-sidebar-active-bg text-sidebar-active-text dark:bg-indigo-900/50 dark:text-indigo-400'
                           : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
                       }
                     `}
@@ -228,7 +225,7 @@ export default function Sidebar() {
                 <div
                   className={`flex items-center p-2 rounded-md transition-all duration-200 relative group ${
                     isActive(item.href) || isSubmenuActive(item)
-                      ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400'
+                      ? 'bg-sidebar-active-bg text-sidebar-active-text dark:bg-indigo-900/50 dark:text-indigo-400'
                       : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
                   }`}
                 >
@@ -321,8 +318,8 @@ export default function Sidebar() {
                         <div
                           className={`flex items-center p-2 pl-4 rounded-md group ${
                             isActive(child.href)
-                              ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30'
-                              : 'text-gray-600 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                              ? 'text-sidebar-active-text dark:text-indigo-400 bg-sidebar-active-bg dark:bg-indigo-900/30'
+                              : 'text-gray-600 hover:text-sidebar-active-text dark:text-gray-400 dark:hover:text-indigo-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                           }`}
                         >
                           <Link href={child.href} className="flex-1">
@@ -379,7 +376,7 @@ export default function Sidebar() {
                                 flex-1 px-4 py-2
                                 ${
                                   isActive(child.href)
-                                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/50'
+                                    ? 'text-sidebar-active-text dark:text-indigo-400 bg-sidebar-active-bg dark:bg-indigo-900/50'
                                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                                 }
                               `}

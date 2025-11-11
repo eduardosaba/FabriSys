@@ -12,6 +12,7 @@ import { PedidoCompraDetalhadoArraySchema } from '@/lib/validations/pedidos';
 import { useToast } from '@/hooks/useToast';
 import Modal from '@/components/Modal';
 import { useRouter } from 'next/navigation';
+import { Edit, Trash2, Eye } from 'lucide-react';
 
 export default function PedidosCompraList() {
   const router = useRouter();
@@ -172,18 +173,24 @@ export default function PedidosCompraList() {
                 </Text>
               </div>
 
-              <div className="flex space-x-2">
-                <Button
-                  variant="secondary"
+              <div className="flex justify-end gap-2">
+                <button
                   onClick={() => router.push(`/dashboard/pedidos-compra/${pedido.id}`)}
+                  className="inline-flex items-center justify-center w-8 h-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  aria-label={`Visualizar pedido ${pedido.numero_pedido}`}
+                  title="Visualizar"
                 >
-                  Editar Itens
-                </Button>
-                <Button variant="secondary" onClick={() => abrirEditar(pedido)}>
-                  Editar Rápido
-                </Button>
-                <Button
-                  variant="secondary"
+                  <Eye className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => abrirEditar(pedido)}
+                  className="inline-flex items-center justify-center w-8 h-8 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                  aria-label={`Editar pedido ${pedido.numero_pedido}`}
+                  title="Editar"
+                >
+                  <Edit className="h-4 w-4" />
+                </button>
+                <button
                   onClick={async () => {
                     const confirmar = window.confirm('Tem certeza que deseja excluir esta ordem?');
                     if (!confirmar) return;
@@ -201,9 +208,12 @@ export default function PedidosCompraList() {
                       toast({ title: 'Erro ao excluir ordem', variant: 'error' });
                     }
                   }}
+                  className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  aria-label={`Excluir pedido ${pedido.numero_pedido}`}
+                  title="Excluir"
                 >
-                  Excluir
-                </Button>
+                  <Trash2 className="h-4 w-4" />
+                </button>
                 <Button
                   variant="secondary"
                   onClick={async () => {

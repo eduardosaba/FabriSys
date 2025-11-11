@@ -12,6 +12,10 @@ import Modal from '@/components/Modal';
 import { Toaster, toast } from 'react-hot-toast';
 import Text from '@/components/ui/Text';
 import Card from '@/components/ui/Card';
+import { Plus, Eye, Edit, Trash2, Loader2, Building2 } from 'lucide-react';
+import { useTableFilters } from '@/hooks/useTableFilters';
+import TableControls from '@/components/ui/TableControls';
+import EmptyState from '@/components/ui/EmptyState';
 // import StatusIcon from '@/components/ui/StatusIcon';
 
 const fornecedorSchema = z.object({
@@ -62,6 +66,12 @@ export default function FornecedoresPage() {
       reset({});
     }
   }, [editingFornecedor, reset]);
+
+  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(fornecedores, [
+    'nome',
+    'cnpj',
+    'email',
+  ]);
 
   async function fetchFornecedores() {
     try {
@@ -175,22 +185,31 @@ export default function FornecedoresPage() {
 
       {loading ? (
         <div className="mt-6 flex items-center justify-center">
-          <div className="flex items-center space-x-2">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900 border-t-transparent dark:border-white dark:border-t-transparent"></div>
-            <span className="text-gray-700 dark:text-gray-300">Carregando...</span>
-          </div>
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <span className="ml-2 text-gray-600">Carregando fornecedores...</span>
         </div>
-      ) : fornecedores.length === 0 ? (
-        <div className="mt-6 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center dark:border-gray-700">
-          <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
-            Nenhum fornecedor cadastrado
-          </p>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Clique no botão acima para adicionar um novo fornecedor
-          </p>
-        </div>
+      ) : filteredItems.length === 0 ? (
+        <EmptyState
+          icon={Building2}
+          title={
+            fornecedores.length === 0
+              ? 'Nenhum fornecedor cadastrado'
+              : 'Nenhum fornecedor encontrado'
+          }
+          description={
+            fornecedores.length === 0
+              ? 'Clique no botão acima para adicionar um novo fornecedor'
+              : 'Tente ajustar os filtros de busca para encontrar o que procura.'
+          }
+        />
       ) : (
         <Card variant="default">
+          <TableControls
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Buscar fornecedores por nome, CNPJ ou email..."
+          />
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -213,7 +232,7 @@ export default function FornecedoresPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {fornecedores.map((fornecedor) => (
+                {filteredItems.map((fornecedor) => (
                   <tr key={fornecedor.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {fornecedor.nome}
@@ -228,19 +247,27 @@ export default function FornecedoresPage() {
                       {fornecedor.telefone || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <Button
-                        variant="secondary"
-                        className="mr-2"
-                        onClick={() => {
-                          setEditingFornecedor(fornecedor);
-                          setIsModalOpen(true);
-                        }}
-                      >
-                        Editar
-                      </Button>
-                      <Button variant="primary" onClick={() => handleDelete(fornecedor)}>
-                        Excluir
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingFornecedor(fornecedor);
+                            setIsModalOpen(true);
+                          }}
+                          className="inline-flex items-center justify-center w-8 h-8 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                          aria-label={`Editar fornecedor ${fornecedor.nome}`}
+                          title="Editar"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(fornecedor)}
+                          className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                          aria-label={`Excluir fornecedor ${fornecedor.nome}`}
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

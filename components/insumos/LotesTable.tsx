@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Edit, Trash2 } from 'lucide-react';
 import StatusIcon from '../ui/StatusIcon';
 import Text from '../ui/Text';
-import Button from '../Button';
 
 interface Lote {
   id: string;
@@ -292,20 +292,20 @@ export default function LotesTable({
                 </Text>
               </td>
               {(onEdit || onDelete) && (
-                <td className="whitespace-nowrap px-6 py-4">
+                <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                   <div className="flex justify-end gap-2">
                     {onEdit && (
-                      <Button
-                        variant="secondary"
+                      <button
                         onClick={() => onEdit(lote)}
-                        className="py-1.5 px-2.5 text-sm"
+                        className="text-yellow-600 hover:text-yellow-900 p-1 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                        title="Editar lote"
+                        aria-label={`Editar lote ${lote.numero_lote || lote.id}`}
                       >
-                        Editar
-                      </Button>
+                        <Edit className="h-5 w-5" />
+                      </button>
                     )}
                     {onDelete && (
-                      <Button
-                        variant="secondary"
+                      <button
                         onClick={() => {
                           if (
                             confirm(
@@ -315,10 +315,12 @@ export default function LotesTable({
                             onDelete(lote);
                           }
                         }}
-                        className="py-1.5 px-2.5 text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        className="text-red-600 hover:text-red-900 p-1 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
+                        title="Excluir lote"
+                        aria-label={`Excluir lote ${lote.numero_lote || lote.id}`}
                       >
-                        Excluir
-                      </Button>
+                        <Trash2 className="h-5 w-5" />
+                      </button>
                     )}
                   </div>
                 </td>

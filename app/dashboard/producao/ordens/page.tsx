@@ -3,10 +3,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
-import { Plus, Eye, Edit, Trash2, Package } from 'lucide-react';
+import { Plus, Eye, Edit, Trash2, Package, Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
 import Modal from '@/components/Modal';
 import { useToast } from '@/hooks/useToast';
+import { useTableFilters } from '@/hooks/useTableFilters';
+import TableControls from '@/components/ui/TableControls';
+import EmptyState from '@/components/ui/EmptyState';
 
 interface OrdemProducao {
   id: string;
@@ -85,6 +88,12 @@ export default function OrdensProducaoPage() {
     void loadOrdens();
   }, [loadOrdens]);
 
+  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(ordens, [
+    'numero_op',
+    'produto_final.nome',
+    'status',
+  ]);
+
   async function handleDelete() {
     if (!selectedOrdem) return;
 
@@ -149,110 +158,128 @@ export default function OrdensProducaoPage() {
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        {ordens.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="mx-auto h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-              <Package className="h-6 w-6 text-blue-600" />
-            </div>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhuma ordem de produção</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              As ordens de produção gerenciam a fabricação dos seus produtos finais.
-            </p>
-            <div className="mt-6">
-              <Button onClick={() => (window.location.href = '/dashboard/producao/ordens/nova')}>
-                <Plus className="w-4 h-4 mr-2" />
-                Criar primeira ordem
-              </Button>
-            </div>
+        <TableControls
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          searchPlaceholder="Buscar ordens por OP, produto ou status..."
+        />
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-gray-600">Carregando ordens...</span>
           </div>
+        ) : filteredItems.length === 0 ? (
+          <EmptyState
+            icon={Package}
+            title={ordens.length === 0 ? 'Nenhuma ordem de produção' : 'Nenhuma ordem encontrada'}
+            description={
+              ordens.length === 0
+                ? 'As ordens de produção gerenciam a fabricação dos seus produtos finais.'
+                : 'Tente ajustar os filtros de busca para encontrar o que procura.'
+            }
+            action={
+              ordens.length === 0
+                ? {
+                    label: 'Criar primeira ordem',
+                    onClick: () => (window.location.href = '/dashboard/producao/ordens/nova'),
+                  }
+                : undefined
+            }
+          />
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  OP
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Produto
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Quantidade
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Data Prevista
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Custo Previsto
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {ordens.map((ordem) => (
-                <tr key={ordem.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {ordem.numero_op}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {ordem.produto_final.nome}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {ordem.quantidade_prevista}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ordem.status)}`}
-                    >
-                      {ordem.status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(ordem.data_prevista).toLocaleDateString('pt-BR')}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {formatCurrency(ordem.custo_previsto)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() =>
-                          (window.location.href = `/dashboard/producao/ordens/${ordem.id}`)
-                        }
-                        className="text-blue-600 hover:text-blue-900"
-                        title="Visualizar"
-                      >
-                        <Eye className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() =>
-                          (window.location.href = `/dashboard/producao/ordens/${ordem.id}/editar`)
-                        }
-                        className="text-yellow-600 hover:text-yellow-900"
-                        title="Editar"
-                      >
-                        <Edit className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedOrdem(ordem);
-                          setDeleteModal(true);
-                        }}
-                        className="text-red-600 hover:text-red-900"
-                        title="Excluir"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    OP
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Produto
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Quantidade
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Data Prevista
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Custo Previsto
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ações
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredItems.map((ordem) => (
+                  <tr key={ordem.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {ordem.numero_op}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {ordem.produto_final.nome}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {ordem.quantidade_prevista}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ordem.status)}`}
+                      >
+                        {ordem.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(ordem.data_prevista).toLocaleDateString('pt-BR')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {formatCurrency(ordem.custo_previsto)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() =>
+                            (window.location.href = `/dashboard/producao/ordens/${ordem.id}`)
+                          }
+                          className="inline-flex items-center justify-center w-8 h-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                          aria-label={`Visualizar ordem ${ordem.numero_op}`}
+                          title="Visualizar"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            (window.location.href = `/dashboard/producao/ordens/${ordem.id}/editar`)
+                          }
+                          className="inline-flex items-center justify-center w-8 h-8 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                          aria-label={`Editar ordem ${ordem.numero_op}`}
+                          title="Editar"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedOrdem(ordem);
+                            setDeleteModal(true);
+                          }}
+                          className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                          aria-label={`Excluir ordem ${ordem.numero_op}`}
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

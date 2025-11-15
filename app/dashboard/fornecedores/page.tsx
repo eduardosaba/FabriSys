@@ -12,11 +12,13 @@ import Modal from '@/components/Modal';
 import { Toaster, toast } from 'react-hot-toast';
 import Text from '@/components/ui/Text';
 import Card from '@/components/ui/Card';
-import { Plus, Eye, Edit, Trash2, Loader2, Building2 } from 'lucide-react';
+import { Edit, Trash2, Loader2 } from 'lucide-react';
 import { useTableFilters } from '@/hooks/useTableFilters';
 import TableControls from '@/components/ui/TableControls';
 import EmptyState from '@/components/ui/EmptyState';
 // import StatusIcon from '@/components/ui/StatusIcon';
+import PageHeader from '@/components/ui/PageHeader';
+import { Truck } from 'lucide-react';
 
 const fornecedorSchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
@@ -67,11 +69,9 @@ export default function FornecedoresPage() {
     }
   }, [editingFornecedor, reset]);
 
-  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(fornecedores, [
-    'nome',
-    'cnpj',
-    'email',
-  ]);
+  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(fornecedores, {
+    searchFields: ['nome', 'cnpj', 'email'],
+  });
 
   async function fetchFornecedores() {
     try {
@@ -166,31 +166,30 @@ export default function FornecedoresPage() {
 
   return (
     <>
-      <div className="mb-6 sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
-          Gestão de Fornecedores
-        </h1>
-        <div className="mt-3 sm:mt-0">
-          <Button
-            onClick={() => {
-              setEditingFornecedor(null);
-              reset({});
-              setIsModalOpen(true);
-            }}
-          >
-            Adicionar Fornecedor
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Gestão de Fornecedores"
+        description="Gerencie os fornecedores cadastrados no sistema"
+        icon={Truck}
+      >
+        <Button
+          onClick={() => {
+            setEditingFornecedor(null);
+            reset({});
+            setIsModalOpen(true);
+          }}
+        >
+          Adicionar Fornecedor
+        </Button>
+      </PageHeader>
 
       {loading ? (
         <div className="mt-6 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
           <span className="ml-2 text-gray-600">Carregando fornecedores...</span>
         </div>
       ) : filteredItems.length === 0 ? (
         <EmptyState
-          icon={Building2}
+          type={fornecedores.length === 0 ? 'no-data' : 'no-results'}
           title={
             fornecedores.length === 0
               ? 'Nenhum fornecedor cadastrado'
@@ -214,46 +213,46 @@ export default function FornecedoresPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Nome
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     CNPJ
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Email
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Telefone
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 bg-white">
                 {filteredItems.map((fornecedor) => (
                   <tr key={fornecedor.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {fornecedor.nome}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {formatCNPJ(fornecedor.cnpj)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {fornecedor.email || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {fornecedor.telefone || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => {
                             setEditingFornecedor(fornecedor);
                             setIsModalOpen(true);
                           }}
-                          className="inline-flex items-center justify-center w-8 h-8 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
                           aria-label={`Editar fornecedor ${fornecedor.nome}`}
                           title="Editar"
                         >
@@ -261,7 +260,7 @@ export default function FornecedoresPage() {
                         </button>
                         <button
                           onClick={() => handleDelete(fornecedor)}
-                          className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
                           aria-label={`Excluir fornecedor ${fornecedor.nome}`}
                           title="Excluir"
                         >

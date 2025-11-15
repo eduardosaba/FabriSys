@@ -1,7 +1,7 @@
 /// <reference types="node" />
 'use server';
 
-import * as htmlPdf from 'html-pdf-node';
+import puppeteer from 'puppeteer';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { base64Logo } from './assets/logo';
@@ -96,15 +96,29 @@ export async function gerarPedidoCompraPDF(itens: ItemPedido[]): Promise<Buffer>
     </html>
   `;
 
-  const options: htmlPdf.Options = {
-    format: 'A4',
-    margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
-  };
+  // Usar puppeteer diretamente para gerar PDF
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
 
-  const file: htmlPdf.File = { content: html };
-  // Tipagem de html-pdf-node pode não refletir o retorno (Buffer). Forçamos o cast.
-  const buffer = await (
-    htmlPdf as unknown as { generatePdf: (f: htmlPdf.File, o?: htmlPdf.Options) => Promise<Buffer> }
-  ).generatePdf(file, options);
-  return buffer;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    const page = await browser.newPage();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+      printBackground: true,
+    });
+
+    return Buffer.from(pdfBuffer);
+  } finally {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    await browser.close();
+  }
 }

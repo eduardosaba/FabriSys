@@ -3,18 +3,18 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Insumo } from '@/lib/types';
-// Import type for form data
-import Button from '@/components/Button';
-import Modal from '@/components/Modal';
-import InsumoForm from '@/components/insumos/InsumoForm';
-import { unidadesMedida } from '@/lib/validations/insumos';
-import { InsumoFormData } from '@/lib/validations';
+import { z } from 'zod';
+import { insumoSchema } from '@/lib/validations';
 import InsumosTable from '@/components/insumos/InsumosTable';
 import { Toaster, toast } from 'react-hot-toast';
-import Panel from '@/components/ui/Panel';
 import Text from '@/components/ui/Text';
 import Card from '@/components/ui/Card';
 import StatusIcon from '@/components/ui/StatusIcon';
+import Button from '@/components/Button';
+import Modal from '@/components/Modal';
+import InsumoForm from '@/components/insumos/InsumoForm';
+import PageHeader from '@/components/ui/PageHeader';
+import { Package } from 'lucide-react';
 
 // Componente "InsumosPorCategoria" removido por não ser utilizado
 
@@ -108,7 +108,7 @@ export default function InsumosPage() {
     }
   }
 
-  async function handleSave(values: InsumoFormData) {
+  async function handleSave(values: z.infer<typeof insumoSchema>) {
     try {
       setSaving(true);
 
@@ -116,12 +116,12 @@ export default function InsumosPage() {
         nome: String(values.nome ?? ''),
         unidade_medida: String(values.unidade_medida ?? 'un'),
         estoque_minimo_alerta: Number(values.estoque_minimo_alerta ?? 0),
-        categoria_id: String(values.categoria_id ?? ''),
-        atributos_dinamicos: (values.atributos_dinamicos as Record<string, unknown>) ?? {},
-        custo_por_ue: Number(values.custo_por_ue) || undefined,
-        unidade_estoque: String(values.unidade_estoque ?? (unidadesMedida[0] as string)),
-        unidade_consumo: String(values.unidade_consumo ?? (unidadesMedida[0] as string)),
+        categoria_id: values.categoria_id || undefined,
+        atributos_dinamicos: values.atributos_dinamicos || {},
+        unidade_estoque: values.unidade_estoque || undefined,
+        unidade_consumo: values.unidade_consumo || undefined,
         fator_conversao: Number(values.fator_conversao ?? 1),
+        custo_por_ue: values.custo_por_ue ? Number(values.custo_por_ue) : undefined,
       };
 
       const resInsert = await supabase.from('insumos').insert(safeValues);
@@ -142,23 +142,20 @@ export default function InsumosPage() {
   }
   return (
     <>
-      <Panel variant="default" className="mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <Text variant="h2" weight="semibold">
-            Insumos
-          </Text>
-          <div className="mt-3 sm:mt-0">
-            <Button
-              onClick={() => {
-                setEditingInsumo(null);
-                setIsModalOpen(true);
-              }}
-            >
-              Novo Insumo
-            </Button>
-          </div>
-        </div>
-      </Panel>
+      <PageHeader
+        title="Cadastro de Insumos"
+        description="Gerencie o cadastro de matérias-primas e insumos"
+        icon={Package}
+      >
+        <Button
+          onClick={() => {
+            setEditingInsumo(null);
+            setIsModalOpen(true);
+          }}
+        >
+          Novo Insumo
+        </Button>
+      </PageHeader>
 
       {loading ? (
         <Card variant="default" className="mt-6 py-8">
@@ -195,20 +192,11 @@ export default function InsumosPage() {
           initialValues={(() => {
             if (!editingInsumo) return undefined;
 
-            // Garantir tipos explícitos antes de passar para o formulário
-            const unidade = (unidadesMedida as readonly string[]).includes(
-              editingInsumo.unidade_medida
-            )
-              ? (editingInsumo.unidade_medida as (typeof unidadesMedida)[number])
-              : 'un';
-
             return {
               nome: String(editingInsumo.nome),
-              unidade_medida: unidade,
+              unidade_medida: String(editingInsumo.unidade_medida),
               estoque_minimo_alerta: editingInsumo.estoque_minimo_alerta,
-              categoria_id: editingInsumo.categoria_id,
-              atributos_dinamicos: editingInsumo.atributos_dinamicos ?? {},
-            } as InsumoFormData;
+            };
           })()}
         />
       </Modal>

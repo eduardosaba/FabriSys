@@ -14,7 +14,8 @@ import { Eye, EyeOff } from 'lucide-react';
 
 import { useEffect, useState } from 'react';
 
-function SplashScreen() {
+function SplashScreen({ onComplete }: { onComplete: () => void }) {
+  const { theme } = useTheme();
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
@@ -23,32 +24,44 @@ function SplashScreen() {
       current += Math.random() * 15 + 5; // avança de 5 a 20 por tick
       if (current >= 100) {
         current = 100;
+        setProgress(100);
         clearInterval(interval);
+        // Aguardar um pouco para mostrar 100% antes de completar
+        setTimeout(onComplete, 300);
+        return;
       }
       setProgress(Math.floor(current));
     }, 120);
     return () => clearInterval(interval);
-  }, []);
+  }, [onComplete]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-primary p-4 relative">
+    <div className="relative flex min-h-screen flex-col items-center justify-center bg-primary p-4">
       {/* Logo com efeito animado */}
-      <div className="w-32 h-32 mb-8 flex items-center justify-center">
+      <div className="mb-8 flex items-center justify-center w-full">
         <img
-          src="/logo.png"
-          alt="Logo FabriSys"
-          className="w-full h-full drop-shadow-lg animate-logo-bounce"
+          src={theme.logo_url || '/logo.png'}
+          alt={`Logo ${theme.name || 'Confectio'}`}
+          className="animate-logo-bounce drop-shadow-lg mx-auto"
+          style={{
+            width: '448px',
+            height: '180px',
+            maxWidth: '95vw',
+            maxHeight: '32vh',
+            objectFit: 'contain',
+            transform: `scale(${theme.logo_scale || 1})`,
+          }}
         />
       </div>
       {/* Barra de progresso real abaixo da logo */}
-      <div className="w-32 h-3 bg-gray-200 rounded-full overflow-hidden mb-4">
+      <div className="mb-4 h-3 w-32 overflow-hidden rounded-full bg-gray-200">
         <div
-          className="h-full bg-gradient-to-r from-blue-400 via-primary to-blue-600 transition-all duration-200"
+          className="h-full bg-gradient-to-r from-orange-400 via-orange-500 to-orange-600 transition-all duration-200"
           style={{ width: `${progress}%` }}
         ></div>
       </div>
-      <span className="text-white text-xs font-mono mb-2">Carregando... {progress}%</span>
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+      <span className="mb-2 font-mono text-xs text-white">Carregando... {progress}%</span>
+      <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-white"></div>
     </div>
   );
 }
@@ -126,54 +139,77 @@ function OnboardingLogin() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-background dark:bg-background">
+    <div className="flex min-h-screen flex-col bg-background dark:bg-background md:flex-row">
       {/* Onboarding/Marketing */}
-      <div className="flex-1 flex flex-col justify-center items-center bg-primary text-white p-8">
-        <img src="/logo.png" alt="Logo FabriSys" className="w-24 h-24 mb-4 drop-shadow-lg" />
-        <h2 className="text-3xl font-bold mb-2">Zero Desperdício</h2>
-        <p className="mb-2">Controle de CMV, produção e insumos em tempo real.</p>
-        <ul className="text-lg list-disc pl-6 mb-4">
+      <div className="flex flex-1 flex-col items-center justify-center bg-primary p-4 text-white">
+        <div
+          className="mb-4 drop-shadow-lg flex justify-center items-center w-full"
+          style={{ minHeight: '48px', marginTop: '16px' }}
+        >
+          <img
+            src={theme.logo_url || '/logo.png'}
+            alt={`Logo ${theme.name || 'Confectio'}`}
+            className="object-contain mx-auto"
+            style={{
+              width: '86px',
+              height: '26px',
+              maxWidth: '60vw',
+              maxHeight: '48px',
+              transform: `scale(${theme.logo_scale || 1})`,
+              display: 'block',
+            }}
+          />
+        </div>
+        <div className="mb-6" />
+        <h2 className="mb-2 text-2xl md:text-3xl font-bold text-center">
+          O segredo da gestão gourmet.
+        </h2>
+        <div className="mb-4" />
+        <p className="mb-2 text-sm md:text-base text-center">
+          Controle de CMV, produção e insumos em tempo real.
+        </p>
+        <ul className="mb-4 list-disc pl-4 md:pl-6 text-sm md:text-lg text-left md:text-center">
           <li>Gestão inteligente de estoque</li>
           <li>Relatórios automáticos</li>
           <li>Segurança e privacidade</li>
         </ul>
       </div>
       {/* Login */}
-      <div className="flex-1 flex flex-col justify-center items-center p-8">
+      <div className="flex flex-1 flex-col items-center justify-center p-8">
         <Card className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="flex justify-center mb-4">
+          <div className="mb-8 text-center">
+            <div className="flex flex-col items-center justify-center mb-6 w-full">
               <div
-                className="relative w-32 h-32"
-                style={{ transform: `scale(${theme.logo_scale || 1})` }}
+                className="relative mx-auto"
+                style={{ width: '224px', height: '90px', maxWidth: '90vw', maxHeight: '30vh' }}
               >
                 <Image
-                  src={theme.logo_url || '/logo.png'}
-                  alt={`Logo ${theme.name || 'Sistema Lari'}`}
+                  src={theme.company_logo_url || theme.logo_url || '/logo.png'}
+                  alt={`Logo ${theme.name || 'Confectio'}`}
                   fill
-                  sizes="128px"
+                  sizes="224px"
                   className="object-contain"
                   priority
                   loading="eager"
+                  style={{ objectFit: 'contain' }}
                 />
               </div>
+              <Text color="muted" className="mt-8 mb-4">
+                Entre com suas credenciais
+              </Text>
             </div>
-            <Text variant="h2" className="mb-2">
-              {theme.name || 'Sistema Lari'}
-            </Text>
-            <Text color="muted">Entre com suas credenciais</Text>
-            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900 rounded-md">
-              <Text className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+            <div className="mt-4 rounded-md bg-blue-50 p-4 dark:bg-blue-900">
+              <Text className="mb-2 text-sm font-medium text-blue-800 dark:text-blue-200">
                 🔑 Credenciais temporárias:
               </Text>
               <div className="space-y-1 text-left">
-                <Text className="text-sm text-blue-700 dark:text-blue-300 font-mono">
+                <Text className="font-mono text-sm text-blue-700 dark:text-blue-300">
                   Admin: sababrtv@gmail.com / admin123
                 </Text>
-                <Text className="text-sm text-blue-700 dark:text-blue-300 font-mono">
+                <Text className="font-mono text-sm text-blue-700 dark:text-blue-300">
                   Fábrica: eduardosaba.rep@gmail.com / fabrica123
                 </Text>
-                <Text className="text-sm text-blue-700 dark:text-blue-300 font-mono">
+                <Text className="font-mono text-sm text-blue-700 dark:text-blue-300">
                   PDV: eduardosaba@uol.com / pdv123
                 </Text>
               </div>
@@ -181,15 +217,15 @@ function OnboardingLogin() {
           </div>
           {/* Barra de progresso durante login */}
           {loading && (
-            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-4">
+            <div className="mb-4 h-3 w-full overflow-hidden rounded-full bg-gray-200">
               <div
-                className="h-full bg-gradient-to-r from-blue-400 via-primary to-blue-600 transition-all duration-200"
+                className="h-full bg-gradient-to-r from-orange-400 via-orange-500 to-orange-600 transition-all duration-200"
                 style={{ width: `${progress}%` }}
               ></div>
             </div>
           )}
           {loading && (
-            <span className="text-blue-700 dark:text-blue-300 text-xs font-mono mb-2 block">
+            <span className="mb-2 block font-mono text-xs text-blue-700 dark:text-blue-300">
               Carregando... {progress}%
             </span>
           )}
@@ -197,7 +233,7 @@ function OnboardingLogin() {
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
                 Email
               </label>
@@ -208,14 +244,14 @@ function OnboardingLogin() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
                 placeholder="seu@email.com"
               />
             </div>
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
                 Senha
               </label>
@@ -227,7 +263,7 @@ function OnboardingLogin() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
                   placeholder="••••••••"
                 />
                 <button
@@ -270,11 +306,9 @@ export default function Home() {
   const router = useRouter();
   const [showSplash, setShowSplash] = useState(true);
 
-  useEffect(() => {
-    // SplashScreen mais rápida
-    const timer = setTimeout(() => setShowSplash(false), 600);
-    return () => clearTimeout(timer);
-  }, []);
+  const handleSplashComplete = () => {
+    setShowSplash(false);
+  };
 
   useEffect(() => {
     if (loading) return;
@@ -294,7 +328,7 @@ export default function Home() {
   }, [user, profile, loading, router]);
 
   if (showSplash || loading) {
-    return <SplashScreen />;
+    return <SplashScreen onComplete={handleSplashComplete} />;
   }
   // Se não logado, mostra Onboarding/Login
   if (!user || !profile) {

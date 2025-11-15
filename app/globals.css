@@ -72,17 +72,6 @@
   --sidebar-active-text: rgb(79 70 229);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-secondary: var(--secondary);
-  --color-accent: var(--accent);
-  --font-sans: var(--font-family, var(--font-geist-sans));
-  --font-mono: var(--font-geist-mono);
-  --radius-default: var(--radius);
-}
-
 /* Aplica cores do 🌙 tema escuro quando a classe .dark estiver presente */
 .dark {
   --background: var(--dark-background, #0a0a0a);

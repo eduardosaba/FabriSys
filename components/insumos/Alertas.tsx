@@ -80,9 +80,9 @@ const AlertasEstoque = () => {
 
   if (alerts.length === 0) {
     return (
-      <div className="p-6 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+      <div className="rounded-lg border border-green-200 bg-green-50 p-6 dark:border-green-800 dark:bg-green-900/20">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-green-100 dark:bg-green-800 rounded-lg">
+          <div className="rounded-lg bg-green-100 p-2 dark:bg-green-800">
             <Package className="h-5 w-5 text-green-600 dark:text-green-400" />
           </div>
           <div>
@@ -103,19 +103,19 @@ const AlertasEstoque = () => {
       {alerts.map((alert) => (
         <Card key={alert.id} className={`p-4 ${getAlertColor(alert.type)} border`}>
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+            <div className="rounded-lg bg-white/50 p-2 dark:bg-gray-800/50">
               {getAlertIcon(alert.type)}
             </div>
             <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
+              <div className="mb-1 flex items-center justify-between">
                 <Text variant="h4" weight="medium" className="text-sm">
                   {alert.product}
                 </Text>
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-white/50 dark:bg-gray-800/50">
+                <span className="rounded-full bg-white/50 px-2 py-1 text-xs font-medium dark:bg-gray-800/50">
                   {alert.quantity} un
                 </span>
               </div>
-              <Text className="text-sm mb-2">{alert.message}</Text>
+              <Text className="mb-2 text-sm">{alert.message}</Text>
               <div className="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-400">
                 <span>Mínimo: {alert.threshold}</span>
                 {alert.daysUntilExpiry && (

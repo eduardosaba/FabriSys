@@ -297,7 +297,7 @@ export default function LotesTable({
                     {onEdit && (
                       <button
                         onClick={() => onEdit(lote)}
-                        className="text-yellow-600 hover:text-yellow-900 p-1 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                        className="rounded p-1 text-yellow-600 hover:text-yellow-900 focus:outline-none focus:ring-2 focus:ring-yellow-500"
                         title="Editar lote"
                         aria-label={`Editar lote ${lote.numero_lote || lote.id}`}
                       >
@@ -315,7 +315,7 @@ export default function LotesTable({
                             onDelete(lote);
                           }
                         }}
-                        className="text-red-600 hover:text-red-900 p-1 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="rounded p-1 text-red-600 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                         title="Excluir lote"
                         aria-label={`Excluir lote ${lote.numero_lote || lote.id}`}
                       >

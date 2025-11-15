@@ -281,15 +281,15 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+      <div className="rounded-md border border-blue-200 bg-blue-50 p-3">
         <p className="text-sm text-blue-800">
           <span className="font-medium">Campos obrigatórios:</span> Nome e Preço de venda são
           obrigatórios.
-          <span className="text-red-500 ml-1">*</span>
+          <span className="ml-1 text-red-500">*</span>
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-gray-700">
             Nome do Produto <span className="text-red-500">*</span>
@@ -302,7 +302,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
             placeholder="Digite o nome do produto"
           />
           {errors.nome && (
-            <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+            <p className="mt-1 flex items-center gap-1 text-sm text-red-600">
               <span>⚠️</span> {errors.nome.message}
             </p>
           )}
@@ -321,7 +321,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
             <option value="semi_acabado">Produto Semi-Acabado (massa, intermediário)</option>
           </select>
           {errors.tipo && (
-            <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+            <p className="mt-1 flex items-center gap-1 text-sm text-red-600">
               <span>⚠️</span> {errors.tipo.message}
             </p>
           )}
@@ -374,7 +374,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
             placeholder="R$ 0,00"
           />
           {errors.preco_venda && (
-            <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+            <p className="mt-1 flex items-center gap-1 text-sm text-red-600">
               <span>⚠️</span> {errors.preco_venda.message}
             </p>
           )}
@@ -413,7 +413,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
                 />
               </div>
             ) : (
-              <div className="h-32 w-32 rounded-lg bg-gray-100 flex items-center justify-center">
+              <div className="flex h-32 w-32 items-center justify-center rounded-lg bg-gray-100">
                 <Upload className="h-8 w-8 text-gray-400" />
               </div>
             )}
@@ -431,8 +431,8 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
               />
               <label
                 htmlFor="imagem"
-                className={`cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
-                  ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`inline-flex cursor-pointer items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                  ${uploading ? 'cursor-not-allowed opacity-50' : ''}`}
               >
                 {uploading ? 'Enviando...' : 'Alterar Imagem'}
               </label>
@@ -449,7 +449,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
           type="submit"
           loading={isSubmitting}
           disabled={Object.keys(errors).length > 0}
-          className={Object.keys(errors).length > 0 ? 'opacity-50 cursor-not-allowed' : ''}
+          className={Object.keys(errors).length > 0 ? 'cursor-not-allowed opacity-50' : ''}
         >
           {produto ? 'Salvar Alterações' : 'Cadastrar Produto'}
         </Button>

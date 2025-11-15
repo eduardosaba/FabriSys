@@ -5,8 +5,10 @@ import { useProfile, useKPIs } from '@/hooks/useDashboardData';
 import type { Profile as ProfileType, KPIs as KPIsType } from '@/hooks/useDashboardData';
 import { DashboardProvider } from '@/contexts/DashboardContext';
 import Card from '@/components/ui/Card';
-import { Package, AlertTriangle, BarChart, List, EyeOff } from 'lucide-react';
+import Button from '@/components/Button';
+import { Package, AlertTriangle, BarChart, List, EyeOff, Factory } from 'lucide-react';
 import { KPISection } from '@/components/ui/KPICards';
+import PageHeader from '@/components/ui/PageHeader';
 
 function DashboardProducaoContent() {
   type FiltrosAtuais = {
@@ -23,9 +25,16 @@ function DashboardProducaoContent() {
     statusSelecionado: 'all',
   });
 
-  const profileResult: { data: ProfileType | null; error?: Error; isLoading?: boolean } =
-    useProfile();
-  const productionResult: { data: KPIsType | null; error?: Error; isLoading?: boolean } = useKPIs({
+  const profileResult: {
+    data: ProfileType | null | undefined;
+    error?: Error;
+    isLoading?: boolean;
+  } = useProfile();
+  const productionResult: {
+    data: KPIsType | null | undefined;
+    error?: Error;
+    isLoading?: boolean;
+  } = useKPIs({
     dataInicial: filtrosAtuais.dataInicial,
     dataFinal: filtrosAtuais.dataFinal,
     statusSelecionado: filtrosAtuais.statusSelecionado,
@@ -92,13 +101,12 @@ function DashboardProducaoContent() {
 
   const aplicarFiltroDashboard = useCallback(() => {
     try {
-      if (typeof productionResult?.mutate === 'function') {
-        void (productionResult.mutate as () => void)();
-      }
+      // Revalidação será feita automaticamente pelo SWR quando os filtros mudarem
+      console.log('Filtros aplicados, dados serão revalidados automaticamente');
     } catch (e) {
-      console.warn('Erro ao forçar revalidação dos KPIs', e);
+      console.warn('Erro ao aplicar filtros', e);
     }
-  }, [productionResult]);
+  }, []);
 
   const toggleCardVisibility = (cardKey: 'ordens' | 'alertas' | 'relatorios' | 'ranking') => {
     setVisibleCards((prev) => ({ ...prev, [cardKey]: !prev[cardKey] }));
@@ -106,7 +114,7 @@ function DashboardProducaoContent() {
 
   if (profileError) {
     return (
-      <div className="text-red-600 p-6">
+      <div className="p-6 text-red-600">
         Erro ao carregar perfil:{' '}
         {String(profileError instanceof Error ? profileError.message : profileError)}
       </div>
@@ -114,16 +122,19 @@ function DashboardProducaoContent() {
   }
   if (kpisError) {
     return (
-      <div className="text-red-600 p-6">
+      <div className="p-6 text-red-600">
         Erro ao carregar KPIs: {String(kpisError instanceof Error ? kpisError.message : kpisError)}
       </div>
     );
   }
   if (profileLoading || isLoadingKpis) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex h-screen items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div
+            className="mx-auto h-12 w-12 animate-spin rounded-full border-b-2"
+            style={{ borderColor: 'var(--color-primary)' }}
+          ></div>
           <p className="mt-4 text-gray-600">Carregando dashboard de produção...</p>
         </div>
       </div>
@@ -132,65 +143,78 @@ function DashboardProducaoContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Dashboard de Produção</h1>
-          {typeof profile?.nome === 'string' ? (
-            <p className="text-gray-600">Bem-vindo, {profile.nome}</p>
-          ) : null}
-        </div>
-      </div>
+      <PageHeader
+        title="Dashboard de Produção"
+        description={
+          typeof profile?.nome === 'string'
+            ? `Bem-vindo, ${profile.nome}`
+            : 'Visão geral da produção e ordens'
+        }
+        icon={Factory}
+      />
 
-      <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 items-stretch lg:items-end">
-          <div className="flex-1 min-w-0">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+      <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4">
+        <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-end lg:gap-4">
+          <div className="min-w-0 flex-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Período
             </label>
-            <select
-              value={filtrosAtuais.periodoSelecionado}
-              onChange={(e) => calcularDatasPorPeriodo(e.target.value)}
-              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="personalizado">Personalizado</option>
-              <option value="hoje">Hoje</option>
-              <option value="ultimos-7-dias">Últimos 7 dias</option>
-            </select>
+            <div className="relative">
+              <select
+                value={filtrosAtuais.periodoSelecionado}
+                onChange={(e) => calcularDatasPorPeriodo(e.target.value)}
+                className="w-full appearance-none rounded-md border border-gray-300 bg-white p-2 pr-8 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+              >
+                <option value="personalizado">Personalizado</option>
+                <option value="hoje">Hoje</option>
+                <option value="ultimos-7-dias">Últimos 7 dias</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
+                <svg
+                  className="h-4 w-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
 
           <div className="lg:flex-shrink-0">
-            <button
+            <Button
               onClick={aplicarFiltroDashboard}
               disabled={isLoadingKpis}
-              className="w-full lg:w-auto px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+              loading={isLoadingKpis}
+              variant="primary"
+              className="w-full lg:w-auto"
             >
-              {isLoadingKpis ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Carregando...
-                </>
-              ) : (
-                <>🔍 Aplicar</>
-              )}
-            </button>
+              🔍 Aplicar
+            </Button>
           </div>
         </div>
       </div>
 
-      <KPISection kpis={productionData} isLoading={isLoadingKpis} />
+      {productionData && <KPISection kpis={productionData} isLoading={isLoadingKpis} />}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {visibleCards.ordens && productionData && (
-          <Card variant="default" className="hover:border-primary transition-colors relative">
+          <Card variant="default" className="relative transition-colors hover:border-primary">
             <button
-              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+              className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
               onClick={() => toggleCardVisibility('ordens')}
               title="Ocultar card"
             >
               <EyeOff className="h-4 w-4 text-gray-600" />
             </button>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/50">
                 <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
@@ -204,16 +228,16 @@ function DashboardProducaoContent() {
         )}
 
         {visibleCards.alertas && productionData && (
-          <Card variant="default" className="hover:border-primary transition-colors relative">
+          <Card variant="default" className="relative transition-colors hover:border-primary">
             <button
-              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+              className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
               onClick={() => toggleCardVisibility('alertas')}
               title="Ocultar card"
             >
               <EyeOff className="h-4 w-4 text-gray-600" />
             </button>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
+              <div className="rounded-lg bg-green-100 p-2 dark:bg-green-900/50">
                 <AlertTriangle className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
               <div>
@@ -227,16 +251,16 @@ function DashboardProducaoContent() {
         )}
 
         {visibleCards.relatorios && productionData && (
-          <Card variant="default" className="hover:border-primary transition-colors relative">
+          <Card variant="default" className="relative transition-colors hover:border-primary">
             <button
-              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+              className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
               onClick={() => toggleCardVisibility('relatorios')}
               title="Ocultar card"
             >
               <EyeOff className="h-4 w-4 text-gray-600" />
             </button>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/50">
                 <BarChart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
@@ -250,15 +274,15 @@ function DashboardProducaoContent() {
         )}
 
         {visibleCards.ranking && productionData && (
-          <Card variant="default" className="hover:border-primary transition-colors relative">
+          <Card variant="default" className="relative transition-colors hover:border-primary">
             <button
-              className="absolute top-2 right-2 p-1 bg-gray-200 rounded-full"
+              className="absolute right-2 top-2 rounded-full bg-gray-200 p-1"
               onClick={() => toggleCardVisibility('ranking')}
             >
               <EyeOff className="h-4 w-4 text-gray-600" />
             </button>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 dark:bg-red-900/50 rounded-lg">
+              <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/50">
                 <List className="h-6 w-6 text-red-600 dark:text-red-400" />
               </div>
               <div>

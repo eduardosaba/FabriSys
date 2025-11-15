@@ -71,7 +71,7 @@ export default function EditarProdutoPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Editar Produto</h1>
+      <h1 className="mb-6 text-3xl font-bold">Editar Produto</h1>
       <ProdutoForm produto={produto} />
     </div>
   );

@@ -118,7 +118,7 @@ export default function AlertasProducao() {
     return (
       <div className="space-y-4">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-24 bg-gray-50 rounded-lg animate-pulse" />
+          <div key={i} className="h-24 animate-pulse rounded-lg bg-gray-50" />
         ))}
       </div>
     );
@@ -126,7 +126,7 @@ export default function AlertasProducao() {
 
   if (alertas.length === 0) {
     return (
-      <div className="bg-green-50 text-green-700 p-4 rounded-lg">
+      <div className="rounded-lg bg-green-50 p-4 text-green-700">
         <p className="text-center">Não há alertas pendentes.</p>
       </div>
     );
@@ -139,16 +139,16 @@ export default function AlertasProducao() {
         return (
           <div
             key={alerta.id}
-            className={cn('p-4 rounded-lg border flex items-start justify-between', tipo.bgColor)}
+            className={cn('flex items-start justify-between rounded-lg border p-4', tipo.bgColor)}
           >
             <div className="flex gap-4">
               <div className={cn('mt-1', tipo.color)}>
-                <tipo.icon className="w-5 h-5" />
+                <tipo.icon className="h-5 w-5" />
               </div>
               <div>
                 <h4 className="font-medium">{tipo.title}</h4>
-                <p className="text-sm text-gray-600 mt-1">{alerta.mensagem}</p>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="mt-1 text-sm text-gray-600">{alerta.mensagem}</p>
+                <p className="mt-2 text-xs text-gray-500">
                   {new Date(alerta.data_criacao).toLocaleString('pt-BR')}
                 </p>
               </div>

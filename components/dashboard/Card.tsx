@@ -42,10 +42,10 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-lg shadow-sm border p-4',
+        'rounded-lg border p-4 shadow-sm',
         themeClasses[theme || 'default'],
         sizeClasses[size || '1x1'],
-        isDragging && 'shadow-lg border-blue-500',
+        isDragging && 'border-blue-500 shadow-lg',
         theme === 'dark' ? 'border-gray-700' : 'border-gray-200',
         className
       )}
@@ -55,7 +55,7 @@ export function Card({
     >
       <div
         className={cn(
-          'flex items-center justify-between mb-4',
+          'mb-4 flex items-center justify-between',
           theme === 'dark' && 'border-gray-700'
         )}
       >
@@ -63,7 +63,7 @@ export function Card({
           <div {...dragHandleProps}>
             <Grip
               className={cn(
-                'w-4 h-4 cursor-grab',
+                'h-4 w-4 cursor-grab',
                 theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
               )}
             />
@@ -78,7 +78,7 @@ export function Card({
               theme === 'dark' ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500'
             )}
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
         )}
       </div>

@@ -27,8 +27,10 @@ async function testPasswordReset() {
 
     console.log('✅ Email enviado com sucesso!');
     console.log('📧 Verifique sua caixa de entrada');
-    console.log('🔗 O link deve redirecionar para:', `${process.env.NEXT_PUBLIC_SUPABASE_URL}/update-password`);
-
+    console.log(
+      '🔗 O link deve redirecionar para:',
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/update-password`
+    );
   } catch (err) {
     console.error('❌ Erro inesperado:', err);
   }

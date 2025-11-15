@@ -77,7 +77,7 @@ export function ConfigurarDashboard({ widgets: _widgets, onAddWidget }: Configur
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
-        <Settings className="w-4 h-4 mr-2" />
+        <Settings className="mr-2 h-4 w-4" />
         Configurar Dashboard
       </Button>
 
@@ -88,7 +88,7 @@ export function ConfigurarDashboard({ widgets: _widgets, onAddWidget }: Configur
         >
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Tipo de Widget</label>
+              <label className="mb-1 block text-sm font-medium">Tipo de Widget</label>
               <Select
                 value={novoWidget.type}
                 onChange={(e) =>
@@ -109,7 +109,7 @@ export function ConfigurarDashboard({ widgets: _widgets, onAddWidget }: Configur
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Título</label>
+              <label className="mb-1 block text-sm font-medium">Título</label>
               <Input
                 value={novoWidget.title}
                 onChange={(e) =>
@@ -126,7 +126,7 @@ export function ConfigurarDashboard({ widgets: _widgets, onAddWidget }: Configur
             {(novoWidget.type === 'grafico-producao' || novoWidget.type === 'ranking-produtos') && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Período</label>
+                  <label className="mb-1 block text-sm font-medium">Período</label>
                   <Select
                     value={novoWidget.config.periodo}
                     onChange={(e) =>
@@ -147,7 +147,7 @@ export function ConfigurarDashboard({ widgets: _widgets, onAddWidget }: Configur
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Limite de Itens</label>
+                  <label className="mb-1 block text-sm font-medium">Limite de Itens</label>
                   <Input
                     type="number"
                     value={novoWidget.config.limite}
@@ -167,7 +167,7 @@ export function ConfigurarDashboard({ widgets: _widgets, onAddWidget }: Configur
               </>
             )}
 
-            <div className="flex justify-end gap-2 mt-6">
+            <div className="mt-6 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>

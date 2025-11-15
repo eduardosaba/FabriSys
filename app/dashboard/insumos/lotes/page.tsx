@@ -11,11 +11,12 @@ import InsumoSelector from '@/components/insumos/InsumoSelector';
 import RegistroCompra from '@/components/insumos/RegistroCompra';
 import { Toaster, toast } from 'react-hot-toast';
 import { z } from 'zod';
-import Panel from '@/components/ui/Panel';
 import Text from '@/components/ui/Text';
 import Card from '@/components/ui/Card';
 import StatusIcon from '@/components/ui/StatusIcon';
 import LotesTable from '@/components/insumos/LotesTable';
+import PageHeader from '@/components/ui/PageHeader';
+import { Archive } from 'lucide-react';
 
 interface PageProps {
   searchParams?: {
@@ -119,21 +120,20 @@ function LotesContent({ searchParams }: { searchParams: Promise<PageProps['searc
 
   return (
     <>
-      <Panel variant="default" className="mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <Text variant="h2" weight="semibold">
-            Controle de Estoque
-          </Text>
-          <div className="mt-3 sm:mt-0 flex gap-3">
-            <Button variant="secondary" onClick={() => setIsModalOpen(true)}>
-              Novo Lote Individual
-            </Button>
-            <Button variant="primary" onClick={() => setRegistroCompraOpen(true)}>
-              Entrada de Mercadoria
-            </Button>
-          </div>
+      <PageHeader
+        title="Controle de Estoque"
+        description="Gerencie Estoques de mercadorias"
+        icon={Archive}
+      >
+        <div className="flex gap-3">
+          <Button variant="secondary" onClick={() => setIsModalOpen(true)}>
+            Novo Lote Individual
+          </Button>
+          <Button variant="primary" onClick={() => setRegistroCompraOpen(true)}>
+            Entrada de Mercadoria
+          </Button>
         </div>
-      </Panel>{' '}
+      </PageHeader>{' '}
       <div className="mb-6">
         <InsumoSelector
           onSelect={(insumo, quantidade) => {

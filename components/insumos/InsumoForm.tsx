@@ -1,22 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  InsumoFormData,
-  insumoSchema,
-  unidadesMedida,
-  unidadesEstoque,
-  unidadesConsumo,
-} from '@/lib/validations/insumos';
+import { insumoSchema, unidadesMedida, unidadesEstoque, unidadesConsumo } from '@/lib/validations';
 import Button from '@/components/Button';
 import { z } from 'zod';
 import CategoriaSelector from './CategoriaSelector';
 
 type Props = {
-  onSubmit: (values: InsumoFormData) => Promise<void>;
-  onCancel?: () => void;
+  onSubmit: (values: z.infer<typeof insumoSchema>) => Promise<void>;
+  onCancel: () => void;
   loading?: boolean;
-  initialValues?: Partial<InsumoFormData>;
+  initialValues?: Partial<z.infer<typeof insumoSchema>>;
 };
 
 type FormState = {
@@ -36,7 +30,7 @@ type InitialValues = {
   unidade_medida: string;
   estoque_minimo_alerta: number;
   categoria_id: string;
-  atributos_dinamicos: Record<string, string | number>;
+  atributos_dinamicos: Record<string, unknown>;
   unidade_estoque: string;
   custo_por_ue: number;
   unidade_consumo: string;
@@ -96,13 +90,14 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
 
     setFormData((prev) => {
       const newValue = type === 'number' ? Number(value) : value;
+      const numericValue = type === 'number' ? (newValue as number) : Number(value);
 
       // Validação adicional para garantir valores seguros
-      if (name === 'estoque_minimo_alerta' && isNaN(newValue)) {
+      if (name === 'estoque_minimo_alerta' && isNaN(numericValue)) {
         return prev; // Ignorar valores inválidos
       }
 
-      if (name === 'fator_conversao' && (newValue <= 0 || isNaN(newValue))) {
+      if (name === 'fator_conversao' && (numericValue <= 0 || isNaN(numericValue))) {
         return prev; // Ignorar valores inválidos
       }
 
@@ -218,8 +213,8 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
           value={formData.nome}
           onChange={handleChange}
           className={`mt-1 block w-full rounded-md ${
-            errors.nome ? 'border-red-500' : 'border-gray-300'
-          } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+            errors.nome ? 'border-red-500' : 'border-[var(--color-primary)]'
+          } shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)] sm:text-sm bg-[var(--color-background)]`}
           required
           disabled={loading}
         />
@@ -258,9 +253,9 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
           name="unidade_medida"
           value={formData.unidade_medida}
           onChange={handleChange}
-          className={`mt-1 block w-full rounded-md ${
-            errors.unidade_medida ? 'border-red-500' : 'border-gray-300'
-          } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+          className={`mt-1 block w-full rounded-md appearance-none ${
+            errors.unidade_medida ? 'border-red-500' : 'border-[var(--color-primary)]'
+          } shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)] focus:bg-[var(--color-background)] focus:text-[var(--color-primary)] sm:text-sm bg-[var(--color-background)]`}
           required
           disabled={loading}
         >
@@ -278,10 +273,10 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
       </div>
 
       {/* Sistema de Unidades Duplas */}
-      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-        <h3 className="text-sm font-medium text-blue-800 mb-3">Sistema de Unidades Duplas</h3>
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <h3 className="mb-3 text-sm font-medium text-blue-800">Sistema de Unidades Duplas</h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label htmlFor="unidade_estoque" className="block text-sm font-medium text-gray-700">
               Unidade de Estoque (UE)
@@ -291,9 +286,9 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
               name="unidade_estoque"
               value={formData.unidade_estoque}
               onChange={handleChange}
-              className={`mt-1 block w-full rounded-md ${
-                errors.unidade_estoque ? 'border-red-500' : 'border-gray-300'
-              } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+              className={`mt-1 block w-full rounded-md appearance-none ${
+                errors.unidade_estoque ? 'border-red-500' : 'border-[var(--color-primary)]'
+              } shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)] focus:bg-[var(--color-background)] focus:text-[var(--color-primary)] sm:text-sm bg-[var(--color-background)]`}
               required
               disabled={loading}
             >
@@ -323,14 +318,16 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
                 handleChange({
                   target: {
                     name: 'custo_por_ue',
-                    value: parseFloat(e.target.value.replace(/[^0-9,-]+/g, '').replace(',', '.')),
+                    value: parseFloat(
+                      e.target.value.replace(/[^0-9,-]+/g, '').replace(',', '.')
+                    ).toString(),
                     type: 'number',
                   },
                 })
               }
               className={`mt-1 block w-full rounded-md ${
-                errors.custo_por_ue ? 'border-red-500' : 'border-gray-300'
-              } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+                errors.custo_por_ue ? 'border-red-500' : 'border-[var(--color-primary)]'
+              } shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)] sm:text-sm bg-[var(--color-background)]`}
               disabled={loading}
             />
             {errors.custo_por_ue && (
@@ -348,9 +345,9 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
               name="unidade_consumo"
               value={formData.unidade_consumo}
               onChange={handleChange}
-              className={`mt-1 block w-full rounded-md ${
-                errors.unidade_consumo ? 'border-red-500' : 'border-gray-300'
-              } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+              className={`mt-1 block w-full rounded-md appearance-none ${
+                errors.unidade_consumo ? 'border-red-500' : 'border-[var(--color-primary)]'
+              } shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)] focus:bg-[var(--color-background)] focus:text-[var(--color-primary)] sm:text-sm bg-[var(--color-background)]`}
               required
               disabled={loading}
             >
@@ -378,8 +375,8 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
               value={formData.fator_conversao}
               onChange={handleChange}
               className={`mt-1 block w-full rounded-md ${
-                errors.fator_conversao ? 'border-red-500' : 'border-gray-300'
-              } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+                errors.fator_conversao ? 'border-red-500' : 'border-[var(--color-primary)]'
+              } shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)] sm:text-sm bg-[var(--color-background)]`}
               required
               min={0.001}
               step={0.001}
@@ -396,13 +393,13 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
 
         {/* Cálculo automático do custo por UC */}
         {formData.custo_por_ue && formData.fator_conversao && (
-          <div className="mt-3 p-3 bg-green-50 rounded border border-green-200">
+          <div className="mt-3 rounded border border-green-200 bg-green-50 p-3">
             <p className="text-sm text-green-800">
               <strong>Custo por UC:</strong> R${' '}
               {(formData.custo_por_ue / formData.fator_conversao).toFixed(4)}/
               {formData.unidade_consumo}
             </p>
-            <p className="text-xs text-green-600 mt-1">
+            <p className="mt-1 text-xs text-green-600">
               Esse é o custo que será usado nos cálculos de produção
             </p>
           </div>
@@ -420,8 +417,8 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
           value={safeInitialValues.estoque_minimo_alerta}
           onChange={handleChange}
           className={`mt-1 block w-full rounded-md ${
-            errors.estoque_minimo_alerta ? 'border-red-500' : 'border-gray-300'
-          } shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm`}
+            errors.estoque_minimo_alerta ? 'border-red-500' : 'border-[var(--color-primary)]'
+          } shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)] sm:text-sm bg-[var(--color-background)]`}
           required
           min={0}
           step={1}
@@ -440,7 +437,11 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
             Cancelar
           </Button>
         )}
-        <Button type="submit" disabled={loading || Object.keys(errors).length > 0}>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={loading || Object.keys(errors).length > 0}
+        >
           {loading ? 'Salvando...' : initialValues ? 'Atualizar' : 'Cadastrar'}
         </Button>
       </div>

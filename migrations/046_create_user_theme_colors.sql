@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS user_theme_colors (
   titulo_paginas_color text NOT NULL DEFAULT '#ffffff',
   logo_url text DEFAULT '/logo.png',
   logo_scale numeric(3,2) DEFAULT 1.0,
+  company_logo_url text,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
   UNIQUE(user_id, theme_mode)

@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
-import { Plus, Eye, Edit, FileText, Loader2 } from 'lucide-react';
+import { Plus, Eye, Edit, Loader2, FileText } from 'lucide-react';
 import { useTableFilters } from '@/hooks/useTableFilters';
 import TableControls from '@/components/ui/TableControls';
 import EmptyState from '@/components/ui/EmptyState';
+import PageHeader from '@/components/ui/PageHeader';
 
 interface FichaTecnicaRaw {
   id: string;
@@ -28,9 +29,9 @@ export default function FichasTecnicasPage() {
   const [fichas, setFichas] = useState<FichaTecnica[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(fichas, [
-    'produto_final.nome',
-  ]);
+  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(fichas, {
+    searchFields: ['produto_final.nome'],
+  });
 
   useEffect(() => {
     void loadFichasTecnicas();
@@ -69,26 +70,26 @@ export default function FichasTecnicasPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Fichas Técnicas</h1>
-          <p className="text-gray-600">Gerenciamento das fichas técnicas de produtos finais</p>
-        </div>
+      <PageHeader
+        title="Fichas Técnicas"
+        description="Gerenciamento das fichas técnicas de produtos finais"
+        icon={FileText}
+      >
         <Button onClick={() => router.push('/dashboard/producao/fichas-tecnicas/nova')}>
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="mr-2 h-4 w-4" />
           Nova Ficha Técnica
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="overflow-hidden rounded-lg bg-white shadow">
         <TableControls
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
@@ -96,12 +97,12 @@ export default function FichasTecnicasPage() {
         />{' '}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
             <span className="ml-2 text-gray-600">Carregando fichas técnicas...</span>
           </div>
         ) : filteredItems.length === 0 ? (
           <EmptyState
-            icon={FileText}
+            type={fichas.length === 0 ? 'no-data' : 'no-results'}
             title={
               fichas.length === 0 ? 'Nenhuma ficha técnica cadastrada' : 'Nenhuma ficha encontrada'
             }
@@ -124,33 +125,33 @@ export default function FichasTecnicasPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Produto Final
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Criado em
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 bg-white">
                 {filteredItems.map((ficha) => (
                   <tr key={ficha.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {ficha.produto_final?.nome || 'N/A'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {new Date(ficha.created_at).toLocaleDateString('pt-BR')}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() =>
                             (window.location.href = `/dashboard/producao/fichas-tecnicas/${ficha.id}`)
                           }
-                          className="inline-flex items-center justify-center w-8 h-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors duration-200 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                           aria-label={`Visualizar ficha técnica de ${ficha.produto_final?.nome || 'produto'}`}
                           title="Visualizar"
                         >
@@ -160,7 +161,7 @@ export default function FichasTecnicasPage() {
                           onClick={() =>
                             (window.location.href = `/dashboard/producao/fichas-tecnicas/${ficha.id}/editar`)
                           }
-                          className="inline-flex items-center justify-center w-8 h-8 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
                           aria-label={`Editar ficha técnica de ${ficha.produto_final?.nome || 'produto'}`}
                           title="Editar"
                         >

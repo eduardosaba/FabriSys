@@ -58,7 +58,7 @@ export function KPICard({
             </Text>
           )}
         </div>
-        {icon && <div className="p-2 bg-primary/10 rounded-lg dark:bg-primary/20">{icon}</div>}
+        {icon && <div className="bg-primary/10 dark:bg-primary/20 rounded-lg p-2">{icon}</div>}
       </div>
     </Card>
   );
@@ -87,16 +87,16 @@ interface KPISectionProps {
 export function KPISection({ kpis, isLoading = false, type = 'production' }: KPISectionProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
           <Card key={index} className="animate-pulse">
             <div className="flex items-start justify-between p-4">
               <div className="flex-1">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24 mb-2"></div>
-                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-16 mb-1"></div>
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+                <div className="mb-2 h-4 w-24 rounded bg-gray-200 dark:bg-gray-700"></div>
+                <div className="mb-1 h-8 w-16 rounded bg-gray-200 dark:bg-gray-700"></div>
+                <div className="h-3 w-20 rounded bg-gray-200 dark:bg-gray-700"></div>
               </div>
-              <div className="p-2 bg-gray-200 dark:bg-gray-700 rounded-lg w-10 h-10"></div>
+              <div className="h-10 w-10 rounded-lg bg-gray-200 p-2 dark:bg-gray-700"></div>
             </div>
           </Card>
         ))}
@@ -107,7 +107,7 @@ export function KPISection({ kpis, isLoading = false, type = 'production' }: KPI
   if (type === 'financial') {
     const financialKPIs = kpis as FinancialKPIs;
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="Lucro Líquido"
           value={`R$ ${financialKPIs.lucro.toLocaleString()}`}
@@ -143,7 +143,7 @@ export function KPISection({ kpis, isLoading = false, type = 'production' }: KPI
   // Default: production KPIs
   const productionKPIs = kpis as ProductionKPIs;
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <KPICard
         title="Produção Total"
         value={productionKPIs.producaoTotal.toLocaleString()}

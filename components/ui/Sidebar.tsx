@@ -1,3 +1,4 @@
+// Função utilitária para cor primária com opacidade
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -107,42 +108,63 @@ export default function Sidebar() {
     <>
       {/* Overlay for mobile */}
       {!isCollapsed && (
-        <div className="fixed inset-0 bg-overlay-mobile lg:hidden z-40" onClick={toggleSidebar} />
+        <div className="fixed inset-0 z-40 bg-overlay-mobile lg:hidden" onClick={toggleSidebar} />
       )}
 
-      {/* Sidebar */}
       <div
         className={`
           fixed inset-y-0 left-0 z-50
           flex flex-col
-          bg-white border-r border-gray-200 dark:bg-gray-900 dark:border-gray-800
-          transition-all duration-300 ease-in-out
-          lg:translate-x-0
+          border-r transition-all duration-300
+          ease-in-out lg:translate-x-0
           ${isCollapsed ? 'w-20 -translate-x-full' : 'w-64 translate-x-0'}
         `}
+        style={{
+          background: 'var(--secondary)',
+          borderColor: 'var(--primary)',
+        }}
       >
         {/* Header */}
-        <div className="flex flex-col py-4 px-4 border-b dark:border-gray-800">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-1 flex justify-center">
-              {theme?.logo_url && (
-                <div
-                  className={`flex-shrink-0 transition-all duration-300 ${isCollapsed ? 'w-10 h-10' : 'w-16 h-16'}`}
-                >
-                  <Image
-                    src={theme.logo_url}
-                    alt={theme?.name || 'Logo'}
-                    width={(isCollapsed ? 40 : 64) * (theme.logo_scale || 1.0)}
-                    height={(isCollapsed ? 40 : 64) * (theme.logo_scale || 1.0)}
-                    className="object-contain w-full h-full"
-                  />
-                </div>
-              )}
+        <div className="flex flex-col border-b px-4 py-4" style={{ borderColor: 'var(--primary)' }}>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex flex-1 justify-center">
+              <div className="flex items-center gap-2">
+                {/* Logo da Empresa (Marca B - foco na personalização do cliente) */}
+                {theme?.company_logo_url && !isCollapsed && (
+                  <div className="flex-shrink-0">
+                    <Image
+                      src={theme.company_logo_url}
+                      alt="Logo da Empresa"
+                      width={32}
+                      height={32}
+                      className="rounded object-contain"
+                      unoptimized
+                      loading="eager"
+                      style={{
+                        width: `calc(32px * var(--company-logo-scale, 1))`,
+                        height: `calc(32px * var(--company-logo-scale, 1))`,
+                        maxWidth: '160px',
+                        maxHeight: '160px',
+                      }}
+                    />
+                  </div>
+                )}
+                {/* Ícone quando menu está encolhido */}
+                {isCollapsed && <Menu className="h-6 w-6 text-primary" />}
+                {/* Fallback quando não há logo da empresa */}
+                {(!theme?.company_logo_url || isCollapsed) && !loading && (
+                  <div className="text-center">
+                    <span className="block truncate text-sm font-semibold text-gray-800 dark:text-white">
+                      {theme?.name || 'SysLari'}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
             {/* Botão interno para desktop */}
             <button
               onClick={toggleSidebar}
-              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white absolute right-2 top-2 hidden lg:block"
+              className="absolute right-2 top-2 hidden rounded-md p-2 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-800 lg:block"
             >
               {isCollapsed ? <Menu className="h-5 w-5" /> : <X className="h-5 w-5" />}
             </button>
@@ -151,11 +173,11 @@ export default function Sidebar() {
             <button
               onClick={toggleSidebar}
               className={`
-                p-2 rounded-md 
-                hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white 
-                fixed top-4 left-4 z-50 
-                bg-white dark:bg-gray-900 
-                shadow-md
+                fixed left-4
+                top-4 z-50 rounded-md
+                bg-white p-2 shadow-md hover:bg-gray-100
+                dark:bg-gray-900 dark:text-white
+                dark:hover:bg-gray-800
                 lg:hidden
                 ${!isCollapsed && 'hidden'}
               `}
@@ -163,9 +185,9 @@ export default function Sidebar() {
               <Menu className="h-5 w-5" />
             </button>
           </div>
-          {!isCollapsed && !loading && (
+          {!isCollapsed && !loading && !theme?.company_logo_url && (
             <div className="text-center">
-              <span className="text-xl font-semibold text-gray-800 dark:text-white truncate block">
+              <span className="block truncate text-sm font-semibold text-gray-800 dark:text-white">
                 {theme?.name || 'SysLari'}
               </span>
             </div>
@@ -174,9 +196,9 @@ export default function Sidebar() {
 
         {/* Favoritos */}
         {pinnedPages.length > 0 && (
-          <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+          <div className="border-b border-gray-200 px-4 py-2 dark:border-gray-700">
             {!isCollapsed && (
-              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 <Star className="h-3 w-3" />
                 Favoritos
               </h3>
@@ -197,13 +219,13 @@ export default function Sidebar() {
                     key={`fav-${displayHref}`}
                     href={displayHref}
                     className={`
-                      flex items-center p-2 rounded-md
+                      flex items-center rounded-md p-2
                       transition-all duration-200
-                      ${!isCollapsed ? 'space-x-2' : 'justify-center w-full'}
+                      ${!isCollapsed ? 'space-x-2' : 'w-full justify-center'}
                       ${
                         isActive(displayHref)
                           ? 'bg-sidebar-active-bg text-sidebar-active-text dark:bg-indigo-900/50 dark:text-indigo-400'
-                          : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+                          : 'text-gray-600 hover:bg-sidebar-hover dark:text-gray-300 dark:hover:bg-gray-800'
                       }
                     `}
                     title={isCollapsed ? displayItem.name : undefined}
@@ -223,15 +245,30 @@ export default function Sidebar() {
             {sidebarItems.map((item) => (
               <li key={item.name}>
                 <div
-                  className={`flex items-center p-2 rounded-md transition-all duration-200 relative group ${
+                  className={`group relative flex items-center rounded-md p-2 transition-all duration-200 ${
                     isActive(item.href) || isSubmenuActive(item)
-                      ? 'bg-sidebar-active-bg text-sidebar-active-text dark:bg-indigo-900/50 dark:text-indigo-400'
-                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+                      ? 'text-sidebar-active-text dark:text-indigo-400'
+                      : 'text-gray-700 dark:text-gray-300'
                   }`}
+                  style={
+                    isActive(item.href) || isSubmenuActive(item)
+                      ? { background: 'var(--primary)' }
+                      : { transition: 'background 0.2s' }
+                  }
+                  onMouseEnter={(e) => {
+                    if (!isActive(item.href) && !isSubmenuActive(item)) {
+                      (e.currentTarget as HTMLElement).style.background = 'var(--primary)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive(item.href) && !isSubmenuActive(item)) {
+                      (e.currentTarget as HTMLElement).style.background = '';
+                    }
+                  }}
                 >
                   <Link
                     href={item.href}
-                    className={`flex items-center flex-1 ${!isCollapsed ? 'space-x-2' : 'justify-center'}`}
+                    className={`flex flex-1 items-center ${!isCollapsed ? 'space-x-2' : 'justify-center'}`}
                     onClick={() => {
                       // Se houver filhos, apenas abre/fecha o submenu sem prevenir navegação
                       if (item.children) {
@@ -264,7 +301,7 @@ export default function Sidebar() {
                         e.stopPropagation();
                         togglePinPage(item.href);
                       }}
-                      className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
+                      className={`rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 ${
                         isPagePinned(item.href)
                           ? 'text-yellow-500 hover:text-yellow-600'
                           : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
@@ -290,10 +327,10 @@ export default function Sidebar() {
                         e.stopPropagation();
                         togglePinPage(item.href);
                       }}
-                      className={`absolute -right-2 -top-2 p-1 rounded-full bg-white dark:bg-gray-800 shadow-md border ${
+                      className={`absolute -right-2 -top-2 rounded-full border bg-white p-1 shadow-md dark:bg-gray-800 ${
                         isPagePinned(item.href)
-                          ? 'text-yellow-500 border-yellow-200'
-                          : 'text-gray-400 border-gray-200'
+                          ? 'border-yellow-200 text-yellow-500'
+                          : 'border-gray-200 text-gray-400'
                       }`}
                       title={
                         isPagePinned(item.href)
@@ -312,15 +349,31 @@ export default function Sidebar() {
                 {/* Submenu */}
                 {/* Submenu para sidebar expandida */}
                 {!isCollapsed && item.children && openSubmenu === item.name && (
-                  <ul className="mt-2 ml-6 space-y-2 border-l-2 border-gray-200">
+                  <ul className="ml-6 mt-2 space-y-2 border-l-2 border-gray-200">
                     {item.children.map((child) => (
                       <li key={child.name}>
                         <div
-                          className={`flex items-center p-2 pl-4 rounded-md group ${
+                          className={`group flex items-center rounded-md p-2 pl-4 ${
                             isActive(child.href)
-                              ? 'text-sidebar-active-text dark:text-indigo-400 bg-sidebar-active-bg dark:bg-indigo-900/30'
-                              : 'text-gray-600 hover:text-sidebar-active-text dark:text-gray-400 dark:hover:text-indigo-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                              ? 'text-sidebar-active-text dark:text-indigo-400'
+                              : 'text-gray-600 dark:text-gray-400'
                           }`}
+                          style={
+                            isActive(child.href) ? { background: 'var(--primary)' } : undefined
+                          }
+                          onMouseEnter={(e) => {
+                            if (!isActive(child.href)) {
+                              const color = getPrimaryWithOpacity(theme, 0.8);
+                              (e.currentTarget as HTMLElement).style.background = color;
+                              (e.currentTarget as HTMLElement).style.color = '#fff';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isActive(child.href)) {
+                              (e.currentTarget as HTMLElement).style.background = '';
+                              (e.currentTarget as HTMLElement).style.color = '';
+                            }
+                          }}
                         >
                           <Link href={child.href} className="flex-1">
                             {child.name}
@@ -331,7 +384,7 @@ export default function Sidebar() {
                               e.stopPropagation();
                               togglePinPage(child.href);
                             }}
-                            className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ml-2 ${
+                            className={`ml-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 ${
                               isPagePinned(child.href)
                                 ? 'text-yellow-500 hover:text-yellow-600'
                                 : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
@@ -357,29 +410,38 @@ export default function Sidebar() {
                 {isCollapsed && item.children && (
                   <div
                     className={`
-                      absolute left-full top-0 ml-2 
-                      bg-white dark:bg-gray-800 
-                      rounded-md shadow-lg
-                      border border-gray-200 dark:border-gray-700
-                      opacity-0 invisible group-hover:opacity-100 group-hover:visible
-                      transition-all duration-200
-                      z-50
+                      invisible absolute left-full top-0 
+                      z-50 ml-2 
+                      rounded-md border
+                      border-gray-200 bg-white opacity-0
+                      shadow-lg transition-all duration-200 group-hover:visible
+                      group-hover:opacity-100 dark:border-gray-700
+                      dark:bg-gray-800
                     `}
                   >
-                    <ul className="py-2 w-48">
+                    <ul className="w-48 py-2">
                       {item.children.map((child) => (
                         <li key={child.name}>
                           <div className="flex items-center justify-between">
                             <Link
                               href={child.href}
-                              className={`
-                                flex-1 px-4 py-2
-                                ${
-                                  isActive(child.href)
-                                    ? 'text-sidebar-active-text dark:text-indigo-400 bg-sidebar-active-bg dark:bg-indigo-900/50'
-                                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                              className={`flex-1 px-4 py-2 ${isActive(child.href) ? 'text-sidebar-active-text dark:text-indigo-400' : 'text-gray-600 dark:text-gray-400'}`}
+                              style={
+                                isActive(child.href) ? { background: 'var(--primary)' } : undefined
+                              }
+                              onMouseEnter={(e) => {
+                                if (!isActive(child.href)) {
+                                  const color = getPrimaryWithOpacity(theme, 0.8);
+                                  (e.currentTarget as HTMLElement).style.background = color;
+                                  (e.currentTarget as HTMLElement).style.color = '#fff';
                                 }
-                              `}
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isActive(child.href)) {
+                                  (e.currentTarget as HTMLElement).style.background = '';
+                                  (e.currentTarget as HTMLElement).style.color = '';
+                                }
+                              }}
                             >
                               {child.name}
                             </Link>
@@ -390,7 +452,7 @@ export default function Sidebar() {
                                 togglePinPage(child.href);
                               }}
                               className={`
-                                p-1 mr-2 rounded
+                                mr-2 rounded p-1
                                 transition-colors duration-200
                                 ${
                                   isPagePinned(child.href)
@@ -422,4 +484,29 @@ export default function Sidebar() {
       </div>
     </>
   );
+}
+
+// Função utilitária para cor primária com opacidade
+import type { ThemeSettings } from '@/lib/types';
+
+function getPrimaryWithOpacity(_theme: Partial<ThemeSettings> | undefined, opacity: number) {
+  // Busca a cor da variável CSS --primary, que sempre reflete a cor customizada
+  let color = '#88544c';
+  if (typeof window !== 'undefined') {
+    const cssPrimary = getComputedStyle(document.documentElement)
+      .getPropertyValue('--primary')
+      .trim();
+    if (cssPrimary) color = cssPrimary;
+  }
+  if (typeof color === 'string' && color.startsWith('#') && color.length === 7) {
+    // hex para rgba
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${opacity})`;
+  } else if (typeof color === 'string' && color.startsWith('rgb')) {
+    // rgb para rgba
+    return color.replace('rgb', 'rgba').replace(')', `,${opacity})`);
+  }
+  return color;
 }

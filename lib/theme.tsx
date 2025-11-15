@@ -21,85 +21,92 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const defaultTheme: ThemeSettings = {
-  name: 'Sistema Lari',
-  logo_url: '/logo.png',
+  name: 'Confectio',
+  logo_url: '/logo.png', // Mantenha ou atualize para o URL da logo 'confectio'
   logo_scale: 1.0,
+  company_logo_url: undefined,
+  company_logo_scale: 1.0,
   font_family: 'Inter',
   border_radius: '0.5rem',
   theme_mode: 'light' as const,
   density: 'comfortable' as const,
+  footer_company_name: 'Eduardo Saba',
+  footer_system_version: '1.0.0',
+  sidebar_bg: '#e8e8e8',
+  sidebar_hover_bg: '#88544c',
+  header_bg: '#e9c4c2',
   colors: {
     light: {
-      primary: '#4CAF50', // rgb(76, 175, 80)
-      secondary: '#4f46e5',
-      accent: '#f97316',
-      background: '#ffffff',
-      text: '#ffffff', // rgb(255, 255, 255)
-      tituloPaginas: '#ffffff',
-      hover3Submenu: '#2E7D32', // rgb(46, 125, 50)
-      textoGeralHover: '#388E3C', // rgb(56, 142, 60)
-      bordasHeaderPerfil: '#A5D6A7', // rgb(165, 214, 167)
-      bordasSelecaoListagens: '#C8E6C9', // rgb(200, 230, 201)
-      barraDashboard: '#04A9DA', // rgb(4, 169, 218)
-      barraDashboardHover: '#04A9DA',
-      receitasGraficos: '#388E3C',
-      receitasGraficosSecundaria: '#81C784', // rgb(129, 199, 132)
-      despesasGraficos: '#D32F2F', // rgb(211, 47, 47)
-      despesasGraficosSecundaria: '#E57373', // rgb(229, 115, 115)
-      barraRolagem: '#4CAF50',
-      barraRolagemFundo: '#C8E6C9',
-      fundoLinkEAD: '#66BB6A', // rgb(102, 187, 106)
-      textoLinkEAD: '#388E3C',
-      botaoSalvar: '#27AE60', // rgb(39, 174, 96)
-      botaoSalvarAtivo: '#219A52', // rgb(33, 154, 82)
-      botaoSalvarDesabilitado: '#7F8C8D', // rgb(127, 140, 141)
-      botaoCancelar: '#E74C3C', // rgb(231, 76, 60)
-      botaoCancelarAtivo: '#C0392B', // rgb(192, 57, 43)
-      botaoCancelarDesabilitado: '#95A5A6', // rgb(149, 165, 166)
-      botaoPesquisar: '#3498DB', // rgb(52, 152, 219)
-      botaoPesquisarAtivo: '#2980B9', // rgb(41, 128, 185)
-      botaoPesquisarDesabilitado: '#BDC3C7', // rgb(189, 195, 199)
-      camposObrigatorios: '#F1C40F', // rgb(241, 196, 15)
-      camposNaoObrigatorios: '#ECF0F1', // rgb(236, 240, 241)
-      barraSuperiorMenu: '#2ECC71', // rgb(46, 204, 113)
-      textoIconeAjuda: '#34495E', // rgb(52, 73, 94)
-      iconeAjuda: '#2ECC71',
+      primary: '#88544c', // Caramelo - Botões, Links
+      tituloPaginas: '#4a2c2b', // Chocolate Escuro
+      secondary: '#e9c4c2', // Rosa Claro - Destaques suaves
+      accent: '#88544c',
+      background: '#f5e4e2', // Pêssego Claro - Fundo Geral
+      text: '#4a2c2b',
+      hover3Submenu: '#88544c',
+      textoGeralHover: '#4a2c2b',
+      bordasHeaderPerfil: '#e9c4c2',
+      bordasSelecaoListagens: '#88544c',
+      barraDashboard: '#88544c',
+      barraDashboardHover: '#4a2c2b',
+      receitasGraficos: '#88544c',
+      receitasGraficosSecundaria: '#e9c4c2',
+      despesasGraficos: '#dc2626', // Vermelho Padrão
+      despesasGraficosSecundaria: '#ef4444', // Vermelho Padrão
+      barraRolagem: '#88544c',
+      barraRolagemFundo: '#f5e4e2',
+      fundoLinkEAD: '#88544c',
+      textoLinkEAD: '#4a2c2b',
+      botaoSalvar: '#88544c',
+      botaoSalvarAtivo: '#4a2c2b',
+      botaoSalvarDesabilitado: '#9ca3af',
+      botaoCancelar: '#dc2626',
+      botaoCancelarAtivo: '#b91c1c',
+      botaoCancelarDesabilitado: '#d1d5db',
+      botaoPesquisar: '#059669', // Verde Padrão
+      botaoPesquisarAtivo: '#047857', // Verde Padrão
+      botaoPesquisarDesabilitado: '#d1d5db',
+      camposObrigatorios: '#f59e0b', // Laranja Padrão
+      camposNaoObrigatorios: '#f3f4f6',
+      barraSuperiorMenu: '#88544c',
+      textoIconeAjuda: '#374151',
+      iconeAjuda: '#88544c',
     },
     dark: {
-      primary: '#3b82f6',
-      secondary: '#6366f1',
-      accent: '#f97316',
-      background: '#1a1a1a',
-      text: '#f3f4f6',
-      tituloPaginas: '#f3f4f6',
-      hover3Submenu: '#2E7D32',
-      textoGeralHover: '#388E3C',
-      bordasHeaderPerfil: '#A5D6A7',
-      bordasSelecaoListagens: '#C8E6C9',
-      barraDashboard: '#04A9DA',
-      barraDashboardHover: '#04A9DA',
-      receitasGraficos: '#388E3C',
-      receitasGraficosSecundaria: '#81C784',
-      despesasGraficos: '#D32F2F',
-      despesasGraficosSecundaria: '#E57373',
-      barraRolagem: '#4CAF50',
-      barraRolagemFundo: '#C8E6C9',
-      fundoLinkEAD: '#66BB6A',
-      textoLinkEAD: '#388E3C',
-      botaoSalvar: '#27AE60',
-      botaoSalvarAtivo: '#219A52',
-      botaoSalvarDesabilitado: '#7F8C8D',
-      botaoCancelar: '#E74C3C',
-      botaoCancelarAtivo: '#C0392B',
-      botaoCancelarDesabilitado: '#95A5A6',
-      botaoPesquisar: '#3498DB',
-      botaoPesquisarAtivo: '#2980B9',
-      botaoPesquisarDesabilitado: '#BDC3C7',
-      camposObrigatorios: '#F1C40F',
-      camposNaoObrigatorios: '#ECF0F1',
-      barraSuperiorMenu: '#2ECC71',
-      textoIconeAjuda: '#34495E',
-      iconeAjuda: '#2ECC71',
+      primary: '#e9c4c2', // Rosa Claro - Destaque em fundo escuro
+      tituloPaginas: '#f2e8e3', // Branco Suave
+      secondary: '#88544c', // Caramelo
+      accent: '#e9c4c2',
+      background: '#4a2c2b', // Chocolate Escuro - Fundo Geral
+      text: '#f2e8e3',
+      hover3Submenu: '#e9c4c2',
+      textoGeralHover: '#f2e8e3',
+      bordasHeaderPerfil: '#88544c',
+      bordasSelecaoListagens: '#e9c4c2',
+      barraDashboard: '#88544c',
+      barraDashboardHover: '#f2e8e3',
+      receitasGraficos: '#e9c4c2',
+      receitasGraficosSecundaria: '#88544c',
+      despesasGraficos: '#ef4444',
+      despesasGraficosSecundaria: '#f87171',
+      barraRolagem: '#e9c4c2',
+      barraRolagemFundo: '#4a2c2b',
+      fundoLinkEAD: '#e9c4c2',
+      textoLinkEAD: '#f2e8e3',
+      botaoSalvar: '#e9c4c2',
+      botaoSalvarAtivo: '#f2e8e3',
+      botaoSalvarDesabilitado: '#6b7280',
+      botaoCancelar: '#ef4444',
+      botaoCancelarAtivo: '#f87171',
+      botaoCancelarDesabilitado: '#9ca3af',
+      botaoPesquisar: '#10b981',
+      botaoPesquisarAtivo: '#34d399',
+      botaoPesquisarDesabilitado: '#9ca3af',
+      camposObrigatorios: '#fbbf24',
+      camposNaoObrigatorios: '#374151',
+      barraSuperiorMenu: '#88544c',
+      textoIconeAjuda: '#9ca3af',
+      iconeAjuda: '#e9c4c2',
     },
   },
 };
@@ -166,8 +173,33 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.style.setProperty('--texto-icone-ajuda', colors.textoIconeAjuda);
       root.style.setProperty('--icone-ajuda', colors.iconeAjuda);
       root.style.setProperty('--border-radius', themeToApply.border_radius);
-      root.style.setProperty('--font-family', themeToApply.font_family);
+      // Aplicar fonte baseada na seleção - definir diretamente a família de fonte
+      const fontMap: Record<string, string> = {
+        Inter: 'Inter, sans-serif',
+        Poppins: 'Poppins, sans-serif',
+        Roboto: 'Roboto, sans-serif',
+        'Open Sans': 'Open Sans, sans-serif',
+        Lato: 'Lato, sans-serif',
+        Montserrat: 'Montserrat, sans-serif',
+        Nunito: 'Nunito, sans-serif',
+        Ubuntu: 'Ubuntu, sans-serif',
+        'Crimson Text': 'Crimson Text, serif',
+        'Playfair Display': 'Playfair Display, serif',
+        Lora: 'Lora, serif',
+        Merriweather: 'Merriweather, serif',
+      };
+      root.style.setProperty(
+        '--custom-font-family',
+        fontMap[themeToApply.font_family] || 'Inter, sans-serif'
+      );
       root.style.setProperty('--logo-scale', themeToApply.logo_scale.toString());
+      root.style.setProperty(
+        '--company-logo-scale',
+        (themeToApply.company_logo_scale ?? 1.0).toString()
+      );
+      root.style.setProperty('--sidebar-bg', themeToApply.sidebar_bg || '#e9c4c2');
+      root.style.setProperty('--sidebar-hover-bg', themeToApply.sidebar_hover_bg || '#88544c');
+      root.style.setProperty('--header-bg', themeToApply.header_bg || '#e9c4c2');
     },
     [resolvedTheme]
   );
@@ -188,7 +220,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data, error } = await supabase
           .from('user_theme_colors')
-          .select('primary_color, titulo_paginas_color, logo_url, logo_scale')
+          .select(
+            'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family'
+          )
           .eq('user_id', userId)
           .eq('theme_mode', resolvedTheme)
           .single();
@@ -205,6 +239,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             tituloPaginas: data.titulo_paginas_color as string,
             logo_url: data.logo_url as string,
             logo_scale: data.logo_scale as number,
+            company_logo_url: data.company_logo_url as string,
+            company_logo_scale: data.company_logo_scale as number,
+            font_family: data.font_family as string,
           };
         }
 
@@ -224,10 +261,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const { data: updateData, error: updateError } = await supabase
           .from('user_theme_colors')
           .update({
-            primary_color: colors.primary ?? '#4CAF50',
+            primary_color: colors.primary ?? '#4A2C2B',
             titulo_paginas_color: colors.tituloPaginas ?? '#ffffff',
             logo_url: colors.logo_url ?? '/logo.png',
             logo_scale: colors.logo_scale ?? 1.0,
+            company_logo_url: colors.company_logo_url,
+            company_logo_scale: colors.company_logo_scale ?? 1.0,
+            font_family: colors.font_family ?? 'Inter',
             updated_at: new Date().toISOString(),
           })
           .eq('user_id', userId)
@@ -239,10 +279,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           const { error: insertError } = await supabase.from('user_theme_colors').insert({
             user_id: userId,
             theme_mode: resolvedTheme,
-            primary_color: colors.primary ?? '#4CAF50',
+            primary_color: colors.primary ?? '#4A2C2B',
             titulo_paginas_color: colors.tituloPaginas ?? '#ffffff',
             logo_url: colors.logo_url ?? '/logo.png',
             logo_scale: colors.logo_scale ?? 1.0,
+            company_logo_url: colors.company_logo_url,
+            company_logo_scale: colors.company_logo_scale ?? 1.0,
+            font_family: colors.font_family ?? 'Inter',
           });
 
           if (insertError) throw insertError;
@@ -261,14 +304,59 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     async (newTheme: Partial<ThemeSettings>, asDefault = false, userId?: string) => {
       try {
         setLoading(true);
-        const updatedTheme = { ...theme, ...newTheme };
+        let updatedTheme = { ...theme, ...newTheme };
 
-        // Se for um usuário admin e estiver salvando cores específicas, salva no banco
-        if (userId && newTheme.colors) {
+        // Se apenas o theme_mode está sendo alterado, tentar aplicar cores customizadas do usuário
+        if (newTheme.theme_mode && newTheme.theme_mode !== 'system' && !newTheme.colors && userId) {
+          try {
+            const userColors = await fetchUserThemeColors(userId);
+            if (userColors) {
+              // Aplicar cores customizadas ao novo modo
+              const mode = newTheme.theme_mode;
+              updatedTheme = {
+                ...updatedTheme,
+                colors: {
+                  ...updatedTheme.colors,
+                  [mode]: {
+                    ...updatedTheme.colors[mode],
+                    ...userColors,
+                  },
+                },
+              };
+            }
+          } catch (err) {
+            console.warn('Erro ao carregar cores do usuário para novo modo:', err);
+          }
+        }
+
+        // Se for um usuário admin e estiver salvando cores específicas ou configurações de logo, salva no banco
+        if (
+          userId &&
+          (newTheme.colors ||
+            newTheme.logo_url ||
+            newTheme.company_logo_url ||
+            newTheme.logo_scale ||
+            newTheme.company_logo_scale ||
+            newTheme.font_family)
+        ) {
           const themeMode = updatedTheme.theme_mode;
-          const colors = newTheme.colors[themeMode as keyof typeof newTheme.colors];
-          if (colors) {
-            await saveUserThemeColors(userId, colors as Partial<ThemeColors>);
+          const colors =
+            newTheme.colors?.[themeMode as keyof typeof newTheme.colors] ||
+            updatedTheme.colors[themeMode as keyof typeof updatedTheme.colors];
+
+          // Incluir configurações de logo nas cores a serem salvas
+          const colorsToSave: Partial<ThemeColors> = {
+            ...(colors as Partial<ThemeColors>),
+            logo_url: newTheme.logo_url || updatedTheme.logo_url,
+            company_logo_url: newTheme.company_logo_url || updatedTheme.company_logo_url,
+            logo_scale: newTheme.logo_scale || updatedTheme.logo_scale,
+            company_logo_scale:
+              newTheme.company_logo_scale ?? updatedTheme.company_logo_scale ?? 1.0,
+            font_family: newTheme.font_family || updatedTheme.font_family,
+          };
+
+          if (colorsToSave) {
+            await saveUserThemeColors(userId, colorsToSave);
           }
         }
 
@@ -301,7 +389,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
-    [theme, applyTheme, saveUserThemeColors]
+    [theme, applyTheme, saveUserThemeColors, fetchUserThemeColors]
   );
 
   useEffect(() => {
@@ -321,11 +409,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           if (user) {
             const userColors = await fetchUserThemeColors(user.id);
             if (userColors) {
-              // Aplicar cores do usuário sobre o tema padrão
+              // Aplicar configurações do usuário sobre o tema padrão
               const themeMode =
                 systemTheme.theme_mode === 'system' ? resolvedTheme : systemTheme.theme_mode;
               activeTheme = {
                 ...systemTheme,
+                logo_url: userColors.logo_url || systemTheme.logo_url,
+                logo_scale: userColors.logo_scale || systemTheme.logo_scale,
+                company_logo_url: userColors.company_logo_url || systemTheme.company_logo_url,
+                font_family: userColors.font_family || systemTheme.font_family,
                 colors: {
                   ...systemTheme.colors,
                   [themeMode]: {
@@ -337,7 +429,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             }
           }
         } catch (userError) {
-          console.warn('Erro ao carregar cores do usuário, usando tema padrão:', userError);
+          console.warn('Erro ao carregar configurações do usuário, usando tema padrão:', userError);
         }
 
         // Verificar se há preferências salvas no localStorage

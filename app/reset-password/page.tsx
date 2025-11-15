@@ -40,11 +40,11 @@ export default function ResetPasswordPage() {
 
   if (emailSent) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 dark:bg-gray-900 sm:px-6 lg:px-8">
+        <div className="w-full max-w-md space-y-8">
           <Card className="p-8">
             <div className="text-center">
-              <div className="mx-auto h-12 w-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
                 <svg
                   className="h-6 w-6 text-green-600 dark:text-green-400"
                   fill="none"
@@ -59,7 +59,7 @@ export default function ResetPasswordPage() {
                   />
                 </svg>
               </div>
-              <Text variant="h2" className="mt-4 mb-2">
+              <Text variant="h2" className="mb-2 mt-4">
                 Email enviado!
               </Text>
               <Text color="muted" className="mb-6">
@@ -76,28 +76,28 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 dark:bg-gray-900 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 relative mb-4">
-            {theme.logo_url ? (
+          <div className="relative mx-auto mb-4 h-16 w-16">
+            {theme.company_logo_url || theme.logo_url ? (
               <div style={{ transform: `scale(${theme.logo_scale || 1})` }}>
                 <Image
-                  src={theme.logo_url}
-                  alt={theme.name || 'Sistema Lari'}
+                  src={theme.company_logo_url || theme.logo_url}
+                  alt={theme.name || 'Confectio'}
                   fill
                   sizes="64px"
                   className="object-contain"
                 />
               </div>
             ) : (
-              <div className="h-full w-full bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">SL</span>
+              <div className="flex h-full w-full items-center justify-center rounded-lg bg-blue-600">
+                <span className="text-xl font-bold text-white">SL</span>
               </div>
             )}
           </div>
           <Text variant="h2" className="mb-2">
-            {theme.name || 'Sistema Lari'}
+            {theme.name || 'Confectio'}
           </Text>
           <Text color="muted">Recupere sua senha</Text>
         </div>
@@ -107,7 +107,7 @@ export default function ResetPasswordPage() {
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
                 Email
               </label>
@@ -117,10 +117,10 @@ export default function ResetPasswordPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
                 placeholder="seu@email.com"
               />
-              <Text color="muted" className="text-sm mt-1">
+              <Text color="muted" className="mt-1 text-sm">
                 Digite o email associado à sua conta
               </Text>
             </div>

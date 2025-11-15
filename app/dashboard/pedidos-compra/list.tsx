@@ -103,7 +103,7 @@ export default function PedidosCompraList() {
   return (
     <div className="space-y-6">
       <Panel>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Text variant="h3">Ordens de Compra</Text>
             <Badge variant="default">{pedidosFiltrados.length}</Badge>
@@ -128,7 +128,7 @@ export default function PedidosCompraList() {
       ) : (
         pedidosFiltrados.map((pedido) => (
           <Card key={pedido.id}>
-            <div className="flex justify-between items-start">
+            <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center space-x-2">
                   <Text variant="h3">Ordem {String(pedido.numero ?? 0).padStart(5, '0')}</Text>
@@ -176,16 +176,16 @@ export default function PedidosCompraList() {
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => router.push(`/dashboard/pedidos-compra/${pedido.id}`)}
-                  className="inline-flex items-center justify-center w-8 h-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                  aria-label={`Visualizar pedido ${pedido.numero_pedido}`}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors duration-200 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  aria-label={`Visualizar pedido ${pedido.numero}`}
                   title="Visualizar"
                 >
                   <Eye className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => abrirEditar(pedido)}
-                  className="inline-flex items-center justify-center w-8 h-8 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
-                  aria-label={`Editar pedido ${pedido.numero_pedido}`}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                  aria-label={`Editar pedido ${pedido.numero}`}
                   title="Editar"
                 >
                   <Edit className="h-4 w-4" />
@@ -208,8 +208,8 @@ export default function PedidosCompraList() {
                       toast({ title: 'Erro ao excluir ordem', variant: 'error' });
                     }
                   }}
-                  className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                  aria-label={`Excluir pedido ${pedido.numero_pedido}`}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  aria-label={`Excluir pedido ${pedido.numero}`}
                   title="Excluir"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -278,7 +278,7 @@ export default function PedidosCompraList() {
                 {pedido.itens_pedido_compra.map((item) => (
                   <div
                     key={item.id}
-                    className="flex justify-between items-center p-2 bg-gray-50 rounded-md"
+                    className="flex items-center justify-between rounded-md bg-gray-50 p-2"
                   >
                     <div>
                       <Text>{item.insumo.nome}</Text>
@@ -292,7 +292,7 @@ export default function PedidosCompraList() {
                 ))}
               </div>
 
-              <div className="mt-4 flex justify-between items-center">
+              <div className="mt-4 flex items-center justify-between">
                 <Text variant="h4">Valor Total:</Text>
                 <Text variant="h4">R$ {pedido.valor_total.toFixed(2)}</Text>
               </div>
@@ -321,7 +321,7 @@ export default function PedidosCompraList() {
         <div className="space-y-3">
           <label className="block text-sm font-medium">Observações</label>
           <textarea
-            className="w-full border rounded p-2 min-h-[100px]"
+            className="min-h-[100px] w-full rounded border p-2"
             value={observacoesEdicao}
             onChange={(e) => setObservacoesEdicao(e.target.value)}
           />

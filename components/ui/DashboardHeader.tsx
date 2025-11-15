@@ -1,6 +1,26 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import type { ThemeSettings } from '@/lib/types';
+// Função utilitária para cor primária com opacidade
+function getPrimaryWithOpacity(_theme: Partial<ThemeSettings> | undefined, opacity: number) {
+  let color = '#88544c';
+  if (typeof window !== 'undefined') {
+    const cssPrimary = getComputedStyle(document.documentElement)
+      .getPropertyValue('--primary')
+      .trim();
+    if (cssPrimary) color = cssPrimary;
+  }
+  if (typeof color === 'string' && color.startsWith('#') && color.length === 7) {
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${opacity})`;
+  } else if (typeof color === 'string' && color.startsWith('rgb')) {
+    return color.replace('rgb', 'rgba').replace(')', `,${opacity})`);
+  }
+  return color;
+}
 import { useTheme } from '@/lib/theme';
 import { useAuth } from '@/lib/auth';
 import { usePageTracking } from '@/hooks/usePageTracking';
@@ -192,35 +212,62 @@ export default function DashboardHeader() {
   });
 
   return (
-    <header className="h-16 border-b bg-background flex items-center justify-between px-6">
+    <header
+      className="flex h-16 items-center justify-between border-b px-6"
+      style={{ background: 'var(--secondary)', borderColor: 'var(--primary)' }}
+    >
       {/* Menu Mobile */}
-      <button className="lg:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md">
+      <button
+        className="rounded-md p-2 lg:hidden"
+        style={{ transition: 'background 0.2s' }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+          (e.currentTarget as HTMLElement).style.color = '';
+          const icon = e.currentTarget.querySelector('svg');
+          if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.background = '';
+          (e.currentTarget as HTMLElement).style.color = '';
+          const icon = e.currentTarget.querySelector('svg');
+          if (icon) icon.style.color = '';
+        }}
+      >
         <Menu className="h-6 w-6" />
       </button>
 
       {/* Logo e Busca */}
-      <div className="flex-1 flex items-center gap-4">
+      <div className="flex flex-1 items-center gap-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <Image
-            src="/logo.png"
-            alt="Confectio"
-            width={32}
-            height={32}
-            sizes="32px"
-            className="rounded-md object-contain"
-            loading="eager"
-          />
-          <span className="text-lg font-semibold hidden sm:inline">Confectio</span>
+          {/* Logo do Sistema (Marca A - sempre visível se existir) */}
+          {theme.logo_url && (
+            <Image
+              src={theme.logo_url}
+              alt={theme.name || 'Sistema'}
+              width={32 * (theme.logo_scale || 1)}
+              height={32 * (theme.logo_scale || 1)}
+              sizes={`${32 * (theme.logo_scale || 1)}px`}
+              className="rounded-md object-contain"
+              loading="eager"
+            />
+          )}
+
+          {/* Nome do Sistema (só mostra se não houver logo do sistema) */}
+          {(!theme.logo_url || theme.logo_url === '/logo.png') && (
+            <span className="hidden text-lg font-semibold sm:inline">
+              {theme.name || 'SistemaLari'}
+            </span>
+          )}
         </Link>
 
-        <div ref={searchRef} className="relative max-w-md w-full hidden sm:block">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <div ref={searchRef} className="relative hidden w-full max-w-md sm:block">
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
             <Search className="h-5 w-5 text-gray-400" />
           </div>
           <input
             type="search"
             placeholder="Pesquisar com IA..."
-            className="block w-full pl-10 pr-12 py-2 border border-gray-300 rounded-md leading-5 bg-white dark:bg-gray-800 dark:border-gray-600 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
+            className="block w-full rounded-md border bg-white py-2 pl-10 pr-12 leading-5 placeholder-gray-500 focus:border-[var(--primary)] focus:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-[var(--primary)] dark:border-gray-600 dark:bg-gray-800 sm:text-sm"
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyDown={(e) => {
@@ -231,7 +278,7 @@ export default function DashboardHeader() {
           />
           <button
             onClick={() => setShowAISearch(!showAISearch)}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center"
+            className="absolute inset-y-0 right-0 flex items-center pr-3"
           >
             <Sparkles
               className={`h-5 w-5 ${showAISearch ? 'text-purple-500' : 'text-gray-400 hover:text-purple-500'} transition-colors`}
@@ -240,11 +287,11 @@ export default function DashboardHeader() {
 
           {/* Sugestões de IA */}
           {showAISearch && (searchSuggestions.length > 0 || searchHistory.length > 0) && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-50 max-h-80 overflow-y-auto">
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
               {/* Sugestões inteligentes */}
               {searchSuggestions.length > 0 && (
                 <div className="p-2">
-                  <div className="flex items-center gap-2 px-3 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <div className="flex items-center gap-2 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     <Lightbulb className="h-3 w-3" />
                     Sugestões IA
                   </div>
@@ -252,7 +299,7 @@ export default function DashboardHeader() {
                     <button
                       key={`suggestion-${index}`}
                       onClick={() => handleSearchSubmit(suggestion)}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md flex items-center gap-2"
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                     >
                       <TrendingUp className="h-4 w-4 text-green-500" />
                       {suggestion}
@@ -263,8 +310,8 @@ export default function DashboardHeader() {
 
               {/* Histórico de pesquisa */}
               {searchHistory.length > 0 && (
-                <div className="p-2 border-t border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-2 px-3 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <div className="border-t border-gray-200 p-2 dark:border-gray-700">
+                  <div className="flex items-center gap-2 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     <History className="h-3 w-3" />
                     Pesquisas Recentes
                   </div>
@@ -275,7 +322,7 @@ export default function DashboardHeader() {
                         setSearchQuery(item);
                         handleSearchSubmit(item);
                       }}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md flex items-center gap-2"
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
                     >
                       <History className="h-4 w-4 text-gray-400" />
                       {item}
@@ -299,7 +346,25 @@ export default function DashboardHeader() {
                 setShowUserMenu(false);
                 setShowQuickMenu(!showQuickMenu);
               }}
-              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+              className="flex items-center gap-2 rounded-md p-2"
+              style={{ transition: 'background 0.2s' }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
+                  theme,
+                  0.8
+                );
+                const icons = e.currentTarget.querySelectorAll('svg');
+                icons.forEach((icon) => {
+                  icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+                });
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = '';
+                const icons = e.currentTarget.querySelectorAll('svg');
+                icons.forEach((icon) => {
+                  icon.style.color = '';
+                });
+              }}
             >
               <Plus className="h-5 w-5" />
               <span className="hidden sm:inline">Atalhos</span>
@@ -309,11 +374,12 @@ export default function DashboardHeader() {
             {showQuickMenu && (
               <div
                 ref={quickMenuRef}
-                className="absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 max-h-96 overflow-y-auto z-50 transition-all duration-200 ease-out"
+                className="absolute right-0 z-50 mt-2 max-h-96 w-80 overflow-y-auto rounded-md shadow-lg ring-1 ring-black ring-opacity-5 transition-all duration-200 ease-out"
+                style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}
               >
                 {/* Ações Rápidas */}
-                <div className="p-3 border-b border-gray-200 dark:border-gray-700">
-                  <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                <div className="border-b border-gray-200 p-3 dark:border-gray-700">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Ações Rápidas
                   </h4>
                   <div className="space-y-1">
@@ -321,7 +387,21 @@ export default function DashboardHeader() {
                       <Link
                         key={`action-${index}`}
                         href={action.href}
-                        className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+                        className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700"
+                        style={{ transition: 'background 0.2s' }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
+                            theme,
+                            0.8
+                          );
+                          const icon = e.currentTarget.querySelector('svg');
+                          if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.background = '';
+                          const icon = e.currentTarget.querySelector('svg');
+                          if (icon) icon.style.color = '';
+                        }}
                         onClick={() => {
                           setShowQuickMenu(false);
                           trackPageAccess(action.href, action.label, action.icon.name);
@@ -336,8 +416,8 @@ export default function DashboardHeader() {
 
                 {/* Páginas Fixadas */}
                 {pinnedPages.length > 0 && (
-                  <div className="p-3 border-b border-gray-200 dark:border-gray-700">
-                    <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <div className="border-b border-gray-200 p-3 dark:border-gray-700">
+                    <h4 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       <Pin className="h-3 w-3" />
                       Fixadas
                     </h4>
@@ -349,7 +429,19 @@ export default function DashboardHeader() {
                           <div key={`pinned-${href}`} className="flex items-center justify-between">
                             <Link
                               href={href}
-                              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md flex-1"
+                              className="flex flex-1 items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700"
+                              style={{ transition: 'background 0.2s' }}
+                              onMouseEnter={(e) => {
+                                (e.currentTarget as HTMLElement).style.background =
+                                  getPrimaryWithOpacity(theme, 0.8);
+                                const icon = e.currentTarget.querySelector('svg');
+                                if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+                              }}
+                              onMouseLeave={(e) => {
+                                (e.currentTarget as HTMLElement).style.background = '';
+                                const icon = e.currentTarget.querySelector('svg');
+                                if (icon) icon.style.color = '';
+                              }}
                               onClick={() => {
                                 setShowQuickMenu(false);
                                 trackPageAccess(href, page.label, page.icon.name);
@@ -375,7 +467,7 @@ export default function DashboardHeader() {
                 {/* Páginas Mais Acessadas */}
                 {recentPages.length > 0 && (
                   <div className="p-3">
-                    <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <h4 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       <Clock className="h-3 w-3" />
                       Recentes
                     </h4>
@@ -387,7 +479,19 @@ export default function DashboardHeader() {
                         >
                           <Link
                             href={page.href}
-                            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md flex-1"
+                            className="flex flex-1 items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700"
+                            style={{ transition: 'background 0.2s' }}
+                            onMouseEnter={(e) => {
+                              (e.currentTarget as HTMLElement).style.background =
+                                getPrimaryWithOpacity(theme, 0.8);
+                              const icon = e.currentTarget.querySelector('svg');
+                              if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+                            }}
+                            onMouseLeave={(e) => {
+                              (e.currentTarget as HTMLElement).style.background = '';
+                              const icon = e.currentTarget.querySelector('svg');
+                              if (icon) icon.style.color = '';
+                            }}
                             onClick={() => setShowQuickMenu(false)}
                           >
                             <Star className="h-4 w-4" />
@@ -417,8 +521,21 @@ export default function DashboardHeader() {
         {/* Atualizar */}
         <button
           onClick={() => window.location.reload()}
-          className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+          className="rounded-md p-2"
+          style={{ transition: 'background 0.2s' }}
           title="Atualizar dados"
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+            (e.currentTarget as HTMLElement).style.color = '';
+            const icon = e.currentTarget.querySelector('svg');
+            if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.background = '';
+            (e.currentTarget as HTMLElement).style.color = '';
+            const icon = e.currentTarget.querySelector('svg');
+            if (icon) icon.style.color = '';
+          }}
         >
           <RefreshCw className="h-5 w-5" />
         </button>
@@ -431,10 +548,21 @@ export default function DashboardHeader() {
               setShowUserMenu(false);
               setShowNotifications(!showNotifications);
             }}
-            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 relative"
+            className="relative rounded-md p-2"
+            style={{ transition: 'background 0.2s' }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = '';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) icon.style.color = '';
+            }}
           >
             <Bell className="h-5 w-5" />
-            <span className="absolute top-0 right-0 h-4 w-4 text-xs flex items-center justify-center bg-red-500 text-white rounded-full">
+            <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs text-white">
               2
             </span>
           </button>
@@ -442,18 +570,19 @@ export default function DashboardHeader() {
           {showNotifications && (
             <div
               ref={notificationsRef}
-              className="absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50 transition-all duration-200 ease-out"
+              className="absolute right-0 z-50 mt-2 w-80 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 transition-all duration-200 ease-out"
+              style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}
             >
-              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="border-b border-gray-200 p-4 dark:border-gray-700">
                 <h3 className="text-sm font-medium">Notificações</h3>
               </div>
               <div className="max-h-96 overflow-y-auto">
                 {/* Exemplo de notificação */}
-                <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="border-b border-gray-200 p-4 dark:border-gray-700">
                   <p className="text-sm text-yellow-600 dark:text-yellow-400">
                     Estoque baixo: Produto X
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">Há 5 minutos</p>
+                  <p className="mt-1 text-xs text-gray-500">Há 5 minutos</p>
                 </div>
               </div>
             </div>
@@ -463,8 +592,21 @@ export default function DashboardHeader() {
         {/* Toggle tema */}
         <button
           onClick={toggleMode}
-          className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+          className="rounded-md p-2"
+          style={{ transition: 'background 0.2s' }}
           title={effectiveMode === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+            (e.currentTarget as HTMLElement).style.color = '';
+            const icon = e.currentTarget.querySelector('svg');
+            if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.background = '';
+            (e.currentTarget as HTMLElement).style.color = '';
+            const icon = e.currentTarget.querySelector('svg');
+            if (icon) icon.style.color = '';
+          }}
         >
           {effectiveMode === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>
@@ -477,10 +619,23 @@ export default function DashboardHeader() {
               setShowNotifications(false);
               setShowUserMenu(!showUserMenu);
             }}
-            className="flex items-center gap-2 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="flex items-center gap-2 rounded-md p-2"
+            style={{ transition: 'background 0.2s' }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+              (e.currentTarget as HTMLElement).style.color = '';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = '';
+              (e.currentTarget as HTMLElement).style.color = '';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) icon.style.color = '';
+            }}
           >
             <User className="h-5 w-5" />
-            <span className="text-sm font-medium hidden sm:inline">
+            <span className="hidden text-sm font-medium sm:inline">
               {profile?.nome || profile?.email || 'Usuário'}
             </span>
           </button>
@@ -489,9 +644,10 @@ export default function DashboardHeader() {
           {showUserMenu && (
             <div
               ref={userMenuRef}
-              className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50 transition-all duration-200 ease-out"
+              className="absolute right-0 z-50 mt-2 w-48 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 transition-all duration-200 ease-out"
+              style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}
             >
-              <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+              <div className="border-b border-gray-200 px-4 py-2 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
                 {profile?.role === 'admin' && 'Administrador'}
                 {profile?.role === 'fabrica' && 'Fábrica'}
                 {profile?.role === 'pdv' && 'PDV'}
@@ -499,7 +655,21 @@ export default function DashboardHeader() {
               {profile?.role === 'admin' && (
                 <Link
                   href="/dashboard/usuarios"
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700"
+                  style={{ transition: 'background 0.2s' }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
+                      theme,
+                      0.8
+                    );
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = '';
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (icon) icon.style.color = '';
+                  }}
                   onClick={() => setShowUserMenu(false)}
                 >
                   <User className="h-4 w-4" />
@@ -511,14 +681,42 @@ export default function DashboardHeader() {
                   setShowUserMenu(false);
                   // TODO: Implementar navegação para ajustes
                 }}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 w-full text-left"
+                className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700"
+                style={{ transition: 'background 0.2s' }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
+                    theme,
+                    0.8
+                  );
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.background = '';
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = '';
+                }}
               >
                 <Settings className="h-4 w-4" />
                 Ajustes
               </button>
               <button
                 onClick={handleSignOut}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 w-full text-left"
+                className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600"
+                style={{ transition: 'background 0.2s' }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
+                    theme,
+                    0.8
+                  );
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.background = '';
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) icon.style.color = '';
+                }}
               >
                 <LogOut className="h-4 w-4" />
                 Sair

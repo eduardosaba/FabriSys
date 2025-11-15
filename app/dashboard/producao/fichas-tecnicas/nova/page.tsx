@@ -138,7 +138,7 @@ export default function NovaFichaTecnicaPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-xl">Carregando...</div>
       </div>
     );
@@ -146,29 +146,29 @@ export default function NovaFichaTecnicaPage() {
 
   if (produtos.length === 0) {
     return (
-      <div className="min-h-[calc(100vh-200px)] flex items-center justify-center p-6">
-        <div className="max-w-2xl w-full">
+      <div className="flex min-h-[calc(100vh-200px)] items-center justify-center p-6">
+        <div className="w-full max-w-2xl">
           <button
             onClick={() => router.push('/dashboard/producao/fichas-tecnicas')}
-            className="inline-flex items-center gap-2 mb-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors"
+            className="mb-6 inline-flex items-center gap-2 text-gray-600 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
           >
             <ArrowLeft size={20} />
             <span>Voltar para Fichas Técnicas</span>
           </button>
 
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 p-12 rounded-2xl shadow-lg text-center border border-blue-100 dark:border-gray-700">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-blue-100 dark:bg-blue-900 mb-6">
+          <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-12 text-center shadow-lg dark:border-gray-700 dark:from-gray-800 dark:to-gray-900">
+            <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
               <Package size={40} className="text-blue-600 dark:text-blue-400" />
             </div>
-            <h2 className="text-3xl font-bold mb-4 text-gray-900 dark:text-white">
+            <h2 className="mb-4 text-3xl font-bold text-gray-900 dark:text-white">
               Nenhum Produto Disponível
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto">
+            <p className="mx-auto mb-8 max-w-md text-lg text-gray-600 dark:text-gray-400">
               Todos os produtos já possuem fichas técnicas ou não há produtos cadastrados.
             </p>
             <button
               onClick={() => router.push('/dashboard/producao/produtos/novo')}
-              className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all transform hover:scale-105 shadow-lg font-semibold"
+              className="inline-flex transform items-center gap-2 rounded-xl bg-blue-600 px-8 py-4 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:bg-blue-700"
             >
               <Package size={20} />
               Cadastrar Novo Produto
@@ -181,26 +181,26 @@ export default function NovaFichaTecnicaPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-7xl mx-auto p-6">
+      <div className="mx-auto max-w-7xl p-6">
         {/* Header */}
         <div className="mb-8">
           <button
             onClick={() => router.push('/dashboard/producao/fichas-tecnicas')}
-            className="inline-flex items-center gap-2 mb-4 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors"
+            className="mb-4 inline-flex items-center gap-2 text-gray-600 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
           >
             <ArrowLeft size={20} />
             <span className="font-medium">Voltar para Fichas Técnicas</span>
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+            <div className="rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 p-3 shadow-lg">
               <FileText size={32} className="text-white" />
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
                 Nova Ficha Técnica
               </h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
+              <p className="mt-1 text-gray-600 dark:text-gray-400">
                 Configure a receita e custos de produção do produto
               </p>
             </div>
@@ -208,13 +208,13 @@ export default function NovaFichaTecnicaPage() {
         </div>
 
         {/* Seleção de Produto */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 mb-6 border border-gray-100 dark:border-gray-700">
-          <div className="flex items-start gap-4 mb-6">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+        <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-8 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+          <div className="mb-6 flex items-start gap-4">
+            <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900">
               <Package size={24} className="text-blue-600 dark:text-blue-400" />
             </div>
             <div className="flex-1">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+              <h2 className="mb-2 text-xl font-bold text-gray-900 dark:text-white">
                 Selecione o Produto
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -224,13 +224,13 @@ export default function NovaFichaTecnicaPage() {
           </div>
 
           <div className="max-w-2xl">
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            <label className="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
               Produto Final *
             </label>
             <select
               value={produtoSelecionado}
               onChange={(e) => setProdutoSelecionado(e.target.value)}
-              className="w-full px-4 py-3 text-base border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all"
+              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-base transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               required
             >
               <option value="">-- Selecione um produto --</option>
@@ -242,11 +242,11 @@ export default function NovaFichaTecnicaPage() {
             </select>
 
             {produtoSelecionado && (
-              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+              <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
                 <div className="flex items-start gap-3">
                   <Info
                     size={20}
-                    className="text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0"
+                    className="mt-0.5 flex-shrink-0 text-blue-600 dark:text-blue-400"
                   />
                   <p className="text-sm text-blue-800 dark:text-blue-300">
                     Agora adicione os insumos necessários para produzir este produto. O sistema
@@ -269,9 +269,9 @@ export default function NovaFichaTecnicaPage() {
         )}
 
         {!produtoAtual && !produtoSelecionado && (
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 p-8 rounded-2xl text-center border-2 border-dashed border-amber-300 dark:border-amber-700">
-            <Package size={48} className="mx-auto text-amber-500 dark:text-amber-400 mb-4" />
-            <p className="text-lg font-semibold text-amber-900 dark:text-amber-200 mb-2">
+          <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 p-8 text-center dark:border-amber-700 dark:from-amber-900/20 dark:to-orange-900/20">
+            <Package size={48} className="mx-auto mb-4 text-amber-500 dark:text-amber-400" />
+            <p className="mb-2 text-lg font-semibold text-amber-900 dark:text-amber-200">
               Selecione um produto acima para começar
             </p>
             <p className="text-amber-700 dark:text-amber-300">

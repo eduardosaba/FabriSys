@@ -106,7 +106,7 @@ export default function ThemeConfigurator() {
     return (
       <Card variant="default" className="mt-6 py-8">
         <div className="flex items-center justify-center gap-3">
-          <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <span className="text-muted-foreground">Carregando configurações...</span>
         </div>
       </Card>
@@ -115,7 +115,7 @@ export default function ThemeConfigurator() {
 
   return (
     <>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* 🧾 FORMULÁRIO PRINCIPAL */}
         <Card variant="default">
           <form onSubmit={handleSubmit(handleSave)} className="space-y-6 p-4">
@@ -133,18 +133,18 @@ export default function ThemeConfigurator() {
             {/* Logo */}
             <div>
               <label className="block text-sm font-medium">Logo</label>
-              <div className="flex items-center gap-4 mt-2">
+              <div className="mt-2 flex items-center gap-4">
                 {watchedValues.logo_url && !previewImageError ? (
                   <Image
                     src={watchedValues.logo_url}
                     alt="Logo"
                     width={48}
                     height={48}
-                    className="object-contain rounded"
+                    className="rounded object-contain"
                     onError={() => setPreviewImageError(true)}
                   />
                 ) : (
-                  <div className="w-12 h-12 bg-gray-100 rounded" />
+                  <div className="h-12 w-12 rounded bg-gray-100" />
                 )}
                 <input
                   type="file"
@@ -206,14 +206,14 @@ export default function ThemeConfigurator() {
                 max="2"
                 step="0.1"
                 {...register('logo_scale', { valueAsNumber: true })}
-                className="w-full mt-2"
+                className="mt-2 w-full"
               />
               <p className="text-sm text-gray-500">{watchedValues.logo_scale?.toFixed(1)}x</p>
             </div>
 
             {/* 🎨 Cores - Tema Claro */}
             <div>
-              <h3 className="text-md font-semibold mt-6 mb-2">Tema Claro</h3>
+              <h3 className="text-md mb-2 mt-6 font-semibold">Tema Claro</h3>
               <div className="grid grid-cols-2 gap-4">
                 {Object.keys(watchedValues.colors.light).map((key) => (
                   <div key={key}>
@@ -221,7 +221,7 @@ export default function ThemeConfigurator() {
                     <input
                       type="color"
                       {...register(`colors.light.${key as keyof FormData['colors']['light']}`)}
-                      className="w-full h-10 cursor-pointer border rounded"
+                      className="h-10 w-full cursor-pointer rounded border"
                     />
                   </div>
                 ))}
@@ -230,7 +230,7 @@ export default function ThemeConfigurator() {
 
             {/* 🌙 Cores - Tema Escuro */}
             <div>
-              <h3 className="text-md font-semibold mt-6 mb-2">Tema Escuro</h3>
+              <h3 className="text-md mb-2 mt-6 font-semibold">Tema Escuro</h3>
               <div className="grid grid-cols-2 gap-4">
                 {Object.keys(watchedValues.colors.dark).map((key) => (
                   <div key={key}>
@@ -238,7 +238,7 @@ export default function ThemeConfigurator() {
                     <input
                       type="color"
                       {...register(`colors.dark.${key as keyof FormData['colors']['dark']}`)}
-                      className="w-full h-10 cursor-pointer border rounded"
+                      className="h-10 w-full cursor-pointer rounded border"
                     />
                   </div>
                 ))}
@@ -256,7 +256,7 @@ export default function ThemeConfigurator() {
         {/* 👁️ PREVIEW */}
         <Card variant="default">
           <div className="p-4">
-            <h3 className="text-lg font-medium mb-4">Preview</h3>
+            <h3 className="mb-4 text-lg font-medium">Preview</h3>
             <PreviewCard data={watchedValues} themeMode={resolvedTheme} />
           </div>
         </Card>
@@ -273,7 +273,7 @@ function PreviewCard({ data, themeMode }: { data: FormData; themeMode?: string }
 
   return (
     <div
-      className="p-6 rounded-lg shadow-md"
+      className="rounded-lg p-6 shadow-md"
       style={{
         backgroundColor: colors.background,
         color: colors.text,
@@ -281,7 +281,7 @@ function PreviewCard({ data, themeMode }: { data: FormData; themeMode?: string }
         borderRadius: data.border_radius,
       }}
     >
-      <div className="flex items-center gap-4 mb-4">
+      <div className="mb-4 flex items-center gap-4">
         <Image
           src={data.logo_url || '/logo.png'}
           alt={data.name}
@@ -293,9 +293,9 @@ function PreviewCard({ data, themeMode }: { data: FormData; themeMode?: string }
         <h2 className="text-2xl font-bold">{data.name}</h2>
       </div>
 
-      <div className="flex gap-2 mb-4">
+      <div className="mb-4 flex gap-2">
         <button
-          className="px-4 py-2 rounded font-medium"
+          className="rounded px-4 py-2 font-medium"
           style={{
             backgroundColor: colors.primary,
             color: '#fff',
@@ -305,7 +305,7 @@ function PreviewCard({ data, themeMode }: { data: FormData; themeMode?: string }
           Primário
         </button>
         <button
-          className="px-4 py-2 rounded font-medium"
+          className="rounded px-4 py-2 font-medium"
           style={{
             backgroundColor: colors.secondary,
             color: '#fff',
@@ -315,7 +315,7 @@ function PreviewCard({ data, themeMode }: { data: FormData; themeMode?: string }
           Secundário
         </button>
         <button
-          className="px-4 py-2 rounded font-medium"
+          className="rounded px-4 py-2 font-medium"
           style={{
             backgroundColor: colors.accent,
             color: '#fff',

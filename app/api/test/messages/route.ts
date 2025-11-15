@@ -37,7 +37,7 @@ export async function GET(_request: Request) {
       resultados.email = await enviarEmailPedido(
         'eduardopedro.fsa@gmail.com',
         'Teste - Pedido de Compra',
-        'Este é um email de teste do Sistema Lari.',
+        'Este é um email de teste do Confectio.',
         pdfBuffer
       );
     } catch (error) {
@@ -51,7 +51,7 @@ export async function GET(_request: Request) {
       console.log('Testando envio de WhatsApp...');
       resultados.whatsapp = await enviarWhatsAppPedido(
         '75991156937',
-        'Este é um teste do Sistema Lari.',
+        'Este é um teste do Confectio.',
         'https://example.com/test.pdf' // URL de teste
       );
     } catch (error) {

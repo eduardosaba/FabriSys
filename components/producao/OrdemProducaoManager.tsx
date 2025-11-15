@@ -52,24 +52,7 @@ export default function OrdemProducaoManager({ ordem, onUpdate }: OrdemProducaoM
 
   // Calcular insumos teóricos baseado na ficha técnica
   const calcularInsumosTeoricos = async (): Promise<InsumoTeorico[]> => {
-    const {
-      data: fichaTecnica,
-      error,
-    }: {
-      data: Array<{
-        quantidade: number;
-        unidade_medida: string;
-        insumo: {
-          id: string;
-          nome: string;
-          unidade_estoque: string;
-          custo_por_ue: number;
-          unidade_consumo: string;
-          fator_conversao: number;
-        };
-      }>;
-      error: Error | null;
-    } = await supabase
+    const { data: fichaTecnica, error } = await supabase
       .from('ficha_tecnica')
       .select(
         `
@@ -90,25 +73,29 @@ export default function OrdemProducaoManager({ ordem, onUpdate }: OrdemProducaoM
     if (error instanceof Error || !fichaTecnica) return [];
 
     const insumosTeoricos: InsumoTeorico[] = fichaTecnica.map((item) => {
-      const insumo = item.insumo;
+      const insumo = Array.isArray(item.insumo) ? item.insumo[0] : item.insumo;
       const quantidadeUC = item.quantidade * ordem.quantidade_prevista;
-      const quantidadeUE = insumo.fator_conversao
+      const quantidadeUE = insumo?.fator_conversao
         ? quantidadeUC / insumo.fator_conversao
         : quantidadeUC;
       const custoTotal =
-        insumo.custo_por_ue && insumo.fator_conversao
+        insumo?.custo_por_ue && insumo?.fator_conversao
           ? (insumo.custo_por_ue / insumo.fator_conversao) * quantidadeUC
           : 0;
 
       return {
-        insumo_id: insumo.id,
-        nome_insumo: insumo.nome,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        insumo_id: insumo?.id || '',
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        nome_insumo: insumo?.nome || '',
         quantidade_uc: quantidadeUC,
         unidade_consumo: item.unidade_medida,
         quantidade_ue: quantidadeUE,
-        unidade_estoque: insumo.unidade_estoque,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        unidade_estoque: insumo?.unidade_estoque || '',
         custo_total: custoTotal,
-        fator_conversao: insumo.fator_conversao || 1,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        fator_conversao: insumo?.fator_conversao || 1,
       };
     });
 
@@ -257,15 +244,15 @@ export default function OrdemProducaoManager({ ordem, onUpdate }: OrdemProducaoM
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 border border-gray-100 dark:border-gray-700">
-      <div className="flex items-center justify-between mb-6">
+    <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
             Ordem de Produção {ordem.numero_op}
           </h2>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="mt-2 flex items-center gap-2">
             <span
-              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(ordem.status)}`}
+              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm font-medium ${getStatusColor(ordem.status)}`}
             >
               {getStatusIcon(ordem.status)}
               {ordem.status.replace('_', ' ').toUpperCase()}
@@ -277,8 +264,8 @@ export default function OrdemProducaoManager({ ordem, onUpdate }: OrdemProducaoM
       {/* Fase 1: Criação */}
       {faseAtual === 'criacao' && (
         <div className="space-y-6">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-xl border border-blue-200 dark:border-blue-800">
-            <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-3 flex items-center gap-2">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-6 dark:border-blue-800 dark:bg-blue-900/20">
+            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-blue-800 dark:text-blue-200">
               <Calculator size={20} />
               Fase 1: Criação da Ordem de Produção
             </h3>
@@ -309,8 +296,8 @@ export default function OrdemProducaoManager({ ordem, onUpdate }: OrdemProducaoM
       {/* Fase 2: Execução */}
       {faseAtual === 'execucao' && (
         <div className="space-y-6">
-          <div className="bg-green-50 dark:bg-green-900/20 p-6 rounded-xl border border-green-200 dark:border-green-800">
-            <h3 className="text-lg font-semibold text-green-800 dark:text-green-200 mb-3 flex items-center gap-2">
+          <div className="rounded-xl border border-green-200 bg-green-50 p-6 dark:border-green-800 dark:bg-green-900/20">
+            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-green-800 dark:text-green-200">
               <Package size={20} />
               Fase 2: Execução da Produção
             </h3>
@@ -326,15 +313,15 @@ export default function OrdemProducaoManager({ ordem, onUpdate }: OrdemProducaoM
 
           {/* Lista de insumos teóricos */}
           {ordem.insumos_teoricos && ordem.insumos_teoricos.length > 0 && (
-            <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg">
-              <h4 className="font-semibold mb-3 text-gray-800 dark:text-gray-200">
+            <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-900/50">
+              <h4 className="mb-3 font-semibold text-gray-800 dark:text-gray-200">
                 Insumos Necessários (Teóricos)
               </h4>
               <div className="space-y-2">
                 {ordem.insumos_teoricos.map((insumo: InsumoTeorico, index: number) => (
                   <div
                     key={index}
-                    className="flex justify-between items-center p-2 bg-white dark:bg-gray-800 rounded border"
+                    className="flex items-center justify-between rounded border bg-white p-2 dark:bg-gray-800"
                   >
                     <div>
                       <span className="font-medium">{insumo.nome_insumo}</span>
@@ -368,12 +355,12 @@ export default function OrdemProducaoManager({ ordem, onUpdate }: OrdemProducaoM
       {/* Fase 3: Finalização */}
       {faseAtual === 'finalizacao' && (
         <div className="space-y-6">
-          <div className="bg-purple-50 dark:bg-purple-900/20 p-6 rounded-xl border border-purple-200 dark:border-purple-800">
-            <h3 className="text-lg font-semibold text-purple-800 dark:text-purple-200 mb-3 flex items-center gap-2">
+          <div className="rounded-xl border border-purple-200 bg-purple-50 p-6 dark:border-purple-800 dark:bg-purple-900/20">
+            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-purple-800 dark:text-purple-200">
               <TrendingUp size={20} />
               Fase 3: Produção Finalizada
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
               <div>
                 <p className="text-purple-700 dark:text-purple-300">
                   Quantidade Real: <strong>{ordem.quantidade_real_produzida}</strong>
@@ -403,8 +390,8 @@ export default function OrdemProducaoManager({ ordem, onUpdate }: OrdemProducaoM
           </div>
 
           {ordem.observacoes_producao && (
-            <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg">
-              <h4 className="font-semibold mb-2 text-gray-800 dark:text-gray-200">
+            <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-900/50">
+              <h4 className="mb-2 font-semibold text-gray-800 dark:text-gray-200">
                 Observações da Produção
               </h4>
               <p className="text-sm text-gray-600 dark:text-gray-400">

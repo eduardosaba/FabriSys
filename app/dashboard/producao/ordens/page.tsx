@@ -3,13 +3,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
-import { Plus, Eye, Edit, Trash2, Package, Loader2 } from 'lucide-react';
+import { Plus, Eye, Edit, Trash2, Loader2, ClipboardList } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
 import Modal from '@/components/Modal';
 import { useToast } from '@/hooks/useToast';
 import { useTableFilters } from '@/hooks/useTableFilters';
 import TableControls from '@/components/ui/TableControls';
 import EmptyState from '@/components/ui/EmptyState';
+import PageHeader from '@/components/ui/PageHeader';
 
 interface OrdemProducao {
   id: string;
@@ -88,11 +89,9 @@ export default function OrdensProducaoPage() {
     void loadOrdens();
   }, [loadOrdens]);
 
-  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(ordens, [
-    'numero_op',
-    'produto_final.nome',
-    'status',
-  ]);
+  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(ordens, {
+    searchFields: ['numero_op', 'produto_final.nome', 'status'],
+  });
 
   async function handleDelete() {
     if (!selectedOrdem) return;
@@ -138,26 +137,26 @@ export default function OrdensProducaoPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Ordens de Produção</h1>
-          <p className="text-gray-600">Gerenciamento completo das ordens de produção</p>
-        </div>
+      <PageHeader
+        title="Ordens de Produção"
+        description="Gerenciamento completo das ordens de produção"
+        icon={ClipboardList}
+      >
         <Button onClick={() => (window.location.href = '/dashboard/producao/ordens/nova')}>
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="mr-2 h-4 w-4" />
           Nova Ordem
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="overflow-hidden rounded-lg bg-white shadow">
         <TableControls
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
@@ -166,12 +165,12 @@ export default function OrdensProducaoPage() {
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
             <span className="ml-2 text-gray-600">Carregando ordens...</span>
           </div>
         ) : filteredItems.length === 0 ? (
           <EmptyState
-            icon={Package}
+            type={ordens.length === 0 ? 'no-data' : 'no-results'}
             title={ordens.length === 0 ? 'Nenhuma ordem de produção' : 'Nenhuma ordem encontrada'}
             description={
               ordens.length === 0
@@ -192,61 +191,61 @@ export default function OrdensProducaoPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     OP
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Produto
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Quantidade
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Data Prevista
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Custo Previsto
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 bg-white">
                 {filteredItems.map((ordem) => (
                   <tr key={ordem.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {ordem.numero_op}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
                       {ordem.produto_final.nome}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {ordem.quantidade_prevista}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="whitespace-nowrap px-6 py-4">
                       <span
-                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ordem.status)}`}
+                        className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(ordem.status)}`}
                       >
                         {ordem.status.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {new Date(ordem.data_prevista).toLocaleDateString('pt-BR')}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
                       {formatCurrency(ordem.custo_previsto)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() =>
                             (window.location.href = `/dashboard/producao/ordens/${ordem.id}`)
                           }
-                          className="inline-flex items-center justify-center w-8 h-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors duration-200 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                           aria-label={`Visualizar ordem ${ordem.numero_op}`}
                           title="Visualizar"
                         >
@@ -256,7 +255,7 @@ export default function OrdensProducaoPage() {
                           onClick={() =>
                             (window.location.href = `/dashboard/producao/ordens/${ordem.id}/editar`)
                           }
-                          className="inline-flex items-center justify-center w-8 h-8 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
                           aria-label={`Editar ordem ${ordem.numero_op}`}
                           title="Editar"
                         >
@@ -267,7 +266,7 @@ export default function OrdensProducaoPage() {
                             setSelectedOrdem(ordem);
                             setDeleteModal(true);
                           }}
-                          className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
                           aria-label={`Excluir ordem ${ordem.numero_op}`}
                           title="Excluir"
                         >
@@ -285,11 +284,11 @@ export default function OrdensProducaoPage() {
 
       <Modal isOpen={deleteModal} onClose={() => setDeleteModal(false)} title="Confirmar exclusão">
         <div className="p-6">
-          <p className="text-gray-700 mb-4">
+          <p className="mb-4 text-gray-700">
             Tem certeza que deseja excluir a ordem de produção{' '}
             <strong>{selectedOrdem?.numero_op}</strong>?
           </p>
-          <p className="text-sm text-gray-500 mb-6">Esta ação não pode ser desfeita.</p>
+          <p className="mb-6 text-sm text-gray-500">Esta ação não pode ser desfeita.</p>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setDeleteModal(false)}>
               Cancelar

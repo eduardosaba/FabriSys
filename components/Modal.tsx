@@ -16,14 +16,14 @@ export default function Modal({ isOpen, onClose, title, children }: Props) {
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md"
+        className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800"
         onClick={(e) => e.stopPropagation()} // Impede que o clique dentro do modal o feche
       >
-        <div className="flex justify-between items-center border-b pb-3 mb-4">
+        <div className="mb-4 flex items-center justify-between border-b pb-3">
           <h2 className="text-xl font-semibold">{title}</h2>
           <button
             onClick={onClose}

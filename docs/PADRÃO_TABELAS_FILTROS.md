@@ -107,7 +107,7 @@ export default function MyTable({ items, onEdit, onDelete, loading }: MyTablePro
   };
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="overflow-hidden rounded-lg bg-white shadow">
       {/* Controles de busca e filtro */}
       {items.length > 0 && <TableControls filters={filters} searchPlaceholder="Buscar itens..." />}
 
@@ -134,39 +134,39 @@ export default function MyTable({ items, onEdit, onDelete, loading }: MyTablePro
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   Nome
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   Status
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                   Ações
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-200 bg-white">
               {filters.filteredItems.map((item) => (
                 <tr key={item.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="whitespace-nowrap px-6 py-4">
                     <div className="text-sm font-medium text-gray-900">{item.nome}</div>
                     {item.descricao && (
                       <div className="text-sm text-gray-500">{item.descricao}</div>
                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="whitespace-nowrap px-6 py-4">
                     <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                      className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5
                       ${item.ativo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
                     >
                       {item.ativo ? 'Ativo' : 'Inativo'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => onEdit(item)}
-                        className="text-yellow-600 hover:text-yellow-900 p-1 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                        className="rounded p-1 text-yellow-600 hover:text-yellow-900 focus:outline-none focus:ring-2 focus:ring-yellow-500"
                         title="Editar"
                         aria-label={`Editar ${item.nome}`}
                         disabled={loading}
@@ -175,7 +175,7 @@ export default function MyTable({ items, onEdit, onDelete, loading }: MyTablePro
                       </button>
                       <button
                         onClick={() => handleDelete(item)}
-                        className="text-red-600 hover:text-red-900 p-1 rounded focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="rounded p-1 text-red-600 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-500"
                         title="Excluir"
                         disabled={loading || deletingId === item.id}
                         aria-label={`Excluir ${item.nome}`}

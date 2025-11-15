@@ -5,7 +5,7 @@ DECLARE
 BEGIN
   -- Define o tema completo com todas as cores específicas
   full_theme := jsonb_build_object(
-    'name', 'Sistema Lari',
+    'name', 'Confectio',
     'logo_url', '/logo.png',
     'logo_scale', 1.0,
     'font_family', 'Inter',

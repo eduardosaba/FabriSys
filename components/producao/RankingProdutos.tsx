@@ -61,12 +61,12 @@ export default function RankingProdutos({ config }: RankingProdutosProps) {
   }, [loadRanking]);
 
   if (loading) {
-    return <div className="h-64 bg-gray-50 rounded-lg animate-pulse" />;
+    return <div className="h-64 animate-pulse rounded-lg bg-gray-50" />;
   }
 
   if (ranking.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
+      <div className="flex h-64 items-center justify-center rounded-lg bg-gray-50">
         <p className="text-gray-600">Não há dados disponíveis.</p>
       </div>
     );

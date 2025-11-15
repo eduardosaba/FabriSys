@@ -56,7 +56,7 @@ export default function KPIsProducao() {
     return (
       <div className="grid grid-cols-3 gap-4">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-24 bg-gray-50 rounded-lg animate-pulse" />
+          <div key={i} className="h-24 animate-pulse rounded-lg bg-gray-50" />
         ))}
       </div>
     );
@@ -64,41 +64,41 @@ export default function KPIsProducao() {
 
   const renderTendencia = (tendencia: 'up' | 'down' | 'stable') => {
     if (tendencia === 'up') {
-      return <TrendingUp className="w-4 h-4 text-green-500" />;
+      return <TrendingUp className="h-4 w-4 text-green-500" />;
     }
     if (tendencia === 'down') {
-      return <TrendingDown className="w-4 h-4 text-red-500" />;
+      return <TrendingDown className="h-4 w-4 text-red-500" />;
     }
-    return <Percent className="w-4 h-4 text-gray-500" />;
+    return <Percent className="h-4 w-4 text-gray-500" />;
   };
 
   return (
     <div className="grid grid-cols-3 gap-4">
-      <div className="bg-white rounded-lg p-4 shadow-sm border">
-        <div className="flex justify-between items-start">
+      <div className="rounded-lg border bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between">
           <div>
             <h3 className="text-sm font-medium text-gray-600">Eficiência</h3>
-            <p className="text-2xl font-semibold mt-1">{kpis.eficiencia.toFixed(1)}%</p>
+            <p className="mt-1 text-2xl font-semibold">{kpis.eficiencia.toFixed(1)}%</p>
           </div>
           {renderTendencia(kpis.eficiencia_tendencia)}
         </div>
       </div>
 
-      <div className="bg-white rounded-lg p-4 shadow-sm border">
-        <div className="flex justify-between items-start">
+      <div className="rounded-lg border bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between">
           <div>
             <h3 className="text-sm font-medium text-gray-600">Produtividade</h3>
-            <p className="text-2xl font-semibold mt-1">{kpis.produtividade.toFixed(1)}%</p>
+            <p className="mt-1 text-2xl font-semibold">{kpis.produtividade.toFixed(1)}%</p>
           </div>
           {renderTendencia(kpis.produtividade_tendencia)}
         </div>
       </div>
 
-      <div className="bg-white rounded-lg p-4 shadow-sm border">
-        <div className="flex justify-between items-start">
+      <div className="rounded-lg border bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between">
           <div>
             <h3 className="text-sm font-medium text-gray-600">Qualidade</h3>
-            <p className="text-2xl font-semibold mt-1">{kpis.qualidade.toFixed(1)}%</p>
+            <p className="mt-1 text-2xl font-semibold">{kpis.qualidade.toFixed(1)}%</p>
           </div>
           {renderTendencia(kpis.qualidade_tendencia)}
         </div>

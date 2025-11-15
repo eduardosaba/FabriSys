@@ -16,11 +16,11 @@ export default function Loading({
   const content = (
     <div className="flex flex-col items-center gap-4">
       <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-loading-spinner border-r-transparent align-[-0.125em]" />
-      <p className="text-loading-text text-center">{message}</p>
+      <p className="text-center text-loading-text">{message}</p>
       {showRetry && onRetry && (
         <button
           onClick={onRetry}
-          className="px-4 py-2 bg-loading-button-bg text-white rounded-md hover:bg-loading-button-hover transition-colors"
+          className="rounded-md bg-loading-button-bg px-4 py-2 text-white transition-colors hover:bg-loading-button-hover"
         >
           Tentar Novamente
         </button>
@@ -30,8 +30,8 @@ export default function Loading({
 
   if (overlay) {
     return (
-      <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 shadow-lg">{content}</div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
+        <div className="rounded-lg bg-white p-6 shadow-lg">{content}</div>
       </div>
     );
   }

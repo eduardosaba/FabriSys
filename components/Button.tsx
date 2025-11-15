@@ -7,9 +7,11 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost' | 'save' | 'cancel' | 'search';
   loading?: boolean;
   size?: 'sm' | 'md' | 'lg';
+  /** Indica se o usuário é master admin (para aplicar cores customizadas) */
+  isMaster?: boolean;
 }
 
-export default function Button({
+function BaseButton({
   label,
   children,
   variant = 'primary',
@@ -17,11 +19,9 @@ export default function Button({
   size = 'md',
   className,
   disabled,
+  isMaster = false,
   ...rest
 }: ButtonProps) {
-  const { profile } = useAuth();
-  const isMaster = profile?.role === 'master';
-
   // Para master admin, obter cores específicas de botão quando disponíveis
   const getCustomButtonStyles = () => {
     if (!isMaster || typeof window === 'undefined') return null;
@@ -88,13 +88,13 @@ export default function Button({
         'disabled:pointer-events-none disabled:opacity-50',
         {
           // Estilos padrão (usados quando não há cores customizadas)
-          'bg-primary text-white hover:bg-primary/90': !hasCustomStyles && variant === 'primary',
-          'bg-secondary text-white hover:bg-secondary/90':
+          'hover:bg-primary/90 bg-primary text-white': !hasCustomStyles && variant === 'primary',
+          'hover:bg-secondary/90 bg-secondary text-white':
             !hasCustomStyles && variant === 'secondary',
           'bg-red-600 text-white hover:bg-red-700': !hasCustomStyles && variant === 'danger',
-          'border border-input bg-background hover:bg-accent hover:text-accent-foreground':
+          'border-input hover:text-accent-foreground border bg-background hover:bg-accent':
             variant === 'outline',
-          'hover:bg-accent hover:text-accent-foreground': variant === 'ghost',
+          'hover:text-accent-foreground hover:bg-accent': variant === 'ghost',
 
           // Estilos customizados para master (quando há cores específicas definidas)
           'hover:opacity-90': hasCustomStyles,
@@ -134,3 +134,15 @@ export default function Button({
     </button>
   );
 }
+
+// Componente principal que usa o hook useAuth
+function Button(props: Omit<ButtonProps, 'isMaster'>) {
+  const { user } = useAuth();
+  const isMaster = user?.role === 'master';
+
+  return <BaseButton {...props} isMaster={isMaster} />;
+}
+
+// Exporta ambos os componentes
+export { Button, BaseButton };
+export default Button;

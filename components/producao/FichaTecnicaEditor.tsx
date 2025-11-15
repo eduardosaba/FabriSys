@@ -142,20 +142,20 @@ export function FichaTecnicaEditor({
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 border border-gray-100 dark:border-gray-700">
-        <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
+      <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <h2 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">
           Ficha Técnica - {nomeProduto}
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            <label className="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
               <div className="flex items-center gap-2">
                 <DollarSign size={18} />
                 Preço de Venda Unitário (R$)
               </div>
             </label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 font-medium">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-medium text-gray-500 dark:text-gray-400">
                 R$
               </span>
               <input
@@ -163,7 +163,7 @@ export function FichaTecnicaEditor({
                 value={precoVendaInput}
                 onChange={handlePrecoVendaChange}
                 placeholder="0,00"
-                className="w-full pl-12 pr-4 py-3 text-lg font-semibold border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all"
+                className="w-full rounded-xl border-2 border-gray-200 py-3 pl-12 pr-4 text-lg font-semibold transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               />
             </div>
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
@@ -172,7 +172,7 @@ export function FichaTecnicaEditor({
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            <label className="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
               <div className="flex items-center gap-2">
                 <Package size={18} />
                 Rendimento da Receita (unidades)
@@ -184,7 +184,7 @@ export function FichaTecnicaEditor({
               value={rendimentoUnidades}
               onChange={(e) => setRendimentoUnidades(parseInt(e.target.value) || 1)}
               placeholder="1"
-              className="w-full px-4 py-3 text-lg font-semibold border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all"
+              className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-lg font-semibold transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             />
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               Quantas unidades esta receita produz? Ex: 20 cones
@@ -194,11 +194,11 @@ export function FichaTecnicaEditor({
       </div>
 
       {/* Lista de Insumos */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 border border-gray-100 dark:border-gray-700">
-        <div className="flex justify-between items-center mb-6">
+      <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <div className="mb-6 flex items-center justify-between">
           <div>
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Receita Completa</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
               💡 <strong>Dica:</strong> Adicione as quantidades em{' '}
               <strong>Unidade de Consumo (UC)</strong> (ex: 30g de leite condensado). O sistema
               calcula automaticamente a conversão para Unidade de Estoque (UE) durante a produção.
@@ -206,7 +206,7 @@ export function FichaTecnicaEditor({
           </div>
           <button
             onClick={addInsumo}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 font-semibold"
+            className="flex transform items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl"
           >
             <Plus size={20} />
             Adicionar Insumo
@@ -215,14 +215,14 @@ export function FichaTecnicaEditor({
 
         <div className="space-y-4">
           {insumos.length === 0 ? (
-            <div className="py-16 text-center border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-900">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900 mb-4">
+            <div className="rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 py-16 text-center dark:border-gray-600 dark:bg-gray-900">
+              <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
                 <Plus size={32} className="text-blue-600 dark:text-blue-400" />
               </div>
-              <p className="text-gray-600 dark:text-gray-400 text-lg font-medium">
+              <p className="text-lg font-medium text-gray-600 dark:text-gray-400">
                 Nenhum insumo adicionado
               </p>
-              <p className="text-gray-500 dark:text-gray-500 text-sm mt-2">
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
                 Clique em "Adicionar Insumo" para começar
               </p>
             </div>
@@ -230,12 +230,12 @@ export function FichaTecnicaEditor({
             insumos.map((insumo) => (
               <div
                 key={insumo.idLocal}
-                className="grid grid-cols-1 md:grid-cols-6 gap-4 p-6 border-2 border-gray-200 dark:border-gray-600 rounded-xl hover:border-blue-300 dark:hover:border-blue-700 transition-all bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-700"
+                className="grid grid-cols-1 gap-4 rounded-xl border-2 border-gray-200 bg-gradient-to-r from-gray-50 to-white p-6 transition-all hover:border-blue-300 dark:border-gray-600 dark:from-gray-800 dark:to-gray-700 dark:hover:border-blue-700 md:grid-cols-6"
               >
                 {/* Seleção de Insumo */}
-                <div className="md:col-span-2 relative">
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    <Search className="inline w-4 h-4 mr-1" />
+                <div className="relative md:col-span-2">
+                  <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    <Search className="mr-1 inline h-4 w-4" />
                     Insumo
                   </label>
                   <div className="relative">
@@ -248,7 +248,7 @@ export function FichaTecnicaEditor({
                         setMostrarBusca(insumo.idLocal);
                       }}
                       placeholder="Buscar insumo..."
-                      className="w-full px-4 py-3 pr-10 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all"
+                      className="w-full rounded-xl border-2 border-gray-300 px-4 py-3 pr-10 transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                     />
                     <Search
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -258,9 +258,9 @@ export function FichaTecnicaEditor({
 
                   {/* Dropdown de busca */}
                   {mostrarBusca === insumo.idLocal && (
-                    <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white dark:bg-gray-700 border-2 border-blue-300 rounded-xl shadow-2xl">
+                    <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-xl border-2 border-blue-300 bg-white shadow-2xl dark:bg-gray-700">
                       {insumosFiltrados.length === 0 ? (
-                        <div className="p-4 text-gray-500 text-center">
+                        <div className="p-4 text-center text-gray-500">
                           Nenhum insumo encontrado
                         </div>
                       ) : (
@@ -268,12 +268,12 @@ export function FichaTecnicaEditor({
                           <button
                             key={ins.id}
                             onClick={() => handleSelectInsumo(insumo.idLocal, ins)}
-                            className="w-full text-left p-3 hover:bg-blue-50 dark:hover:bg-gray-600 border-b last:border-b-0 transition-colors"
+                            className="w-full border-b p-3 text-left transition-colors last:border-b-0 hover:bg-blue-50 dark:hover:bg-gray-600"
                           >
                             <div className="font-semibold text-gray-800 dark:text-white">
                               {ins.nome}
                             </div>
-                            <div className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
+                            <div className="space-y-1 text-sm text-gray-500 dark:text-gray-400">
                               <div>
                                 <span className="font-medium">Estoque:</span> {ins.unidade_estoque}
                                 {ins.custo_por_ue && (
@@ -309,7 +309,7 @@ export function FichaTecnicaEditor({
 
                 {/* Quantidade */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
                     Quantidade
                   </label>
                   <input
@@ -320,25 +320,25 @@ export function FichaTecnicaEditor({
                     onChange={(e) =>
                       updateInsumo(insumo.idLocal, 'quantidade', parseFloat(e.target.value) || 0)
                     }
-                    className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all"
+                    className="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                   />
                 </div>
 
                 {/* Unidade */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
                     Unidade de Consumo (UC)
                   </label>
                   <input
                     type="text"
                     value={insumo.unidadeMedida}
                     disabled
-                    className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-gray-100 dark:bg-gray-600 cursor-not-allowed"
+                    className="w-full cursor-not-allowed rounded-xl border-2 border-gray-300 bg-gray-100 px-4 py-3 dark:border-gray-600 dark:bg-gray-600"
                   />
                   {/* Informações do sistema de unidades duplas */}
                   {insumo.unidadeEstoque && (
-                    <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+                    <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 dark:border-blue-800 dark:bg-blue-900/20">
+                      <div className="space-y-1 text-xs text-blue-800 dark:text-blue-200">
                         <div>
                           <strong>Estoque (UE):</strong> {insumo.unidadeEstoque}
                         </div>
@@ -363,7 +363,7 @@ export function FichaTecnicaEditor({
 
                 {/* Perda (%) */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
                     Perda (%)
                   </label>
                   <input
@@ -375,7 +375,7 @@ export function FichaTecnicaEditor({
                     onChange={(e) =>
                       updateInsumo(insumo.idLocal, 'perdaPadrao', parseFloat(e.target.value) || 0)
                     }
-                    className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-all"
+                    className="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                   />
                 </div>
 
@@ -383,7 +383,7 @@ export function FichaTecnicaEditor({
                 <div className="flex items-end">
                   <button
                     onClick={() => removeInsumo(insumo.idLocal)}
-                    className="w-full px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2 font-semibold"
+                    className="flex w-full transform items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-red-600 px-4 py-3 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:from-red-600 hover:to-red-700"
                     title="Remover insumo"
                   >
                     <Trash2 size={18} />
@@ -397,9 +397,9 @@ export function FichaTecnicaEditor({
       </div>
 
       {/* Resumo de Custos */}
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-        <h3 className="text-xl font-semibold mb-4">Resumo de Custos</h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="rounded-lg bg-white p-6 shadow dark:bg-gray-800">
+        <h3 className="mb-4 text-xl font-semibold">Resumo de Custos</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <div>
             <div className="text-sm text-gray-500">Custo Total</div>
             <div className="text-2xl font-bold">R$ {custoResumo.custoTotal.toFixed(2)}</div>
@@ -434,7 +434,7 @@ export function FichaTecnicaEditor({
         <button
           onClick={handleSave}
           disabled={loading || insumos.length === 0}
-          className="px-8 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white text-lg font-bold rounded-xl hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all transform hover:scale-105 shadow-2xl"
+          className="transform rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-8 py-4 text-lg font-bold text-white shadow-2xl transition-all hover:scale-105 hover:from-green-700 hover:to-emerald-700 disabled:cursor-not-allowed disabled:from-gray-400 disabled:to-gray-500"
         >
           {loading ? 'Salvando...' : '💾 Salvar Ficha Técnica'}
         </button>

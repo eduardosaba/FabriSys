@@ -12,11 +12,11 @@ interface BadgeProps {
   className?: string;
 }
 
-export default function Badge({ 
-  children, 
-  variant = 'default', 
+export default function Badge({
+  children,
+  variant = 'default',
   size = 'md',
-  className = '' 
+  className = '',
 }: BadgeProps) {
   const baseStyles = 'inline-flex items-center justify-center font-medium rounded-full';
 
@@ -25,13 +25,13 @@ export default function Badge({
     success: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
     warning: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
     danger: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
-    info: 'bg-primary/10 text-primary dark:bg-primary/20'
+    info: 'bg-primary/10 text-primary dark:bg-primary/20',
   };
 
   const sizeStyles = {
     sm: 'px-2 py-0.5 text-xs',
     md: 'px-2.5 py-1 text-sm',
-    lg: 'px-3 py-1.5 text-base'
+    lg: 'px-3 py-1.5 text-base',
   };
 
   return (

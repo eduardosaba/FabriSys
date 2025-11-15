@@ -82,16 +82,16 @@ export default function GraficosProducao({ periodo }: GraficoProducaoProps) {
   if (loading || !dadosProducao.length) {
     return (
       <div className="space-y-8">
-        <div className="h-[400px] bg-gray-50 rounded-lg animate-pulse" />
-        <div className="h-[400px] bg-gray-50 rounded-lg animate-pulse" />
+        <div className="h-[400px] animate-pulse rounded-lg bg-gray-50" />
+        <div className="h-[400px] animate-pulse rounded-lg bg-gray-50" />
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
-      <div className="bg-white p-6 rounded-lg shadow-sm">
-        <h3 className="text-lg font-medium mb-4">Produção Diária</h3>
+      <div className="rounded-lg bg-white p-6 shadow-sm">
+        <h3 className="mb-4 text-lg font-medium">Produção Diária</h3>
         <div className="h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={dadosProducao} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -127,8 +127,8 @@ export default function GraficosProducao({ periodo }: GraficoProducaoProps) {
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-lg shadow-sm">
-        <h3 className="text-lg font-medium mb-4">Produtos mais Produzidos</h3>
+      <div className="rounded-lg bg-white p-6 shadow-sm">
+        <h3 className="mb-4 text-lg font-medium">Produtos mais Produzidos</h3>
         <div className="h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rankingProdutos} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>

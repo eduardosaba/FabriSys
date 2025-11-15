@@ -89,10 +89,10 @@ describe('LotesTable', () => {
       );
     });
 
-    fireEvent.click(screen.getByText('Editar'));
+    fireEvent.click(screen.getByLabelText('Editar lote L123'));
     expect(onEdit).toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText('Excluir'));
+    fireEvent.click(screen.getByLabelText('Excluir lote L123'));
     expect(onDelete).toHaveBeenCalled();
   });
 

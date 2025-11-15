@@ -18,6 +18,7 @@ import { KPISection } from '@/components/ui/KPICards';
 import Chart from '@/components/ui/Charts';
 import Button from '@/components/Button';
 import AlertasEstoque from '@/components/insumos/Alertas';
+import PageHeader from '@/components/ui/PageHeader';
 import { useState, useCallback, useMemo } from 'react';
 
 export default function ProducaoDashboard() {
@@ -261,10 +262,11 @@ export default function ProducaoDashboard() {
   return (
     <div className="space-y-6">
       <Panel>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <Text variant="h2" weight="semibold">
-            Dashboard de Mercadoria
-          </Text>
+        <PageHeader
+          title="Dashboard de Mercadoria"
+          description="Visão geral do estoque, fornecedores e produtos"
+          icon={Package}
+        >
           <div className="flex gap-2">
             <Link href="/dashboard/insumos/cadastro">
               <Button variant="primary" className="flex items-center gap-2">
@@ -279,37 +281,54 @@ export default function ProducaoDashboard() {
               </Button>
             </Link>
           </div>
-        </div>
+        </PageHeader>
       </Panel>
 
       {/* Filtros Interativos Inteligentes */}
-      <div className="bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 items-stretch lg:items-end">
-          <div className="flex-1 min-w-0">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+      <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4">
+        <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-end lg:gap-4">
+          <div className="min-w-0 flex-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Período
             </label>
-            <select
-              value={filtrosAtuais.periodoSelecionado}
-              onChange={(e) => calcularDatasPorPeriodo(e.target.value)}
-              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="personalizado">Personalizado</option>
-              <option value="hoje">Hoje</option>
-              <option value="ontem">Ontem</option>
-              <option value="amanha">Amanhã</option>
-              <option value="esta-semana">Esta semana (dom até hoje)</option>
-              <option value="ultimos-7-dias">Últimos 7 dias</option>
-              <option value="semana-passada">Semana passada</option>
-              <option value="este-mes">Este mês</option>
-              <option value="ultimos-30-dias">Últimos 30 dias</option>
-              <option value="mes-passado">Mês passado</option>
-              <option value="ano">Ano</option>
-            </select>
+            <div className="relative">
+              <select
+                value={filtrosAtuais.periodoSelecionado}
+                onChange={(e) => calcularDatasPorPeriodo(e.target.value)}
+                className="w-full appearance-none rounded-md border border-gray-300 bg-white p-2 pr-8 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+              >
+                <option value="personalizado">Personalizado</option>
+                <option value="hoje">Hoje</option>
+                <option value="ontem">Ontem</option>
+                <option value="amanha">Amanhã</option>
+                <option value="esta-semana">Esta semana (dom até hoje)</option>
+                <option value="ultimos-7-dias">Últimos 7 dias</option>
+                <option value="semana-passada">Semana passada</option>
+                <option value="este-mes">Este mês</option>
+                <option value="ultimos-30-dias">Últimos 30 dias</option>
+                <option value="mes-passado">Mês passado</option>
+                <option value="ano">Ano</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
+                <svg
+                  className="h-4 w-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
 
-          <div className="flex-1 min-w-0">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <div className="min-w-0 flex-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Data Inicial
             </label>
             <input
@@ -323,12 +342,12 @@ export default function ProducaoDashboard() {
                 }))
               }
               disabled={filtrosAtuais.periodoSelecionado !== 'personalizado'}
-              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
+              className="w-full rounded-md border border-gray-300 bg-white p-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:disabled:bg-gray-800"
             />
           </div>
 
-          <div className="flex-1 min-w-0">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <div className="min-w-0 flex-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Data Final
             </label>
             <input
@@ -342,68 +361,96 @@ export default function ProducaoDashboard() {
                 }))
               }
               disabled={filtrosAtuais.periodoSelecionado !== 'personalizado'}
-              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
+              className="w-full rounded-md border border-gray-300 bg-white p-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:disabled:bg-gray-800"
             />
           </div>
 
-          <div className="flex-1 min-w-0">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <div className="min-w-0 flex-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Filial
             </label>
-            <select
-              value={filtrosAtuais.filialSelecionada}
-              onChange={(e) =>
-                setFiltrosAtuais((prev) => ({ ...prev, filialSelecionada: e.target.value }))
-              }
-              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="Geral">Todas as Filiais</option>
-              <option value="Matriz">Matriz</option>
-              <option value="Filial1">Filial Centro</option>
-              <option value="Filial2">Filial Norte</option>
-            </select>
+            <div className="relative">
+              <select
+                value={filtrosAtuais.filialSelecionada}
+                onChange={(e) =>
+                  setFiltrosAtuais((prev) => ({ ...prev, filialSelecionada: e.target.value }))
+                }
+                className="w-full appearance-none rounded-md border border-gray-300 bg-white p-2 pr-8 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+              >
+                <option value="Geral">Todas as Filiais</option>
+                <option value="Matriz">Matriz</option>
+                <option value="Filial1">Filial Centro</option>
+                <option value="Filial2">Filial Norte</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
+                <svg
+                  className="h-4 w-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
 
-          <div className="flex-1 min-w-0">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <div className="min-w-0 flex-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Categoria
             </label>
-            <select
-              value={filtrosAtuais.categoriaSelecionada}
-              onChange={(e) =>
-                setFiltrosAtuais((prev) => ({ ...prev, categoriaSelecionada: e.target.value }))
-              }
-              className="w-full p-2 text-sm border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">Todas as Categorias</option>
-              <option value="produtos">Produtos</option>
-              <option value="insumos">Insumos</option>
-              <option value="materias-primas">Matérias-Primas</option>
-              <option value="embalagens">Embalagens</option>
-            </select>
+            <div className="relative">
+              <select
+                value={filtrosAtuais.categoriaSelecionada}
+                onChange={(e) =>
+                  setFiltrosAtuais((prev) => ({ ...prev, categoriaSelecionada: e.target.value }))
+                }
+                className="w-full appearance-none rounded-md border border-gray-300 bg-white p-2 pr-8 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+              >
+                <option value="all">Todas as Categorias</option>
+                <option value="produtos">Produtos</option>
+                <option value="insumos">Insumos</option>
+                <option value="materias-primas">Matérias-Primas</option>
+                <option value="embalagens">Embalagens</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
+                <svg
+                  className="h-4 w-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
 
           <div className="lg:flex-shrink-0">
-            <button
+            <Button
               onClick={aplicarFiltroDashboard}
               disabled={isLoadingKpis}
-              className="w-full lg:w-auto px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+              loading={isLoadingKpis}
+              className="w-full lg:w-auto"
             >
-              {isLoadingKpis ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Carregando...
-                </>
-              ) : (
-                <>🔍 Aplicar</>
-              )}
-            </button>
+              🔍 Aplicar
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Cards de Ação Rápida */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
         {(
           [
             {
@@ -438,9 +485,9 @@ export default function ProducaoDashboard() {
         ).map(
           (card) =>
             !hiddenCards.includes(card.key) && (
-              <Card key={card.key} className="hover:border-primary transition-colors relative">
+              <Card key={card.key} className="relative transition-colors hover:border-primary">
                 <button
-                  className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+                  className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
                   onClick={() => toggleCardVisibility(card.key)}
                   title="Ocultar card"
                 >
@@ -472,7 +519,7 @@ export default function ProducaoDashboard() {
       {hiddenCards.length > 0 && (
         <div className="mt-6 flex items-center gap-4">
           <button
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+            className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600"
             onClick={() => setHiddenCards([])}
           >
             <EyeOff className="h-4 w-4" />
@@ -496,12 +543,12 @@ export default function ProducaoDashboard() {
       />
 
       {/* Gráficos */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 gap-4 lg:gap-6 xl:grid-cols-2">
         {/* Produção Mensal por Produto */}
         {!hiddenChartCards.includes('producao-mensal') && (
-          <Card className="p-4 relative">
+          <Card className="relative p-4">
             <button
-              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
               onClick={() => toggleChartCardVisibility('producao-mensal')}
               title="Ocultar gráfico"
             >
@@ -512,7 +559,7 @@ export default function ProducaoDashboard() {
             </Text>
             {isLoadingKpis ? (
               <div className="animate-pulse">
-                <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                <div className="h-64 rounded bg-gray-200 dark:bg-gray-700"></div>
               </div>
             ) : (
               <Chart
@@ -527,9 +574,9 @@ export default function ProducaoDashboard() {
 
         {/* Análise de Produção Anual */}
         {!hiddenChartCards.includes('analise-producao') && (
-          <Card className="p-4 relative">
+          <Card className="relative p-4">
             <button
-              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
               onClick={() => toggleChartCardVisibility('analise-producao')}
               title="Ocultar gráfico"
             >
@@ -540,7 +587,7 @@ export default function ProducaoDashboard() {
             </Text>
             {isLoadingKpis ? (
               <div className="animate-pulse">
-                <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                <div className="h-64 rounded bg-gray-200 dark:bg-gray-700"></div>
               </div>
             ) : (
               <Chart
@@ -556,9 +603,9 @@ export default function ProducaoDashboard() {
 
         {/* Alertas de Estoque */}
         {!hiddenChartCards.includes('alertas-estoque') && (
-          <Card className="p-4 relative">
+          <Card className="relative p-4">
             <button
-              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
               onClick={() => toggleChartCardVisibility('alertas-estoque')}
               title="Ocultar card"
             >
@@ -573,9 +620,9 @@ export default function ProducaoDashboard() {
 
         {/* Resumo de Produtos */}
         {!hiddenChartCards.includes('resumo-produtos') && (
-          <Card className="p-4 relative">
+          <Card className="relative p-4">
             <button
-              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
               onClick={() => toggleChartCardVisibility('resumo-produtos')}
               title="Ocultar card"
             >
@@ -586,7 +633,7 @@ export default function ProducaoDashboard() {
             </Text>
             <div className="space-y-4">
               {/* TODO: Adicionar gráficos e estatísticas de produtos */}
-              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
                 <Text variant="h4" weight="medium">
                   Estatísticas em breve...
                 </Text>
@@ -600,24 +647,24 @@ export default function ProducaoDashboard() {
 
         {/* Lista de Compras */}
         {!hiddenChartCards.includes('lista-compras') && (
-          <Card className="p-4 relative">
+          <Card className="relative p-4">
             <button
-              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
               onClick={() => toggleChartCardVisibility('lista-compras')}
               title="Ocultar card"
             >
               <EyeOff className="h-4 w-4 text-gray-600" />
             </button>
-            <div className="flex items-center justify-between mb-4">
+            <div className="mb-4 flex items-center justify-between">
               <Text variant="h3" weight="medium">
                 Lista de Compras
               </Text>
-              <Button variant="secondary" className="text-sm flex items-center gap-2">
+              <Button variant="secondary" className="flex items-center gap-2 text-sm">
                 <Plus className="h-4 w-4" />
                 Nova Lista
               </Button>
             </div>
-            <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
               <Text variant="h4" weight="medium">
                 Lista de Compras em breve...
               </Text>
@@ -628,9 +675,9 @@ export default function ProducaoDashboard() {
 
         {/* Relatórios Rápidos */}
         {!hiddenChartCards.includes('relatorios-rapidos') && (
-          <Card className="p-4 relative">
+          <Card className="relative p-4">
             <button
-              className="absolute top-2 right-2 p-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors z-10"
+              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
               onClick={() => toggleChartCardVisibility('relatorios-rapidos')}
               title="Ocultar card"
             >
@@ -643,7 +690,7 @@ export default function ProducaoDashboard() {
               <Link href="/dashboard/relatorios/validade">
                 <Button
                   variant="secondary"
-                  className="w-full flex items-center gap-2 justify-center"
+                  className="flex w-full items-center justify-center gap-2"
                 >
                   <BarChart className="h-4 w-4" />
                   Relatório de Validade
@@ -652,7 +699,7 @@ export default function ProducaoDashboard() {
               <Link href="/dashboard/relatorios/estoque">
                 <Button
                   variant="secondary"
-                  className="w-full flex items-center gap-2 justify-center"
+                  className="flex w-full items-center justify-center gap-2"
                 >
                   <List className="h-4 w-4" />
                   Relatório de Estoque
@@ -667,7 +714,7 @@ export default function ProducaoDashboard() {
       {hiddenChartCards.length > 0 && (
         <div className="mt-6 flex items-center gap-4">
           <button
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+            className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600"
             onClick={() => setHiddenChartCards([])}
           >
             <EyeOff className="h-4 w-4" />

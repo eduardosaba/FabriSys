@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { format, addDays, isBefore } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Text from '@/components/ui/Text';
 import StatusIcon from '@/components/ui/StatusIcon';

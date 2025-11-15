@@ -258,5 +258,5 @@
 _Este checklist garante uma implementação suave e bem-sucedida do Sistema Lari na sua operação._
 
 **Data de Implementação: \*\***\_\_\_**\*\***
-**Responsável: **\*\*****\_\_\_****\*\*****</content>
+**Responsável: **\*\*\***\*\_\_\_\*\***\*\*\*\*\*\*</content>
 <parameter name="filePath">d:\DOCUMENTOS PAI\SistemaLari\syslari\CHECKLIST_IMPLEMENTACAO.md

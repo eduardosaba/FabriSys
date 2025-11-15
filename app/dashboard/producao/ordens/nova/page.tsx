@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
+import PageHeader from '@/components/ui/PageHeader';
 
 interface ProdutoFinal {
   id: string;
@@ -107,8 +108,8 @@ export default function NovaOrdemPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -120,38 +121,56 @@ export default function NovaOrdemPage() {
           variant="secondary"
           onClick={() => (window.location.href = '/dashboard/producao/ordens')}
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
+          <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar
         </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Nova Ordem de Produção</h1>
-          <p className="text-gray-600">Crie uma nova ordem de produção</p>
-        </div>
+        <PageHeader
+          title="Nova Ordem de Produção"
+          description="Crie uma nova ordem de produção"
+          icon={Plus}
+        />
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg bg-white p-6 shadow">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Produto Final *</label>
-            <select
-              value={formData.produto_final_id}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, produto_final_id: e.target.value }))
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            >
-              <option value="">Selecione um produto</option>
-              {produtos.map((produto) => (
-                <option key={produto.id} value={produto.id}>
-                  {produto.nome}
-                </option>
-              ))}
-            </select>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Produto Final *</label>
+            <div className="relative">
+              <select
+                value={formData.produto_final_id}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, produto_final_id: e.target.value }))
+                }
+                className="w-full appearance-none rounded-md border border-gray-300 px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Selecione um produto</option>
+                {produtos.map((produto) => (
+                  <option key={produto.id} value={produto.id}>
+                    {produto.nome}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
+                <svg
+                  className="h-4 w-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="mb-2 block text-sm font-medium text-gray-700">
               Quantidade Prevista *
             </label>
             <input
@@ -162,19 +181,19 @@ export default function NovaOrdemPage() {
               onChange={(e) =>
                 setFormData((prev) => ({ ...prev, quantidade_prevista: e.target.value }))
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="0.00"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Data Prevista *</label>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Data Prevista *</label>
             <input
               type="date"
               value={formData.data_prevista}
               onChange={(e) => setFormData((prev) => ({ ...prev, data_prevista: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
           </div>
@@ -189,7 +208,7 @@ export default function NovaOrdemPage() {
             Cancelar
           </Button>
           <Button type="submit" disabled={saving}>
-            <Save className="w-4 h-4 mr-2" />
+            <Save className="mr-2 h-4 w-4" />
             {saving ? 'Salvando...' : 'Salvar Ordem'}
           </Button>
         </div>

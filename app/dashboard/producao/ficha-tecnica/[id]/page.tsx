@@ -116,7 +116,7 @@ export default function FichaTecnicaPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-xl">Carregando...</div>
       </div>
     );
@@ -124,7 +124,7 @@ export default function FichaTecnicaPage() {
 
   if (!produto) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-xl text-red-600">Produto não encontrado</div>
       </div>
     );
@@ -135,7 +135,7 @@ export default function FichaTecnicaPage() {
       {/* Botão Voltar */}
       <button
         onClick={() => router.push('/dashboard/producao')}
-        className="flex items-center gap-2 mb-6 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+        className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
       >
         <ArrowLeft size={20} />
         Voltar para Produção

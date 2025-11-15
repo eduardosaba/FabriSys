@@ -54,11 +54,11 @@ export default function KPIProdutos({ periodo = 'mes' }: KPIProdutosProps) {
 
   if (loading || !data) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="bg-white rounded-lg shadow-sm p-6 animate-pulse">
-            <div className="h-4 bg-gray-200 rounded w-24" />
-            <div className="mt-2 h-8 bg-gray-200 rounded w-16" />
+          <div key={i} className="animate-pulse rounded-lg bg-white p-6 shadow-sm">
+            <div className="h-4 w-24 rounded bg-gray-200" />
+            <div className="mt-2 h-8 w-16 rounded bg-gray-200" />
           </div>
         ))}
       </div>
@@ -115,13 +115,13 @@ export default function KPIProdutos({ periodo = 'mes' }: KPIProdutosProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
       {kpis.map((kpi, index) => (
-        <div key={index} className="bg-white rounded-lg shadow-sm p-6">
+        <div key={index} className="rounded-lg bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-gray-500">{kpi.title}</span>
-            <div className={`p-2 rounded-full ${kpi.bgColor}`}>
-              <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
+            <div className={`rounded-full p-2 ${kpi.bgColor}`}>
+              <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
             </div>
           </div>
           <div className="mt-2 flex items-baseline">

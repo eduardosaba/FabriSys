@@ -11,7 +11,7 @@ export interface Profile {
   updated_at: string;
 }
 
-interface ThemeColors {
+export interface ThemeColors {
   primary: string;
   secondary: string;
   accent: string;
@@ -50,16 +50,26 @@ interface ThemeColors {
   // Configurações de logo para usuários admin
   logo_url?: string;
   logo_scale?: number;
+  company_logo_url?: string;
+  company_logo_scale?: number;
+  font_family?: string;
 }
 
 export interface ThemeSettings {
   name: string;
   logo_url: string;
   logo_scale: number;
+  company_logo_url?: string;
+  company_logo_scale?: number;
   font_family: string;
   border_radius: string;
   theme_mode: 'light' | 'dark' | 'system';
   density: 'comfortable' | 'compact';
+  footer_company_name?: string;
+  footer_system_version?: string;
+  sidebar_bg?: string;
+  sidebar_hover_bg?: string;
+  header_bg?: string;
   colors: {
     light: ThemeColors;
     dark: ThemeColors;

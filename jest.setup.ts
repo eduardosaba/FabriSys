@@ -1,5 +1,21 @@
 // Mock do hook useRouter do Next.js para ambiente de teste (Vitest)
 import { vi } from 'vitest';
+import React from 'react';
+
+// Mock do hook useAuth - deve ser definido antes dos outros imports
+vi.mock('../lib/auth', () => ({
+  useAuth: () => ({
+    user: { id: 'test-user', email: 'test@example.com' },
+    profile: { id: 'test-profile', role: 'admin', name: 'Test User' },
+    loading: false,
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    signUp: vi.fn(),
+  }),
+  AuthProvider: ({ children }: { children: React.ReactNode }) =>
+    React.createElement('div', null, children),
+}));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: vi.fn(),

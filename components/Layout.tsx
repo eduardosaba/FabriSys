@@ -77,7 +77,7 @@ export default function Layout({ children }: Props) {
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       {/* Sidebar para mobile - overlay */}
       <div
-        className={`fixed inset-0 bg-gray-800/60 z-40 lg:hidden ${
+        className={`fixed inset-0 z-40 bg-gray-800/60 lg:hidden ${
           sidebarOpen ? 'block' : 'hidden'
         }`}
         onClick={() => setSidebarOpen(false)}
@@ -85,7 +85,7 @@ export default function Layout({ children }: Props) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 transform bg-white dark:bg-gray-800 transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static ${
+        className={`fixed left-0 top-0 z-50 h-full w-64 transform bg-white transition-transform duration-200 ease-in-out dark:bg-gray-800 lg:static lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -97,8 +97,8 @@ export default function Layout({ children }: Props) {
             if (item.isSection) {
               return (
                 <div
-                  key={item.href}
-                  className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-t border-gray-200 dark:border-gray-700 mt-4 pt-4 first:mt-0 first:pt-0 first:border-t-0"
+                  key={item.title}
+                  className="mt-4 border-t border-gray-200 px-4 py-2 pt-4 text-xs font-semibold uppercase tracking-wider text-gray-500 first:mt-0 first:border-t-0 first:pt-0 dark:border-gray-700"
                 >
                   <span className="mr-2">{item.icon}</span>
                   {item.title}
@@ -111,9 +111,9 @@ export default function Layout({ children }: Props) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group flex items-center rounded-lg px-4 py-2 text-sm font-medium ml-2 ${
+                className={`group ml-2 flex items-center rounded-lg px-4 py-2 text-sm font-medium ${
                   isActive
-                    ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                    ? 'border-r-2 border-blue-700 bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
                     : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'
                 }`}
               >

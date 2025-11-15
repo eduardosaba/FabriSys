@@ -67,8 +67,8 @@ export default function ProducaoDashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -77,14 +77,14 @@ export default function ProducaoDashboardPage() {
     <div className="flex flex-col gap-6 p-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Dashboard de Produção</h1>
-        <p className="text-gray-600 mt-2">Visão geral do sistema de produção</p>
+        <p className="mt-2 text-gray-600">Visão geral do sistema de produção</p>
       </div>
 
       {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg bg-white p-6 shadow">
           <div className="flex items-center">
-            <div className="p-2 bg-blue-100 rounded-lg">
+            <div className="rounded-lg bg-blue-100 p-2">
               <BarChart2 className="h-6 w-6 text-blue-600" />
             </div>
             <div className="ml-4">
@@ -94,9 +94,9 @@ export default function ProducaoDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="rounded-lg bg-white p-6 shadow">
           <div className="flex items-center">
-            <div className="p-2 bg-yellow-100 rounded-lg">
+            <div className="rounded-lg bg-yellow-100 p-2">
               <Clock className="h-6 w-6 text-yellow-600" />
             </div>
             <div className="ml-4">
@@ -106,9 +106,9 @@ export default function ProducaoDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="rounded-lg bg-white p-6 shadow">
           <div className="flex items-center">
-            <div className="p-2 bg-blue-100 rounded-lg">
+            <div className="rounded-lg bg-blue-100 p-2">
               <Package className="h-6 w-6 text-blue-600" />
             </div>
             <div className="ml-4">
@@ -118,9 +118,9 @@ export default function ProducaoDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="rounded-lg bg-white p-6 shadow">
           <div className="flex items-center">
-            <div className="p-2 bg-green-100 rounded-lg">
+            <div className="rounded-lg bg-green-100 p-2">
               <CheckCircle className="h-6 w-6 text-green-600" />
             </div>
             <div className="ml-4">
@@ -132,10 +132,10 @@ export default function ProducaoDashboardPage() {
       </div>
 
       {/* Cards adicionais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="rounded-lg bg-white p-6 shadow">
           <div className="flex items-center">
-            <div className="p-2 bg-purple-100 rounded-lg">
+            <div className="rounded-lg bg-purple-100 p-2">
               <Package className="h-6 w-6 text-purple-600" />
             </div>
             <div className="ml-4">
@@ -145,9 +145,9 @@ export default function ProducaoDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="rounded-lg bg-white p-6 shadow">
           <div className="flex items-center">
-            <div className="p-2 bg-red-100 rounded-lg">
+            <div className="rounded-lg bg-red-100 p-2">
               <AlertTriangle className="h-6 w-6 text-red-600" />
             </div>
             <div className="ml-4">
@@ -159,20 +159,20 @@ export default function ProducaoDashboardPage() {
       </div>
 
       {/* Seções de atalho rápido */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h3>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-lg bg-white p-6 shadow">
+          <h3 className="mb-4 text-lg font-semibold text-gray-900">Ações Rápidas</h3>
           <div className="space-y-3">
             <button
               onClick={() => (window.location.href = '/dashboard/producao/ordens/nova')}
-              className="w-full text-left p-3 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+              className="w-full rounded-md bg-blue-50 p-3 text-left transition-colors hover:bg-blue-100"
             >
               <div className="font-medium text-blue-900">Nova Ordem de Produção</div>
               <div className="text-sm text-blue-700">Criar uma nova ordem</div>
             </button>
             <button
               onClick={() => (window.location.href = '/dashboard/producao/produtos/novo')}
-              className="w-full text-left p-3 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
+              className="w-full rounded-md bg-green-50 p-3 text-left transition-colors hover:bg-green-100"
             >
               <div className="font-medium text-green-900">Novo Produto Final</div>
               <div className="text-sm text-green-700">Cadastrar produto</div>
@@ -180,26 +180,26 @@ export default function ProducaoDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Ordens Recentes</h3>
+        <div className="rounded-lg bg-white p-6 shadow">
+          <h3 className="mb-4 text-lg font-semibold text-gray-900">Ordens Recentes</h3>
           <div className="text-sm text-gray-600">
             <p>Visualize as últimas ordens criadas</p>
             <button
               onClick={() => (window.location.href = '/dashboard/producao/ordens')}
-              className="mt-3 text-blue-600 hover:text-blue-800 font-medium"
+              className="mt-3 font-medium text-blue-600 hover:text-blue-800"
             >
               Ver todas as ordens →
             </button>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Relatórios</h3>
+        <div className="rounded-lg bg-white p-6 shadow">
+          <h3 className="mb-4 text-lg font-semibold text-gray-900">Relatórios</h3>
           <div className="text-sm text-gray-600">
             <p>Acesse relatórios de produção</p>
             <button
               onClick={() => (window.location.href = '/dashboard/producao/relatorios')}
-              className="mt-3 text-blue-600 hover:text-blue-800 font-medium"
+              className="mt-3 font-medium text-blue-600 hover:text-blue-800"
             >
               Ver relatórios →
             </button>

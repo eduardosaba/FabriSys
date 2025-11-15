@@ -30,7 +30,7 @@ async function testarEnvios() {
     const emailResult = await enviarEmailPedido(
       'eduardopedro.fsa@gmail.com',
       'Teste - Pedido de Compra',
-      'Este é um email de teste do Sistema Lari.',
+      'Este é um email de teste do Confectio.',
       pdfBuffer
     );
     console.log('Resultado do envio de email:', emailResult ? 'Sucesso' : 'Falha');
@@ -39,7 +39,7 @@ async function testarEnvios() {
     console.log('\nTestando envio de WhatsApp...');
     const whatsappResult = await enviarWhatsAppPedido(
       '75991156937',
-      'Este é um teste do Sistema Lari.',
+      'Este é um teste do Confectio.',
       'https://example.com/test.pdf' // URL de teste
     );
     console.log('Resultado do envio de WhatsApp:', whatsappResult ? 'Sucesso' : 'Falha');

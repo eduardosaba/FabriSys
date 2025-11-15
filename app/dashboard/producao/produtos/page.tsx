@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Box } from 'lucide-react';
 import Button from '@/components/Button';
 import PageHeader from '@/components/ui/PageHeader';
 import { useToast } from '@/hooks/useToast';
@@ -56,9 +56,9 @@ export default function ProdutosPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <PageHeader title="Produto Final" description="Gerenciamento de produtos finais">
+      <PageHeader title="Produto Final" description="Gerenciamento de produtos finais" icon={Box}>
         <Button onClick={() => (window.location.href = '/dashboard/producao/produtos/novo')}>
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="mr-2 h-4 w-4" />
           Novo Produto Final
         </Button>
       </PageHeader>

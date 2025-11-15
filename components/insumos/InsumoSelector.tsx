@@ -64,7 +64,7 @@ export default function InsumoSelector({ onSelect }: InsumoSelectorProps) {
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Digite o nome do insumo..."
-          className="w-full p-2 border rounded-md"
+          className="w-full rounded-md border p-2"
         />
       </div>
 
@@ -76,8 +76,8 @@ export default function InsumoSelector({ onSelect }: InsumoSelectorProps) {
             <button
               key={insumo.id}
               onClick={() => setInsumoSelecionado(insumo)}
-              className={`w-full p-2 text-left rounded-md hover:bg-gray-100 ${
-                insumoSelecionado?.id === insumo.id ? 'bg-blue-50 border-blue-500' : ''
+              className={`w-full rounded-md p-2 text-left hover:bg-gray-100 ${
+                insumoSelecionado?.id === insumo.id ? 'border-blue-500 bg-blue-50' : ''
               }`}
             >
               <Text>{insumo.nome}</Text>
@@ -101,7 +101,7 @@ export default function InsumoSelector({ onSelect }: InsumoSelectorProps) {
               value={quantidade}
               onChange={(e) => setQuantidade(Math.max(1, Number(e.target.value)))}
               min="1"
-              className="w-24 p-2 border rounded-md"
+              className="w-24 rounded-md border p-2"
             />
             <Text>{insumoSelecionado.unidade_medida}</Text>
           </div>

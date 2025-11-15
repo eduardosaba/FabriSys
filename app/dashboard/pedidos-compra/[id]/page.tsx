@@ -160,7 +160,7 @@ export default function EditarPedidoCompraPage({ params }: { params: { id: strin
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card className="p-4">
           <Text variant="h4" className="mb-3">
             Adicionar Insumos
@@ -179,7 +179,7 @@ export default function EditarPedidoCompraPage({ params }: { params: { id: strin
               {itens.map((it) => (
                 <div
                   key={it.insumo.id}
-                  className="flex items-center justify-between border rounded p-2"
+                  className="flex items-center justify-between rounded border p-2"
                 >
                   <div>
                     <Text weight="medium">{it.insumo.nome}</Text>
@@ -209,7 +209,7 @@ export default function EditarPedidoCompraPage({ params }: { params: { id: strin
                             Math.max(1, parseInt(e.target.value) || 1)
                           )
                         }
-                        className="w-20 text-center border rounded p-1"
+                        className="w-20 rounded border p-1 text-center"
                       />
                       <Button
                         variant="secondary"
@@ -226,7 +226,7 @@ export default function EditarPedidoCompraPage({ params }: { params: { id: strin
                 </div>
               ))}
 
-              <div className="pt-3 border-t flex items-center justify-between">
+              <div className="flex items-center justify-between border-t pt-3">
                 <Text weight="medium">Valor Total Estimado:</Text>
                 <Text weight="bold">R$ {valorTotal.toFixed(2)}</Text>
               </div>
@@ -239,7 +239,7 @@ export default function EditarPedidoCompraPage({ params }: { params: { id: strin
         <div className="space-y-2">
           <Text variant="h4">Observações</Text>
           <textarea
-            className="w-full border rounded p-2 min-h-[120px]"
+            className="min-h-[120px] w-full rounded border p-2"
             value={observacoes}
             onChange={(e) => setObservacoes(e.target.value)}
           />

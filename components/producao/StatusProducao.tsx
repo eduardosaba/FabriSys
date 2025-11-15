@@ -28,22 +28,34 @@ export default function StatusProducao() {
         .select(
           `
           id,
-          numero,
+          numero_op,
           produto:produtos_finais(nome),
-          quantidade,
+          quantidade_prevista,
           status,
-          progresso,
           data_inicio,
           data_fim
         `
         )
-        .in('status', ['em_andamento', 'pausada'])
+        .in('status', ['em_producao', 'pausada'])
         .order('data_inicio', { ascending: false })
         .limit(5);
 
       if (error) throw error;
 
-      setOrdens(data || []);
+      // Mapear dados para corresponder ao tipo OrdemProducao local
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mappedData = (data || []).map((item: any) => ({
+        id: item.id,
+        numero: item.numero_op,
+        produto: item.produto?.nome || '',
+        quantidade: item.quantidade_prevista,
+        status: item.status as 'pendente' | 'em_andamento' | 'pausada' | 'concluida',
+        progresso: 0, // TODO: calcular progresso baseado em registros de produção
+        data_inicio: item.data_inicio,
+        data_fim: item.data_fim,
+      }));
+
+      setOrdens(mappedData);
     } catch {
       toast({
         title: 'Erro ao carregar ordens',
@@ -69,7 +81,7 @@ export default function StatusProducao() {
     return (
       <div className="space-y-4">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-16 bg-gray-50 rounded-lg animate-pulse" />
+          <div key={i} className="h-16 animate-pulse rounded-lg bg-gray-50" />
         ))}
       </div>
     );
@@ -77,7 +89,7 @@ export default function StatusProducao() {
 
   if (ordens.length === 0) {
     return (
-      <div className="bg-gray-50 text-gray-600 p-4 rounded-lg">
+      <div className="rounded-lg bg-gray-50 p-4 text-gray-600">
         <p className="text-center">Não há ordens em produção no momento.</p>
       </div>
     );
@@ -104,22 +116,22 @@ export default function StatusProducao() {
         const statusColor = statusColors[ordem.status];
 
         return (
-          <div key={ordem.id} className="bg-white rounded-lg p-4 shadow-sm border">
+          <div key={ordem.id} className="rounded-lg border bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <StatusIcon className={`w-5 h-5 ${statusColor}`} />
+                  <StatusIcon className={`h-5 w-5 ${statusColor}`} />
                   <h3 className="font-medium">Ordem #{ordem.numero}</h3>
                 </div>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="mt-1 text-sm text-gray-600">
                   {ordem.produto} - {ordem.quantidade} unidades
                 </p>
               </div>
               <div className="text-right">
                 <div className="text-sm font-medium">{ordem.progresso}%</div>
-                <div className="w-24 h-2 bg-gray-100 rounded-full mt-1">
+                <div className="mt-1 h-2 w-24 rounded-full bg-gray-100">
                   <div
-                    className="h-full bg-green-500 rounded-full"
+                    className="h-full rounded-full bg-green-500"
                     style={{ width: `${ordem.progresso}%` }}
                   />
                 </div>

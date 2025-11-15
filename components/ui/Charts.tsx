@@ -112,8 +112,8 @@ export default function Chart({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[300px] bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      <div className="flex h-[300px] items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-800">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
       </div>
     );
   }
@@ -121,7 +121,7 @@ export default function Chart({
   return (
     <div className="relative">
       {title && (
-        <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">{title}</h3>
+        <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
       )}
       {content}
     </div>

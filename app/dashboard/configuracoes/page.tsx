@@ -3,25 +3,22 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import Button from '@/components/Button';
-import ThemeConfigurator from '@/components/ThemeConfigurator';
 import CustomizacaoTab from './CustomizacaoTab';
+import PageHeader from '@/components/ui/PageHeader';
+import { Settings } from 'lucide-react';
 
 export default function ConfiguracoesPage() {
-  const [activeTab, setActiveTab] = useState<'visual' | 'sistema' | 'customizacao'>('visual');
+  const [activeTab, setActiveTab] = useState<'sistema' | 'customizacao'>('customizacao');
 
   return (
-    <div className="container py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Configurações</h1>
-      </div>
+    <div className="container space-y-6 py-6">
+      <PageHeader
+        title="Configurações"
+        description="Personalize a aparência e comportamento do sistema"
+        icon={Settings}
+      />
 
       <div className="flex gap-2 border-b pb-2">
-        <Button
-          variant={activeTab === 'visual' ? 'primary' : 'outline'}
-          onClick={() => setActiveTab('visual')}
-        >
-          Visual
-        </Button>
         <Button
           variant={activeTab === 'sistema' ? 'primary' : 'outline'}
           onClick={() => setActiveTab('sistema')}
@@ -37,7 +34,6 @@ export default function ConfiguracoesPage() {
       </div>
 
       <div className="grid gap-6">
-        {activeTab === 'visual' && <ThemeConfigurator />}
         {activeTab === 'customizacao' && <CustomizacaoTab />}
         {activeTab === 'sistema' && (
           <Card>

@@ -4,6 +4,7 @@ import Badge from '@/components/ui/Badge';
 import { useTableFilters } from '@/hooks/useTableFilters';
 import TableControls from '@/components/ui/TableControls';
 import EmptyState from '@/components/ui/EmptyState';
+import Pagination from '@/components/ui/Pagination';
 import { Edit, Trash2 } from 'lucide-react';
 
 type Props = {
@@ -14,10 +15,12 @@ type Props = {
 };
 
 export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Props) {
-  // Usar o hook de filtros
+  // Usar o hook de filtros com paginação
   const filters = useTableFilters(insumos, {
     searchFields: ['nome', 'categoria.nome'],
     statusField: 'ativo',
+    itemsPerPage: 10,
+    enablePagination: true,
   });
 
   // Agrupar insumos por categoria após a filtragem
@@ -33,8 +36,26 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
     {} as Record<string, Insumo[]>
   );
 
+  // Obter apenas os insumos das categorias que serão exibidas na página atual
+  const startIndex = (filters.currentPage - 1) * filters.itemsPerPage;
+  const endIndex = startIndex + filters.itemsPerPage;
+  const allInsumosPaginados = Object.values(insumosPorCategoria).flat().slice(startIndex, endIndex);
+
+  // Re-agrupar apenas os insumos paginados
+  const insumosPaginadosPorCategoria = allInsumosPaginados.reduce(
+    (acc, insumo) => {
+      const categoria = insumo.categoria?.nome || 'Sem categoria';
+      if (!acc[categoria]) {
+        acc[categoria] = [];
+      }
+      acc[categoria].push(insumo);
+      return acc;
+    },
+    {} as Record<string, Insumo[]>
+  );
+
   // Ordenar categorias alfabeticamente
-  const categorias = Object.keys(insumosPorCategoria).sort();
+  const categorias = Object.keys(insumosPaginadosPorCategoria).sort();
 
   return (
     <div className="space-y-8">
@@ -103,7 +124,7 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                  {insumosPorCategoria[categoria].map((insumo) => (
+                  {insumosPaginadosPorCategoria[categoria].map((insumo) => (
                     <tr key={insumo.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="whitespace-nowrap px-6 py-4">
                         <Text variant="body-sm" weight="medium">
@@ -151,7 +172,7 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() => onEdit(insumo)}
-                            className="inline-flex items-center justify-center w-8 h-8 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
                             aria-label={`Editar insumo ${insumo.nome}`}
                             title="Editar"
                             disabled={loading}
@@ -160,7 +181,7 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
                           </button>
                           <button
                             onClick={() => onDelete(insumo)}
-                            className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
                             aria-label={`Excluir insumo ${insumo.nome}`}
                             title="Excluir"
                             disabled={loading}
@@ -176,6 +197,18 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
             </div>
           </div>
         ))
+      )}
+
+      {/* Paginação */}
+      {filters.totalPages > 1 && (
+        <Pagination
+          currentPage={filters.currentPage}
+          totalPages={filters.totalPages}
+          onPageChange={filters.setCurrentPage}
+          itemsPerPage={filters.itemsPerPage}
+          onItemsPerPageChange={filters.setItemsPerPage}
+          totalItems={filters.resultCount}
+        />
       )}
     </div>
   );

@@ -32,19 +32,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Buscar sessão inicial
     const getInitialSession = async () => {
-      const res = await supabase.auth.getSession();
-      const sessionRes = res?.data?.session ?? null;
-      setSession(sessionRes);
-      setUser(sessionRes?.user ?? null);
+      try {
+        const res = await supabase.auth.getSession();
+        const sessionRes = res?.data?.session ?? null;
+        setSession(sessionRes);
+        setUser(sessionRes?.user ?? null);
 
-      if (sessionRes?.user) {
-        await fetchProfile(sessionRes.user.id);
+        if (sessionRes?.user) {
+          await fetchProfile(sessionRes.user.id);
+        }
+      } catch (error) {
+        console.warn('Erro ao buscar sessão inicial:', error);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     void getInitialSession();
+
+    // Timeout de segurança para evitar loading infinito
+    const _timeout = setTimeout(() => {
+      if (loading) {
+        console.warn('Timeout de loading excedido, forçando fim do loading');
+        setLoading(false);
+      }
+    }, 5000); // 5 segundos
 
     // Escutar mudanças de auth
     const onAuth = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -62,8 +74,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const subscription = onAuth?.data?.subscription;
 
-    return () => subscription?.unsubscribe?.();
-  }, []);
+    return () => {
+      subscription?.unsubscribe?.();
+      clearTimeout(_timeout);
+    };
+  }, [loading]);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -75,8 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setProfile((res?.data as Profile) ?? { id: userId, role: 'pdv' });
     } catch (error) {
-      if (error instanceof Error) console.error('Erro ao buscar perfil:', error.message);
-      else console.error('Erro ao buscar perfil:', error);
+      console.warn('Erro ao buscar perfil, usando fallback:', error);
       // Fallback para role pdv se não encontrar perfil
       setProfile({ id: userId, role: 'pdv' });
     }

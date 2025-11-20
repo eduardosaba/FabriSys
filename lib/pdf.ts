@@ -97,19 +97,17 @@ export async function gerarPedidoCompraPDF(itens: ItemPedido[]): Promise<Buffer>
   `;
 
   // Usar puppeteer diretamente para gerar PDF
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+
   const browser = await puppeteer.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const page = await browser.newPage();
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+
     await page.setContent(html, { waitUntil: 'networkidle0' });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const pdfBuffer = await page.pdf({
       format: 'A4',
       margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
@@ -118,7 +116,6 @@ export async function gerarPedidoCompraPDF(itens: ItemPedido[]): Promise<Buffer>
 
     return Buffer.from(pdfBuffer);
   } finally {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     await browser.close();
   }
 }

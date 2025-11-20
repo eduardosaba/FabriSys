@@ -1,6 +1,6 @@
 import { useTheme } from '@/lib/theme';
 import { useAuth } from '@/lib/auth';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Card from '@/components/ui/Card';
 import Text from '@/components/ui/Text';
 import Button from '@/components/Button';
@@ -52,6 +52,8 @@ export default function CustomizacaoTab() {
   const [showSavePresetModal, setShowSavePresetModal] = useState(false);
   // Predefinições criadas pelo usuário (carregadas do banco)
   const [userPresets, setUserPresets] = useState<ThemePreset[]>([]);
+
+  type UserThemeRow = { id: number; colors_json?: string | null };
 
   // Determinar quais campos mostrar baseado no tipo de usuário
   const availableFields = isMasterAdmin ? MASTER_FIELDS : ADMIN_FIELDS;
@@ -130,8 +132,11 @@ export default function CustomizacaoTab() {
 
         // também atualizar campos globais (sidebar_bg, sidebar_hover_bg, header_bg)
         if (key === 'sidebar_bg' || key === 'sidebar_hover_bg' || key === 'header_bg') {
-          // Atribuição dinâmica para campos opcionais do preset
-          (newPreset as any)[key] = typeof value === 'string' ? value : String(value);
+          // atribui às propriedades opcionais do preset explicitamente
+          const v = typeof value === 'string' ? value : String(value);
+          if (key === 'sidebar_bg') newPreset.sidebar_bg = v;
+          if (key === 'sidebar_hover_bg') newPreset.sidebar_hover_bg = v;
+          if (key === 'header_bg') newPreset.header_bg = v;
         }
 
         setAppliedPreset(newPreset);
@@ -142,7 +147,7 @@ export default function CustomizacaoTab() {
   };
 
   // Handler para aplicar predefinição
-  const handleApplyPreset = (preset: (typeof THEME_PRESETS)[0]) => {
+  const handleApplyPreset = (preset: ThemePreset) => {
     // Aplicando predefinição: preparar settings para preview
     // Aplica as cores do preset para ambos os modos
     const newSettings = { ...settings };
@@ -173,8 +178,8 @@ export default function CustomizacaoTab() {
     // newSettings atualizado com campos globais do preset
 
     // Validação simples de contraste para modo dark
-    const darkBg = darkColors.background || '#111827';
-    const darkText = darkColors.text || '#f9fafb';
+    const darkBg = darkColors?.background ?? '#111827';
+    const darkText = darkColors?.text ?? '#f9fafb';
     function luminance(hex: string) {
       hex = hex.replace('#', '');
       const r = parseInt(hex.substring(0, 2), 16) / 255;
@@ -213,7 +218,7 @@ export default function CustomizacaoTab() {
             data: { user },
           } = await supabase.auth.getUser();
           userId = user?.id;
-        } catch (e) {
+        } catch (e: unknown) {
           // ignora aqui; updateTheme aceitará undefined e salvará localmente
           console.warn('Não foi possível obter userId via supabase.auth.getUser()', e);
         }
@@ -223,13 +228,15 @@ export default function CustomizacaoTab() {
         const lightColors = appliedPreset.colors.light || {};
         const darkColors = appliedPreset.colors.dark || {};
 
-        // Preparar configurações para light
+        // Preparar configurações para light (cast seguro via unknown para satisfazer o TS)
         const lightUpdatedColors = {
-          ...lightColors,
+          ...(lightColors || {}),
         } as unknown as import('@/lib/types').ThemeColors;
 
-        // Preparar configurações para dark
-        const darkUpdatedColors = { ...darkColors } as unknown as import('@/lib/types').ThemeColors;
+        // Preparar configurações para dark (cast seguro via unknown para satisfazer o TS)
+        const darkUpdatedColors = {
+          ...(darkColors || {}),
+        } as unknown as import('@/lib/types').ThemeColors;
 
         // Aplicar campos globais da predefinição
         if ('sidebar_bg' in appliedPreset) {
@@ -315,7 +322,7 @@ export default function CustomizacaoTab() {
   };
 
   // Construir um objeto de predefinição a partir do estado atual/appliedPreset
-  const buildPresetFromCurrent = () => {
+  const buildPresetFromCurrent = (): ThemePreset => {
     const presetName = appliedPreset?.name || `Custom ${new Date().toISOString()}`;
     const key = (presetName || 'custom').toLowerCase().replace(/[^a-z0-9]+/g, '_');
 
@@ -328,7 +335,6 @@ export default function CustomizacaoTab() {
       colorsForDark = { ...(appliedPreset.colors?.dark || {}) };
     } else {
       // Extrair do tema atual e do settings
-      const themeMode = 'light';
       const themeColors = theme.colors || {};
       colorsForLight = { ...(themeColors.light || {}) } as unknown as Record<string, string>;
       colorsForDark = { ...(themeColors.dark || {}) } as unknown as Record<string, string>;
@@ -345,16 +351,16 @@ export default function CustomizacaoTab() {
     return {
       key,
       name: presetName,
+      description: 'Custom preset created by user',
       colors: {
         light: colorsForLight,
         dark: colorsForDark,
       },
-      created_at: new Date().toISOString(),
-    } as any;
+    } as ThemePreset;
   };
 
   // Persistir predefinição no campo colors_json do registro user_theme_colors para ambos os modos
-  const persistUserPreset = async (presetObj: any) => {
+  const persistUserPreset = async (presetObj: ThemePreset) => {
     if (!profile?.id) {
       toast.error('Usuário não autenticado');
       return;
@@ -364,35 +370,84 @@ export default function CustomizacaoTab() {
 
     for (const mode of modes) {
       try {
-        const { data, error } = await supabase
+        const resp = await supabase
           .from('user_theme_colors')
           .select('id, colors_json')
           .eq('user_id', profile.id)
           .eq('theme_mode', mode)
           .single();
+        const data = resp.data as unknown;
+        const error = resp.error as unknown;
 
-        if (error && (error as any).code !== 'PGRST116') {
+        if (error && (error as { code?: string }).code !== 'PGRST116') {
           console.error('Erro ao buscar registro user_theme_colors:', error);
           toast.error('Erro ao salvar predefinição');
           continue;
         }
 
-        if (data && data.id) {
-          let jsonObj = { presets: [] as any[] } as any;
-          if (data.colors_json) {
+        if (data && typeof data === 'object' && 'id' in data) {
+          const row = data as Record<string, unknown>;
+          let jsonObj: { presets: ThemePreset[] } = { presets: [] };
+          const colorsJsonRaw = typeof row.colors_json === 'string' ? row.colors_json : undefined;
+          if (colorsJsonRaw) {
             try {
-              jsonObj = JSON.parse(data.colors_json);
-            } catch (e) {
+              const parsed = JSON.parse(colorsJsonRaw) as unknown;
+              const maybePresets = (parsed as { presets?: unknown }).presets;
+              if (Array.isArray(maybePresets)) {
+                const safePresets: ThemePreset[] = [];
+                maybePresets.forEach((p) => {
+                  if (p && typeof p === 'object') {
+                    const candidate = p as Record<string, unknown>;
+                    if (typeof candidate.name === 'string') {
+                      const nameVal = candidate.name;
+                      const keyVal = typeof candidate.key === 'string' ? candidate.key : undefined;
+                      const descVal =
+                        typeof candidate.description === 'string' ? candidate.description : '';
+                      const candidateColors =
+                        candidate.colors && typeof candidate.colors === 'object'
+                          ? (candidate.colors as Record<string, unknown>)
+                          : undefined;
+                      const lightColors =
+                        candidateColors &&
+                        candidateColors.light &&
+                        typeof candidateColors.light === 'object'
+                          ? (candidateColors.light as Record<string, string>)
+                          : {};
+                      const darkColors =
+                        candidateColors &&
+                        candidateColors.dark &&
+                        typeof candidateColors.dark === 'object'
+                          ? (candidateColors.dark as Record<string, string>)
+                          : {};
+
+                      const preset: ThemePreset = {
+                        key: keyVal,
+                        name: nameVal,
+                        description: descVal,
+                        colors: {
+                          light: lightColors,
+                          dark: darkColors,
+                        },
+                      };
+                      safePresets.push(preset);
+                    }
+                  }
+                });
+                jsonObj = { presets: safePresets };
+              }
+            } catch (err: unknown) {
+              void err;
               jsonObj = { presets: [] };
             }
           }
           jsonObj.presets = jsonObj.presets || [];
           jsonObj.presets.push(presetObj);
 
+          const rowId = Number(String(row.id ?? ''));
           const { error: updateErr } = await supabase
             .from('user_theme_colors')
             .update({ colors_json: JSON.stringify(jsonObj), updated_at: new Date().toISOString() })
-            .eq('id', data.id);
+            .eq('id', rowId);
 
           if (updateErr) {
             console.error('Erro ao atualizar colors_json:', updateErr);
@@ -404,10 +459,10 @@ export default function CustomizacaoTab() {
           const { error: insertErr } = await supabase.from('user_theme_colors').insert({
             user_id: profile.id,
             theme_mode: mode,
-            primary_color: settings.primary || '#4A2C2B',
-            titulo_paginas_color: settings.tituloPaginas || '#ffffff',
-            logo_url: settings.logo_url || '/logo.png',
-            logo_scale: settings.logo_scale || 1.0,
+            primary_color: (settings.primary as string) || '#4A2C2B',
+            titulo_paginas_color: (settings.tituloPaginas as string) || '#ffffff',
+            logo_url: (settings.logo_url as string) || '/logo.png',
+            logo_scale: (settings.logo_scale as number) || 1.0,
             colors_json: JSON.stringify(jsonObj),
           });
 
@@ -431,8 +486,8 @@ export default function CustomizacaoTab() {
         if (exists) return prev.map((p) => (p.key === presetObj.key ? presetObj : p));
         return [...prev, presetObj];
       });
-    } catch (e) {
-      // não crítico
+    } catch (err: unknown) {
+      void err; // não crítico
     }
   };
 
@@ -445,30 +500,80 @@ export default function CustomizacaoTab() {
   };
 
   // Carregar predefinições do usuário (do campo colors_json)
-  const loadUserPresets = async () => {
+  const loadUserPresets = useCallback(async () => {
     if (!profile?.id) return;
     try {
-      const { data, error } = await supabase
+      const resp = await supabase
         .from('user_theme_colors')
         .select('colors_json')
         .eq('user_id', profile.id);
+      const data = resp.data as unknown;
+      const error = resp.error as unknown;
       if (error) {
         console.error('Erro ao carregar predefinições do usuário:', error);
         return;
       }
 
       const presets: ThemePreset[] = [];
-      (data || []).forEach((row: any) => {
-        if (row?.colors_json) {
+      const rows = Array.isArray(data) ? data : [];
+      rows.forEach((row) => {
+        const rowObj = row as Record<string, unknown>;
+        const colorsJsonRaw =
+          row && typeof row === 'object' && typeof rowObj.colors_json === 'string'
+            ? rowObj.colors_json
+            : undefined;
+        if (colorsJsonRaw) {
           try {
-            const json = JSON.parse(row.colors_json);
-            if (Array.isArray(json.presets)) {
-              json.presets.forEach((p: any) => {
-                if (p && p.name) presets.push(p as ThemePreset);
+            const parsed = JSON.parse(colorsJsonRaw) as unknown;
+            const maybePresets = (parsed as { presets?: unknown }).presets;
+            if (Array.isArray(maybePresets)) {
+              maybePresets.forEach((p) => {
+                if (p && typeof p === 'object') {
+                  const candidate = p as Record<string, unknown>;
+                  if (typeof candidate.name === 'string') {
+                    const nameVal =
+                      typeof candidate.name === 'string'
+                        ? candidate.name
+                        : String(candidate.name ?? '');
+                    const keyVal =
+                      typeof candidate.key === 'string' ? String(candidate.key) : undefined;
+                    const descVal =
+                      typeof candidate.description === 'string'
+                        ? String(candidate.description)
+                        : '';
+                    const candidateColors =
+                      candidate.colors && typeof candidate.colors === 'object'
+                        ? (candidate.colors as Record<string, unknown>)
+                        : undefined;
+                    const lightColors =
+                      candidateColors &&
+                      candidateColors.light &&
+                      typeof candidateColors.light === 'object'
+                        ? (candidateColors.light as Record<string, string>)
+                        : {};
+                    const darkColors =
+                      candidateColors &&
+                      candidateColors.dark &&
+                      typeof candidateColors.dark === 'object'
+                        ? (candidateColors.dark as Record<string, string>)
+                        : {};
+
+                    const preset: ThemePreset = {
+                      key: keyVal,
+                      name: nameVal,
+                      description: descVal,
+                      colors: {
+                        light: lightColors,
+                        dark: darkColors,
+                      },
+                    };
+                    presets.push(preset);
+                  }
+                }
               });
             }
-          } catch (e) {
-            // ignora JSON inválido
+          } catch (err: unknown) {
+            void err; // ignora JSON inválido
           }
         }
       });
@@ -485,15 +590,15 @@ export default function CustomizacaoTab() {
       });
 
       setUserPresets(deduped);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Erro ao carregar predefinições do usuário:', err);
     }
-  };
+  }, [profile?.id]);
 
   // Carregar ao montar / quando o perfil mudar
   useEffect(() => {
     void loadUserPresets();
-  }, [profile?.id]);
+  }, [loadUserPresets]);
 
   return (
     <div className="space-y-6">

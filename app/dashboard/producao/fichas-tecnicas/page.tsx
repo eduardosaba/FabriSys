@@ -9,13 +9,6 @@ import TableControls from '@/components/ui/TableControls';
 import EmptyState from '@/components/ui/EmptyState';
 import PageHeader from '@/components/ui/PageHeader';
 
-interface FichaTecnicaRaw {
-  id: string;
-  nome?: string;
-  produto_final: { nome: string } | { nome: string }[];
-  created_at: string;
-}
-
 interface FichaTecnica {
   id: string;
   slug: string;
@@ -46,7 +39,7 @@ export default function FichasTecnicasPage() {
 
   async function loadFichasTecnicas() {
     try {
-      const { data, error } = await supabase
+      const resp = await supabase
         .from('fichas_tecnicas')
         .select(
           `
@@ -59,15 +52,30 @@ export default function FichasTecnicasPage() {
         )
         .order('created_at', { ascending: false });
 
+      const data = resp.data as unknown;
+      const error = resp.error as unknown;
       if (error) throw error;
 
       // Transformar os dados para o formato correto
-      const fichasFormatadas = (data || []).map((ficha: any) => ({
-        ...ficha,
-        produto_final: Array.isArray(ficha.produto_final)
-          ? ficha.produto_final[0]
-          : ficha.produto_final,
-      }));
+      const rows = Array.isArray(data) ? data : [];
+      const fichasFormatadas = rows.map((row: Record<string, unknown>) => {
+        const produtoField = row.produto_final;
+        let produtoFinal: unknown;
+        if (
+          Array.isArray(produtoField) &&
+          produtoField.length > 0 &&
+          typeof produtoField[0] === 'object'
+        ) {
+          produtoFinal = produtoField[0];
+        } else if (produtoField && typeof produtoField === 'object') {
+          produtoFinal = produtoField;
+        }
+
+        return {
+          ...row,
+          produto_final: produtoFinal || { nome: '' },
+        } as unknown as FichaTecnica;
+      });
 
       setFichas(fichasFormatadas);
     } catch (err) {

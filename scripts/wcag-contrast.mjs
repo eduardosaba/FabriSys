@@ -1,6 +1,5 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 function hexToRgb(hex) {
   hex = hex.replace('#', '');
@@ -38,18 +37,13 @@ function contrastRatio(hex1, hex2) {
 
 function sanitizeToJsonLike(input) {
   let s = input;
-  // Remove block comments and line comments
   s = s.replace(/\/\*[\s\S]*?\*\//g, '');
   s = s.replace(/\/\/.*$/gm, '');
-  // Normalize newlines
   s = s.replace(/\r\n|\r/g, '\n');
-  // Add quotes to unquoted keys (avoid quoting already quoted keys)
   s = s.replace(/(?<!["'])\b([a-zA-Z0-9_]+)\b\s*:/g, '"$1":');
-  // Convert single-quoted strings to double-quoted
   s = s.replace(/'([^']*)'/g, function(_, g1){
     return '"' + g1.replace(/\\"/g, '\\"') + '"';
   });
-  // Remove trailing commas
   s = s.replace(/,\s*([}\]])/g, '$1');
   return s;
 }
@@ -77,13 +71,12 @@ function extractPresets(fileContent) {
 }
 
 function analyze() {
-  const filePath = path.join(__dirname, '..', 'components', 'configuracao', 'theme-config.ts');
+  const filePath = path.join(new URL('.', import.meta.url).pathname, '..', 'components', 'configuracao', 'theme-config.ts');
   const content = fs.readFileSync(filePath, 'utf8');
   const arrStr = extractPresets(content);
   const jsonLike = sanitizeToJsonLike(arrStr);
   let presets = null;
   try {
-    // debug: dump jsonLike snippet
     console.log('--- JSONLIKE SNIPPET START ---');
     console.log(jsonLike.slice(0, 3000));
     console.log('--- JSONLIKE SNIPPET END ---');
@@ -94,7 +87,7 @@ function analyze() {
     process.exit(1);
   }
   console.log('Parsed presets count:', Array.isArray(presets) ? presets.length : 'not-array');
-  try { fs.writeFileSync(path.join(__dirname, 'tmp_presets_jsonlike.txt'), jsonLike); } catch(e) { void e; }
+  try { fs.writeFileSync(path.join(new URL('.', import.meta.url).pathname, 'tmp_presets_jsonlike.txt'), jsonLike); } catch(e) { void e; }
 
   const report = [];
   presets.forEach((preset) => {

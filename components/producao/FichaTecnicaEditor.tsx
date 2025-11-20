@@ -12,7 +12,7 @@ interface FichaTecnicaEditorProps {
   nomeProduto: string;
   precoVenda: number;
   onSave: (insumos: InsumoFicha[], precoVenda: number, rendimento: number) => Promise<void>;
-  ficha?: FichaTecnica;
+  ficha?: Partial<FichaTecnica>;
   modoEdicao?: boolean;
 }
 
@@ -33,8 +33,8 @@ export function FichaTecnicaEditor({
   nomeProduto,
   precoVenda: initialPrecoVenda,
   onSave,
-  ficha,
-  modoEdicao = false,
+  ficha: _ficha,
+  modoEdicao: _modoEdicao = false,
 }: FichaTecnicaEditorProps) {
   const {
     insumos,

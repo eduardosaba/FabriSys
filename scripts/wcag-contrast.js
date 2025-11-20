@@ -1,12 +1,17 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fs = require('fs');
 const path = require('path');
 
 function hexToRgb(hex) {
   hex = hex.replace('#', '');
-  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
-  const r = parseInt(hex.substring(0,2),16);
-  const g = parseInt(hex.substring(2,4),16);
-  const b = parseInt(hex.substring(4,6),16);
+  if (hex.length === 3)
+    hex = hex
+      .split('')
+      .map((c) => c + c)
+      .join('');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
   return { r, g, b };
 }
 
@@ -31,6 +36,7 @@ function contrastRatio(hex1, hex2) {
     const darker = Math.min(L1, L2);
     return (lighter + 0.05) / (darker + 0.05);
   } catch (e) {
+    void e;
     return null;
   }
 }
@@ -43,7 +49,7 @@ function sanitizeToJsonLike(input) {
   // Add quotes to keys: key: -> "key":
   s = s.replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":');
   // Replace single quotes with double
-  s = s.replace(/'([^']*)'/g, function(_, g1){
+  s = s.replace(/'([^']*)'/g, function (_, g1) {
     return '"' + g1.replace(/\\"/g, '\\"') + '"';
   });
   // Remove trailing commas before } or ]
@@ -112,7 +118,9 @@ function analyze() {
   });
 
   // Print report
-  console.log('WCAG Contrast Report (ratios). Recommended: >=4.5 for normal text, >=3 for large text.');
+  console.log(
+    'WCAG Contrast Report (ratios). Recommended: >=4.5 for normal text, >=3 for large text.'
+  );
   report.forEach((r) => {
     console.log('\n---- ' + r.name + ' ----');
     r.checks.forEach((c) => {

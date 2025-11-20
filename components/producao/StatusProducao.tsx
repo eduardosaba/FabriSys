@@ -23,7 +23,7 @@ export default function StatusProducao() {
 
   const loadOrdens = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      const resp = await supabase
         .from('ordens_producao')
         .select(
           `
@@ -40,20 +40,33 @@ export default function StatusProducao() {
         .order('data_inicio', { ascending: false })
         .limit(5);
 
+      const data = resp.data as unknown;
+      const error = resp.error as unknown;
       if (error) throw error;
 
-      // Mapear dados para corresponder ao tipo OrdemProducao local
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mappedData = (data || []).map((item: any) => ({
-        id: item.id,
-        numero: item.numero_op,
-        produto: item.produto?.nome || '',
-        quantidade: item.quantidade_prevista,
-        status: item.status as 'pendente' | 'em_andamento' | 'pausada' | 'concluida',
-        progresso: 0, // TODO: calcular progresso baseado em registros de produção
-        data_inicio: item.data_inicio,
-        data_fim: item.data_fim,
-      }));
+      const rows = Array.isArray(data) ? data : [];
+      const mappedData = rows.map((item) => {
+        const it = item as Record<string, unknown>;
+        const produtoField = it.produto;
+        const produtoObj = Array.isArray(produtoField)
+          ? (produtoField[0] as Record<string, unknown>)
+          : (produtoField as Record<string, unknown> | undefined);
+        const produtoNome =
+          produtoObj && typeof produtoObj.nome === 'string' ? produtoObj.nome : '';
+        const statusRaw = String(it.status ?? 'pendente');
+        const statusMapped = statusRaw === 'em_producao' ? 'em_andamento' : statusRaw;
+
+        return {
+          id: String(it.id ?? ''),
+          numero: String(it.numero_op ?? ''),
+          produto: produtoNome,
+          quantidade: Number(it.quantidade_prevista ?? 0),
+          status: statusMapped as 'pendente' | 'em_andamento' | 'pausada' | 'concluida',
+          progresso: 0,
+          data_inicio: typeof it.data_inicio === 'string' ? it.data_inicio : undefined,
+          data_fim: typeof it.data_fim === 'string' ? it.data_fim : undefined,
+        } as OrdemProducao;
+      });
 
       setOrdens(mappedData);
     } catch {

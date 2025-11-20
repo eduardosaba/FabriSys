@@ -1,6 +1,5 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 function hexToRgb(hex) {
   hex = hex.replace('#', '');
@@ -18,11 +17,10 @@ function rgbToHex({r,g,b}){
 
 function srgbToLinear(c) { c = c/255; return c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055,2.4); }
 function relativeLuminance(hex){ const {r,g,b}=hexToRgb(hex); return 0.2126*srgbToLinear(r)+0.7152*srgbToLinear(g)+0.0722*srgbToLinear(b); }
-function contrastRatio(a,b){ try{ const L1=relativeLuminance(a); const L2=relativeLuminance(b); const lighter=Math.max(L1,L2); const darker=Math.min(L1,L2); return (lighter+0.05)/(darker+0.05); }catch{return null;} }
+function contrastRatio(a,b){ try{ const L1=relativeLuminance(a); const L2=relativeLuminance(b); const lighter=Math.max(L1,L2); const darker=Math.min(L1,L2); return (lighter+0.05)/(darker+0.05); }catch(e){ void e; return null;} }
 
 function darkenHex(hex, factor){ const c=hexToRgb(hex); return rgbToHex({ r: c.r * factor, g: c.g * factor, b: c.b * factor }); }
 
-// reuse extractor from wcag script
 function extractPresets(fileContent) {
   const marker = 'export const THEME_PRESETS';
   const idx = fileContent.indexOf(marker);
@@ -50,7 +48,7 @@ function sanitizeToJsonLike(input) {
 }
 
 function fixPresets() {
-  const filePath = path.join(__dirname, '..', 'components', 'configuracao', 'theme-config.ts');
+  const filePath = path.join(new URL('.', import.meta.url).pathname, '..', 'components', 'configuracao', 'theme-config.ts');
   const content = fs.readFileSync(filePath, 'utf8');
   const { start, end, text } = extractPresets(content);
   const jsonLike = sanitizeToJsonLike(text);
@@ -60,15 +58,13 @@ function fixPresets() {
   presets.forEach((preset) => {
     ['light','dark'].forEach((mode) => {
       const colors = (preset.colors && preset.colors[mode]) || {};
-      // pairs to check: background/text, sidebar_bg/sidebar_text, header_bg/text
       const pairs = [ {aKey:'background', bKey:'text'}, {aKey:'sidebar_bg', bKey:'sidebar_text'}, {aKey:'header_bg', bKey:'text'} ];
       pairs.forEach(({aKey,bKey}) => {
         const a = colors[aKey]; const b = colors[bKey] || colors['text'];
         if (!a || !b) return;
         let ratio = contrastRatio(a,b);
         if (ratio >= 4.5) return;
-        // attempt to darken a until ratio >= 4.5, up to 30 iterations
-        let factor = 0.92; // each iter multiply rgb by factor
+        let factor = 0.92;
         let cur = a;
         for (let i=0;i<30;i++){
           cur = darkenHex(cur, factor);
@@ -76,12 +72,10 @@ function fixPresets() {
           if (ratio && ratio >= 4.5) break;
         }
         if (ratio && ratio >= 4.5) {
-          // assign corrected value
           colors[aKey] = cur;
           changed = true;
           console.log(`Adjusted preset '${preset.name}' ${mode} ${aKey}: ${a} -> ${cur} (ratio ${ratio.toFixed(2)})`);
         } else {
-          // fallback: darken more aggressively
           let cur2 = a;
           for (let i=0;i<60;i++){ cur2 = darkenHex(cur2, 0.9); const r2=contrastRatio(cur2,b); if(r2 && r2>=4.5){ colors[aKey]=cur2; changed=true; console.log(`Adjusted aggressively '${preset.name}' ${mode} ${aKey}: ${a} -> ${cur2} (ratio ${r2.toFixed(2)})`); break; }}
         }
@@ -94,14 +88,8 @@ function fixPresets() {
     return;
   }
 
-  // Serialize presets back to TypeScript array (keep double quotes)
   const newArrStr = JSON.stringify(presets, null, 2);
-  // Minor formatting: ensure trailing comma style similar to original isn't required
-
-  // Build new file content
   const newContent = content.slice(0, start) + newArrStr + content.slice(end);
-
-  // Backup original
   fs.writeFileSync(filePath + '.bak', content, 'utf8');
   fs.writeFileSync(filePath, newContent, 'utf8');
   console.log('theme-config.ts updated (backup created at theme-config.ts.bak)');

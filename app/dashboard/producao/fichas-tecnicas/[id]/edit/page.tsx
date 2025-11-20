@@ -5,30 +5,35 @@ import { useRouter, useParams } from 'next/navigation';
 import { FichaTecnicaEditor } from '@/components/producao/FichaTecnicaEditor';
 import { supabase } from '@/lib/supabase';
 
+interface FichaRaw {
+  produto_final_id: string;
+  nome: string;
+  preco_venda: number;
+  slug?: string;
+}
+
 export default function EditFichaTecnicaPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
   const [loading, setLoading] = useState(true);
-  const [ficha, setFicha] = useState<any>(null);
+  const [ficha, setFicha] = useState<FichaRaw | null>(null);
 
   useEffect(() => {
     async function fetchFicha() {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('fichas_tecnicas')
-        .select('*')
-        .eq('slug', id)
-        .single();
+      const resp = await supabase.from('fichas_tecnicas').select('*').eq('slug', id).single();
+      const data = resp.data as unknown;
+      const error = resp.error as unknown;
       if (error) {
         alert('Erro ao carregar ficha técnica');
         router.push('/dashboard/producao/fichas-tecnicas');
         return;
       }
-      setFicha(data);
+      setFicha(data as FichaRaw);
       setLoading(false);
     }
-    if (id) fetchFicha();
+    if (id) void fetchFicha();
   }, [id, router]);
 
   if (loading) {

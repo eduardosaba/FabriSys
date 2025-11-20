@@ -52,7 +52,7 @@ export default function OrdemProducaoManager({ ordem, onUpdate }: OrdemProducaoM
 
   // Calcular insumos teóricos baseado na ficha técnica
   const calcularInsumosTeoricos = async (): Promise<InsumoTeorico[]> => {
-    const { data: fichaTecnica, error } = await supabase
+    const resp = await supabase
       .from('ficha_tecnica')
       .select(
         `
@@ -70,33 +70,33 @@ export default function OrdemProducaoManager({ ordem, onUpdate }: OrdemProducaoM
       )
       .eq('produto_final_id', ordem.produto_final_id);
 
-    if (error instanceof Error || !fichaTecnica) return [];
+    const fichaTecnica = resp.data as unknown;
+    const error = resp.error as unknown;
+    if (error || !Array.isArray(fichaTecnica)) return [];
 
-    const insumosTeoricos: InsumoTeorico[] = fichaTecnica.map((item) => {
-      const insumo = Array.isArray(item.insumo) ? item.insumo[0] : item.insumo;
-      const quantidadeUC = item.quantidade * ordem.quantidade_prevista;
-      const quantidadeUE = insumo?.fator_conversao
-        ? quantidadeUC / insumo.fator_conversao
-        : quantidadeUC;
-      const custoTotal =
-        insumo?.custo_por_ue && insumo?.fator_conversao
-          ? (insumo.custo_por_ue / insumo.fator_conversao) * quantidadeUC
-          : 0;
+    const insumosTeoricos: InsumoTeorico[] = (fichaTecnica as unknown[]).map((itemRaw) => {
+      const item = itemRaw as Record<string, unknown>;
+      const insumoField = item.insumo;
+      const insumo = Array.isArray(insumoField)
+        ? (insumoField[0] as Record<string, unknown>)
+        : (insumoField as Record<string, unknown> | undefined);
+      const quantidade = Number(item.quantidade ?? 0);
+      const quantidadeUC = quantidade * ordem.quantidade_prevista;
+      const fator = Number(insumo?.fator_conversao ?? 1);
+      const quantidadeUE = fator ? quantidadeUC / fator : quantidadeUC;
+      const custoPorUE = Number(insumo?.custo_por_ue ?? 0);
+      const custoTotal = fator ? (custoPorUE / fator) * quantidadeUC : 0;
 
       return {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        insumo_id: insumo?.id || '',
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        nome_insumo: insumo?.nome || '',
+        insumo_id: String(insumo?.id ?? ''),
+        nome_insumo: String(insumo?.nome ?? ''),
         quantidade_uc: quantidadeUC,
-        unidade_consumo: item.unidade_medida,
+        unidade_consumo: String(item.unidade_medida ?? ''),
         quantidade_ue: quantidadeUE,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        unidade_estoque: insumo?.unidade_estoque || '',
+        unidade_estoque: String(insumo?.unidade_estoque ?? ''),
         custo_total: custoTotal,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        fator_conversao: insumo?.fator_conversao || 1,
-      };
+        fator_conversao: fator || 1,
+      } as InsumoTeorico;
     });
 
     return insumosTeoricos;

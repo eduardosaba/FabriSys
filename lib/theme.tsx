@@ -40,52 +40,9 @@ const defaultTheme: ThemeSettings = {
       primary: '#88544c', // Caramelo - Botões, Links
       tituloPaginas: '#4a2c2b', // Chocolate Escuro
       secondary: '#e9c4c2', // Rosa Claro - Destaques suaves
+      text: '#111827',
       accent: '#88544c',
       background: '#f5e4e2', // Pêssego Claro - Fundo Geral
-      text: '#4a2c2b',
-      hover3Submenu: '#88544c',
-      textoGeralHover: '#4a2c2b',
-      bordasHeaderPerfil: '#e9c4c2',
-      bordasSelecaoListagens: '#88544c',
-      barraDashboard: '#88544c',
-      barraDashboardHover: '#4a2c2b',
-      receitasGraficos: '#88544c',
-      receitasGraficosSecundaria: '#e9c4c2',
-      despesasGraficos: '#dc2626', // Vermelho Padrão
-      despesasGraficosSecundaria: '#ef4444', // Vermelho Padrão
-      barraRolagem: '#88544c',
-      barraRolagemFundo: '#f5e4e2',
-      fundoLinkEAD: '#88544c',
-      textoLinkEAD: '#4a2c2b',
-      botaoSalvar: '#88544c',
-      botaoSalvarAtivo: '#4a2c2b',
-      botaoSalvarDesabilitado: '#9ca3af',
-      botaoCancelar: '#dc2626',
-      botaoCancelarAtivo: '#b91c1c',
-      botaoCancelarDesabilitado: '#d1d5db',
-      botaoPesquisar: '#059669', // Verde Padrão
-      botaoPesquisarAtivo: '#047857', // Verde Padrão
-      botaoPesquisarDesabilitado: '#d1d5db',
-      camposObrigatorios: '#f59e0b', // Laranja Padrão
-      camposNaoObrigatorios: '#f3f4f6',
-      barraSuperiorMenu: '#88544c',
-      textoIconeAjuda: '#374151',
-      iconeAjuda: '#88544c',
-      // Propriedades do sidebar (valores padrão para manter compatibilidade com ThemeColors)
-      sidebar_bg: '#e8e8e8',
-      sidebar_hover_bg: '#88544c',
-      sidebar_text: '#4a2c2b',
-      sidebar_active_text: '#88544c',
-      // Fundo do cabeçalho (modo claro)
-      header_bg: '#e9c4c2',
-    },
-    dark: {
-      primary: '#e9c4c2', // Rosa Claro - Destaque em fundo escuro
-      tituloPaginas: '#f2e8e3', // Branco Suave
-      secondary: '#88544c', // Caramelo
-      accent: '#e9c4c2',
-      background: '#4a2c2b', // Chocolate Escuro - Fundo Geral
-      text: '#f2e8e3',
       hover3Submenu: '#e9c4c2',
       textoGeralHover: '#f2e8e3',
       bordasHeaderPerfil: '#88544c',
@@ -121,6 +78,48 @@ const defaultTheme: ThemeSettings = {
       sidebar_active_text: '#e9c4c2',
       // Fundo do cabeçalho (modo escuro)
       header_bg: '#88544c',
+    },
+    dark: {
+      primary: '#e9c4c2',
+      tituloPaginas: '#f2e8e3',
+      secondary: '#4a2c2b',
+      text: '#f9fafb',
+      accent: '#e9c4c2',
+      background: '#0b1220',
+      hover3Submenu: '#4a2c2b',
+      textoGeralHover: '#111827',
+      bordasHeaderPerfil: '#f2e8e3',
+      bordasSelecaoListagens: '#4a2c2b',
+      barraDashboard: '#4a2c2b',
+      barraDashboardHover: '#f2e8e3',
+      receitasGraficos: '#4a2c2b',
+      receitasGraficosSecundaria: '#e9c4c2',
+      despesasGraficos: '#ef4444',
+      despesasGraficosSecundaria: '#f87171',
+      barraRolagem: '#4a2c2b',
+      barraRolagemFundo: '#f2e8e3',
+      fundoLinkEAD: '#4a2c2b',
+      textoLinkEAD: '#f2e8e3',
+      botaoSalvar: '#4a2c2b',
+      botaoSalvarAtivo: '#f2e8e3',
+      botaoSalvarDesabilitado: '#6b7280',
+      botaoCancelar: '#ef4444',
+      botaoCancelarAtivo: '#f87171',
+      botaoCancelarDesabilitado: '#9ca3af',
+      botaoPesquisar: '#10b981',
+      botaoPesquisarAtivo: '#34d399',
+      botaoPesquisarDesabilitado: '#9ca3af',
+      camposObrigatorios: '#fbbf24',
+      camposNaoObrigatorios: '#f3f4f6',
+      barraSuperiorMenu: '#4a2c2b',
+      textoIconeAjuda: '#9ca3af',
+      iconeAjuda: '#4a2c2b',
+      sidebar_bg: '#111827',
+      sidebar_hover_bg: '#4a2c2b',
+      sidebar_text: '#f2e8e3',
+      sidebar_active_text: '#e9c4c2',
+      header_bg: '#4a2c2b',
+      footer_bg: '#111827',
     },
   },
 };
@@ -260,10 +259,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyTheme(systemTheme);
   }, [systemTheme, applyTheme]);
 
-  const fetchTheme = useCallback(async (): Promise<ThemeSettings> => {
+  const fetchTheme = useCallback((): Promise<ThemeSettings> => {
     // Por enquanto, retorna o tema padrão
     // Futuramente pode buscar do banco de dados se houver configurações globais
-    return defaultTheme;
+    return Promise.resolve(defaultTheme);
   }, []);
 
   const fetchUserThemeColors = useCallback(
@@ -372,13 +371,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         // Se a atualização inclui alteração da cor `secondary` para o modo ativo,
         // e não especifica `sidebar_bg`/`header_bg`, propagar `secondary` para esses campos.
         try {
-          const mode = (newTheme.theme_mode ||
-            updatedTheme.theme_mode) as keyof typeof updatedTheme.colors;
-          const incomingModeColors = newTheme.colors && (newTheme.colors as any)[mode];
+          type Mode = 'light' | 'dark';
+          let mode: Mode = 'light';
+          const modeCandidate = newTheme.theme_mode ?? updatedTheme.theme_mode;
+          if (modeCandidate === 'light' || modeCandidate === 'dark') mode = modeCandidate;
+
+          const incomingColorsMap = newTheme.colors as
+            | Partial<Record<Mode, Partial<ThemeColors>>>
+            | undefined;
+          const incomingModeColors = incomingColorsMap ? incomingColorsMap[mode] : undefined;
           const incomingHasSecondary = !!(incomingModeColors && incomingModeColors.secondary);
 
           if (incomingHasSecondary) {
-            const newSecondary = incomingModeColors.secondary as string;
+            const newSecondary = String(incomingModeColors.secondary);
 
             const incomingHasSidebarBg =
               !!(incomingModeColors && 'sidebar_bg' in incomingModeColors) ||
@@ -388,9 +393,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
               'header_bg' in newTheme;
 
             if (!incomingHasSidebarBg || !incomingHasHeaderBg) {
-              const prevColorsForMode =
-                (updatedTheme.colors && (updatedTheme.colors as any)[mode]) || {};
-              const merged = {
+              const prevColorsForMode = (updatedTheme.colors && updatedTheme.colors[mode]) || {};
+              const merged: Partial<ThemeColors> = {
                 ...prevColorsForMode,
                 ...(incomingModeColors || {}),
               };
@@ -402,16 +406,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
                 ...updatedTheme,
                 colors: {
                   ...(updatedTheme.colors || {}),
-                  [mode]: merged,
+                  [mode]: merged as ThemeColors,
                 },
               };
 
-              // Também ajustar top-level fields se o caller não forneceu
+              // Também ajustar top-level campos se o caller não forneceu
               if (!('sidebar_bg' in newTheme)) updatedTheme.sidebar_bg = newSecondary;
               if (!('header_bg' in newTheme)) updatedTheme.header_bg = newSecondary;
             }
           }
-        } catch (propErr) {
+        } catch (propErr: unknown) {
           // Não bloquear a atualização por erro nesta lógica
           console.warn('Erro ao propagar secondary para sidebar/header:', propErr);
         }

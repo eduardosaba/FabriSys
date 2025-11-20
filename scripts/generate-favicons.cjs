@@ -4,7 +4,6 @@
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
-const toIco = require('to-ico');
 
 async function generate(source) {
   const src = source || path.join(__dirname, '..', 'app', 'confectio.jpg');
@@ -27,10 +26,10 @@ async function generate(source) {
     console.log('Written', fileName);
   }
 
-  // Create favicon.ico from 16,32,48
-  const icoBuf = await toIco([pngBuffers[0], pngBuffers[1], pngBuffers[2]]);
-  fs.writeFileSync(path.join(outDir, 'favicon.ico'), icoBuf);
-  console.log('Written favicon.ico');
+  // NOTE: favicon.ico generation is intentionally skipped here to avoid adding
+  // an extra transitive dependency. If you need `favicon.ico`, generate it
+  // in CI or locally with a tool like `png-to-ico` or manually combine PNGs.
+  console.log('Skipped favicon.ico generation (generate in CI or manually if needed)');
 
   // Create apple touch icon (180x180)
   const apple = await sharp(src).resize(180,180,{fit:'cover'}).png().toBuffer();

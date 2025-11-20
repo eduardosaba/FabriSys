@@ -147,10 +147,10 @@ export default function PedidoCompraForm({ itens, onSuccess }: PedidoCompraFormP
             type="email"
             {...register('email')}
             placeholder="fornecedor@exemplo.com"
-            className="w-full p-2 border rounded-md"
+            className="w-full rounded-md border p-2"
           />
           {errors.email && (
-            <Text className="text-sm text-red-500 mt-1">{errors.email.message}</Text>
+            <Text className="mt-1 text-sm text-red-500">{errors.email.message}</Text>
           )}
         </div>
 
@@ -160,10 +160,10 @@ export default function PedidoCompraForm({ itens, onSuccess }: PedidoCompraFormP
             type="tel"
             {...register('telefone')}
             placeholder="(00) 00000-0000"
-            className="w-full p-2 border rounded-md"
+            className="w-full rounded-md border p-2"
           />
           {errors.telefone && (
-            <Text className="text-sm text-red-500 mt-1">{errors.telefone.message}</Text>
+            <Text className="mt-1 text-sm text-red-500">{errors.telefone.message}</Text>
           )}
         </div>
 
@@ -172,7 +172,7 @@ export default function PedidoCompraForm({ itens, onSuccess }: PedidoCompraFormP
           <textarea
             {...register('observacoes')}
             placeholder="Alguma observação adicional..."
-            className="w-full p-2 border rounded-md"
+            className="w-full rounded-md border p-2"
             rows={3}
           />
         </div>

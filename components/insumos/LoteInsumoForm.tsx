@@ -92,7 +92,7 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
         <select
           id="insumo_id"
           {...register('insumo_id')}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
           disabled={loadingData || loading || !!initialData}
         >
           <option value="">Selecione um insumo</option>
@@ -117,7 +117,7 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
         <select
           id="fornecedor_id"
           {...register('fornecedor_id')}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
           disabled={loadingData || loading}
         >
           <option value="">Selecione um fornecedor</option>
@@ -145,7 +145,7 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
           type="date"
           id="data_recebimento"
           {...register('data_recebimento')}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
           disabled={loading}
         />
         {errors.data_recebimento && (
@@ -166,7 +166,7 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
           type="date"
           id="data_validade"
           {...register('data_validade')}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
           disabled={loading}
         />
         {errors.data_validade && (
@@ -189,7 +189,7 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
             step="any"
             id="quantidade_inicial"
             {...register('quantidade_inicial', { valueAsNumber: true })}
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
             disabled={loading}
           />
           {insumoSelecionado && (
@@ -216,7 +216,7 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
           type="text"
           id="numero_lote"
           {...register('numero_lote')}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
           disabled={loading}
         />
         {errors.numero_lote && (
@@ -237,7 +237,7 @@ export default function LoteInsumoForm({ onSubmit, onCancel, loading, initialDat
           type="text"
           id="numero_nota_fiscal"
           {...register('numero_nota_fiscal')}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
           disabled={loading}
         />
         {errors.numero_nota_fiscal && (

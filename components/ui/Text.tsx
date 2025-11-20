@@ -31,14 +31,14 @@ export default function Text({
     h4: 'text-xl leading-snug',
     body: 'text-base leading-relaxed',
     'body-sm': 'text-sm leading-relaxed',
-    caption: 'text-xs leading-relaxed'
+    caption: 'text-xs leading-relaxed',
   };
 
   const weightStyles = {
     normal: 'font-normal',
     medium: 'font-medium',
     semibold: 'font-semibold',
-    bold: 'font-bold'
+    bold: 'font-bold',
   };
 
   const colorStyles = {
@@ -47,7 +47,7 @@ export default function Text({
     primary: 'text-primary',
     success: 'text-green-600 dark:text-green-400',
     warning: 'text-yellow-600 dark:text-yellow-400',
-    danger: 'text-red-600 dark:text-red-400'
+    danger: 'text-red-600 dark:text-red-400',
   };
 
   return (

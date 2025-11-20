@@ -1,5 +1,9 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vitest/config';
+import dotenv from 'dotenv';
+
+// Carregar variáveis do .env.test antes dos testes
+dotenv.config({ path: '.env.test' });
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
@@ -30,7 +34,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': '/syslari',
+      '@': '.',
     },
   },
 });

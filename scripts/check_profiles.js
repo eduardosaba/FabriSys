@@ -11,23 +11,21 @@ const supabase = createClient(
 async function checkProfiles() {
   console.log('🔍 Verificando perfis na tabela profiles...\n');
 
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, email, role, created_at, updated_at');
+  const res = await supabase.from('profiles').select('id, email, role, created_at, updated_at');
 
-  if (error) {
-    console.error('❌ Erro ao buscar perfis:', error);
+  if (res.error) {
+    console.error('❌ Erro ao buscar perfis:', res.error);
     return;
   }
 
-  if (!data || data.length === 0) {
+  if (!res.data || res.data.length === 0) {
     console.log('❌ Nenhum perfil encontrado.');
     return;
   }
 
-  console.log(`Encontrados ${data.length} perfis:\n`);
-  data.forEach((profile, index) => {
-    console.log(`${index + 1}. ID: ${profile.id}`);
+  console.log(`Encontrados ${res.data.length} perfis:\n`);
+  res.data.forEach((profile, _index) => {
+    console.log(`ID: ${profile.id}`);
     console.log(`   Email: ${profile.email}`);
     console.log(`   Role: ${profile.role}`);
     console.log(`   Criado em: ${profile.created_at}`);

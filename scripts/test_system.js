@@ -39,7 +39,7 @@ async function testSystem() {
   const testUsers = [
     { email: 'sababrtv@gmail.com', role: 'admin' },
     { email: 'eduardosaba.rep@gmail.com', role: 'fabrica' },
-    { email: 'eduardosaba@uol.com', role: 'pdv' }
+    { email: 'eduardosaba@uol.com', role: 'pdv' },
   ];
 
   for (const user of testUsers) {

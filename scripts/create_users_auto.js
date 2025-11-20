@@ -4,12 +4,15 @@ dotenv.config({ path: '.env.local' });
 
 async function _checkUserExists(userId) {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
-      headers: {
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        },
       }
-    });
+    );
 
     return response.ok;
   } catch {
@@ -19,17 +22,20 @@ async function _checkUserExists(userId) {
 
 async function updateUserPassword(userId, password) {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY
-      },
-      body: JSON.stringify({
-        password: password
-      })
-    });
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        },
+        body: JSON.stringify({
+          password: password,
+        }),
+      }
+    );
 
     if (response.ok) {
       console.log(`✅ Senha atualizada para usuário ${userId}`);
@@ -51,16 +57,16 @@ async function createUser(userData) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       },
       body: JSON.stringify({
         id: userData.id,
         email: userData.email,
         password: userData.password,
         email_confirm: true,
-        user_metadata: { nome: userData.nome }
-      })
+        user_metadata: { nome: userData.nome },
+      }),
     });
 
     if (response.ok) {
@@ -105,11 +111,11 @@ async function createProfile(profileData) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
-        'Prefer': 'resolution=merge-duplicates'
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Prefer: 'resolution=merge-duplicates',
       },
-      body: JSON.stringify(profileData)
+      body: JSON.stringify(profileData),
     });
 
     if (response.ok) {
@@ -134,20 +140,20 @@ async function createUsers() {
       id: '972cd273-7812-487d-a24a-a43cffda65af',
       email: 'sababrtv@gmail.com',
       password: 'admin123',
-      nome: 'Administrador'
+      nome: 'Administrador',
     },
     {
       id: '910a58fc-776a-4466-afcb-0c1421eac7e5',
       email: 'eduardosaba.rep@gmail.com',
       password: 'fabrica123',
-      nome: 'Usuario Fabrica'
+      nome: 'Usuario Fabrica',
     },
     {
       id: 'f53c6333-9759-4d18-be45-387325ea9638',
       email: 'eduardosaba@uol.com',
       password: 'pdv123',
-      nome: 'Usuario PDV'
-    }
+      nome: 'Usuario PDV',
+    },
   ];
 
   for (const user of users) {
@@ -157,11 +163,15 @@ async function createUsers() {
     // Criar perfil
     await createProfile({
       id: user.id,
-      role: user.email.includes('admin') ? 'admin' : user.email.includes('fabrica') ? 'fabrica' : 'pdv',
+      role: user.email.includes('admin')
+        ? 'admin'
+        : user.email.includes('fabrica')
+          ? 'fabrica'
+          : 'pdv',
       nome: user.nome,
       email: user.email,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     });
   }
 
@@ -179,24 +189,27 @@ async function testLogin() {
   const testUsers = [
     { email: 'sababrtv@gmail.com', password: 'admin123' },
     { email: 'eduardosaba.rep@gmail.com', password: 'fabrica123' },
-    { email: 'eduardosaba@uol.com', password: 'pdv123' }
+    { email: 'eduardosaba@uol.com', password: 'pdv123' },
   ];
 
   for (const user of testUsers) {
     try {
       console.log(`\nTestando ${user.email}...`);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        },
-        body: JSON.stringify({
-          email: user.email,
-          password: user.password
-        })
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            email: user.email,
+            password: user.password,
+          }),
+        }
+      );
 
       const data = await response.json();
 
@@ -205,7 +218,6 @@ async function testLogin() {
       } else {
         console.log(`❌ Login falhou: ${data.error_description || data.msg}`);
       }
-
     } catch (err) {
       console.log(`❌ Erro: ${err.message}`);
     }

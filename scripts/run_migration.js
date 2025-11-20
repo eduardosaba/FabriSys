@@ -10,10 +10,10 @@ async function runMigrationSQL(sql) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       },
-      body: JSON.stringify({ sql })
+      body: JSON.stringify({ sql }),
     });
 
     if (!response.ok) {
@@ -49,7 +49,9 @@ async function main() {
   } else {
     console.log('Tentando abordagem alternativa...');
     console.log('Por favor, execute o SQL manualmente no painel do Supabase:');
-    console.log('SQL Editor > New Query > Cole o conteúdo do arquivo migrations/020_fix_profiles_rls_policies.sql');
+    console.log(
+      'SQL Editor > New Query > Cole o conteúdo do arquivo migrations/020_fix_profiles_rls_policies.sql'
+    );
   }
 }
 

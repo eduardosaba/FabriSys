@@ -8,6 +8,8 @@ import Modal from '@/components/Modal';
 import Panel from '@/components/ui/Panel';
 import Text from '@/components/ui/Text';
 import { toast } from 'sonner';
+import { Edit, Trash2, Tag } from 'lucide-react';
+import PageHeader from '@/components/ui/PageHeader';
 
 interface CategoriaFormData {
   nome: string;
@@ -106,10 +108,13 @@ export default function CategoriasPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <Text variant="h4">Categorias de Insumos</Text>
+      <PageHeader
+        title="Categorias de Insumos"
+        description="Organize seus insumos por categorias"
+        icon={Tag}
+      >
         <Button onClick={() => handleOpenModal()}>Nova Categoria</Button>
-      </div>
+      </PageHeader>
 
       <Panel>
         {loading ? (
@@ -121,23 +126,30 @@ export default function CategoriasPage() {
             {categorias.map((categoria) => (
               <div
                 key={categoria.id}
-                className="flex justify-between items-center py-4 px-6 first:pt-2 last:pb-2"
+                className="flex items-center justify-between px-6 py-4 first:pt-2 last:pb-2"
               >
                 <Text>{categoria.nome}</Text>
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => handleOpenModal(categoria)}>
-                    Editar
-                  </Button>
-                  <Button
-                    variant="secondary"
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => handleOpenModal(categoria)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                    aria-label={`Editar categoria ${categoria.nome}`}
+                    title="Editar"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
                     onClick={() => {
                       if (confirm(`Deseja realmente excluir a categoria "${categoria.nome}"?`)) {
                         void handleDelete(categoria);
                       }
                     }}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                    aria-label={`Excluir categoria ${categoria.nome}`}
+                    title="Excluir"
                   >
-                    Excluir
-                  </Button>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             ))}

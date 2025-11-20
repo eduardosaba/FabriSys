@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import LotesTable from '../components/insumos/LotesTable';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../lib/supabase';
 
 // Mock do supabase com encadeamento simples
-vi.mock('@/lib/supabase', () => {
+vi.mock('../lib/supabase', () => {
   const defaultResult = {
     data: [
       {
@@ -89,10 +89,10 @@ describe('LotesTable', () => {
       );
     });
 
-    fireEvent.click(screen.getByText('Editar'));
+    fireEvent.click(screen.getByLabelText('Editar lote L123'));
     expect(onEdit).toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText('Excluir'));
+    fireEvent.click(screen.getByLabelText('Excluir lote L123'));
     expect(onDelete).toHaveBeenCalled();
   });
 

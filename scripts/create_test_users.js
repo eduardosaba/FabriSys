@@ -19,7 +19,8 @@ dotenv.config({ path: '.env.local' });
   try {
     // Usa NEXT_PUBLIC_SUPABASE_URL se SUPABASE_URL não estiver definido
     const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const SERVICE_KEY =
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!SUPABASE_URL || !SERVICE_KEY) {
       console.error('Erro: defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no ambiente.');
@@ -29,43 +30,81 @@ dotenv.config({ path: '.env.local' });
     const baseUrl = SUPABASE_URL.replace(/\/+$/, '');
 
     const users = [
-      { id: '972cd273-7812-487d-a24a-a43cffda65af', email: 'sababrtv@gmail.com', password: 'admin123', nome: 'Administrador', role: 'admin' },
-      { id: '910a58fc-776a-4466-afcb-0c1421eac7e5', email: 'eduardosaba.rep@gmail.com', password: 'fabrica123', nome: 'Usuario Fabrica', role: 'fabrica' },
-      { id: 'f53c6333-9759-4d18-be45-387325ea9638', email: 'eduardosaba@uol.com', password: 'pdv123', nome: 'Usuario PDV', role: 'pdv' }
+      {
+        id: '972cd273-7812-487d-a24a-a43cffda65af',
+        email: 'sababrtv@gmail.com',
+        password: 'admin123',
+        nome: 'Administrador',
+        role: 'admin',
+      },
+      {
+        id: '910a58fc-776a-4466-afcb-0c1421eac7e5',
+        email: 'eduardosaba.rep@gmail.com',
+        password: 'fabrica123',
+        nome: 'Usuario Fabrica',
+        role: 'fabrica',
+      },
+      {
+        id: 'f53c6333-9759-4d18-be45-387325ea9638',
+        email: 'eduardosaba@uol.com',
+        password: 'pdv123',
+        nome: 'Usuario PDV',
+        role: 'pdv',
+      },
     ];
 
     const headers = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SERVICE_KEY}`,
-      'apikey': SERVICE_KEY
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: SERVICE_KEY,
     };
 
     async function createAuthUser(u) {
       const res = await fetch(`${baseUrl}/auth/v1/admin/users`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ id: u.id, email: u.email, password: u.password, email_confirm: true, user_metadata: { nome: u.nome } })
+        body: JSON.stringify({
+          id: u.id,
+          email: u.email,
+          password: u.password,
+          email_confirm: true,
+          user_metadata: { nome: u.nome },
+        }),
       });
       const text = await res.text();
       let json;
-  try { json = JSON.parse(text); } catch { json = text; }
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = text;
+      }
       return { status: res.status, ok: res.ok, body: json };
     }
 
     async function getUserByEmail(email) {
-      const res = await fetch(`${baseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, { headers });
-  if (!res.ok) return null;
-  try { return await res.json(); } catch { return null; }
+      const res = await fetch(`${baseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
+        headers,
+      });
+      if (!res.ok) return null;
+      try {
+        return await res.json();
+      } catch {
+        return null;
+      }
     }
 
     async function updateAuthUser(id, u) {
       const res = await fetch(`${baseUrl}/auth/v1/admin/users/${id}`, {
         method: 'PATCH',
         headers,
-        body: JSON.stringify({ password: u.password, user_metadata: { nome: u.nome } })
+        body: JSON.stringify({ password: u.password, user_metadata: { nome: u.nome } }),
       });
-  const text = await res.text();
-  try { return { ok: res.ok, body: JSON.parse(text) }; } catch { return { ok: res.ok, body: text }; }
+      const text = await res.text();
+      try {
+        return { ok: res.ok, body: JSON.parse(text) };
+      } catch {
+        return { ok: res.ok, body: text };
+      }
     }
 
     async function upsertProfile(u) {
@@ -75,12 +114,23 @@ dotenv.config({ path: '.env.local' });
         method: 'POST',
         headers: {
           ...headers,
-          'Prefer': 'resolution=merge-duplicates'
+          Prefer: 'resolution=merge-duplicates',
         },
-        body: JSON.stringify({ id: u.id, role: u.role, nome: u.nome, email: u.email, created_at: now, updated_at: now })
+        body: JSON.stringify({
+          id: u.id,
+          role: u.role,
+          nome: u.nome,
+          email: u.email,
+          created_at: now,
+          updated_at: now,
+        }),
       });
-  const text = await res.text();
-  try { return { ok: res.ok, body: JSON.parse(text) }; } catch { return { ok: res.ok, body: text }; }
+      const text = await res.text();
+      try {
+        return { ok: res.ok, body: JSON.parse(text) };
+      } catch {
+        return { ok: res.ok, body: text };
+      }
     }
 
     for (const u of users) {
@@ -90,7 +140,12 @@ dotenv.config({ path: '.env.local' });
         console.log('auth user criado.');
       } else {
         // tentar detectar se já existe
-        if (resCreate.status === 409 || (resCreate.body && typeof resCreate.body === 'string' && resCreate.body.toLowerCase().includes('already exists')) ) {
+        if (
+          resCreate.status === 409 ||
+          (resCreate.body &&
+            typeof resCreate.body === 'string' &&
+            resCreate.body.toLowerCase().includes('already exists'))
+        ) {
           console.log('já existe — atualizando.');
           const existing = await getUserByEmail(u.email);
           let userId = null;
@@ -101,21 +156,36 @@ dotenv.config({ path: '.env.local' });
           }
           if (userId) {
             const upd = await updateAuthUser(userId, u);
-            if (upd.ok) console.log('auth user atualizado.'); else console.log('falha ao atualizar auth user', upd.body);
+            if (upd.ok) console.log('auth user atualizado.');
+            else console.log('falha ao atualizar auth user', upd.body);
           } else {
-            console.log('Não foi possível localizar usuário existente para atualizar. Resposta do servidor:', resCreate.body);
+            console.log(
+              'Não foi possível localizar usuário existente para atualizar. Resposta do servidor:',
+              resCreate.body
+            );
             continue;
           }
-        } else if (resCreate.status === 400 && resCreate.body && typeof resCreate.body === 'object' && resCreate.body.error && resCreate.body.error.message && resCreate.body.error.message.toLowerCase().includes('user with this email already exists')) {
+        } else if (
+          resCreate.status === 400 &&
+          resCreate.body &&
+          typeof resCreate.body === 'object' &&
+          resCreate.body.error &&
+          resCreate.body.error.message &&
+          resCreate.body.error.message.toLowerCase().includes('user with this email already exists')
+        ) {
           // outra forma de mensagem
           console.log('já existe (mensagem 400) — tentando localizar e atualizar.');
           const existing = await getUserByEmail(u.email);
           let userId = existing && existing[0] && existing[0].id;
           if (userId) {
             const upd = await updateAuthUser(userId, u);
-            if (upd.ok) console.log('auth user atualizado.'); else console.log('falha ao atualizar auth user', upd.body);
+            if (upd.ok) console.log('auth user atualizado.');
+            else console.log('falha ao atualizar auth user', upd.body);
           } else {
-            console.log('Não foi possível localizar usuário existente para atualizar. Resposta:', resCreate.body);
+            console.log(
+              'Não foi possível localizar usuário existente para atualizar. Resposta:',
+              resCreate.body
+            );
             continue;
           }
         } else {
@@ -126,7 +196,8 @@ dotenv.config({ path: '.env.local' });
 
       // Criar/atualizar profile via PostgREST
       const resProfile = await upsertProfile(u);
-      if (resProfile.ok) console.log('profile inserido/atualizado.'); else console.log('falha ao inserir profile:', resProfile.body);
+      if (resProfile.ok) console.log('profile inserido/atualizado.');
+      else console.log('falha ao inserir profile:', resProfile.body);
     }
 
     console.log('Concluído.');

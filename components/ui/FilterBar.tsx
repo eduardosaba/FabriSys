@@ -46,7 +46,7 @@ export default function FilterBar({ onFilterChange, onExport }: FilterBarProps) 
 
   return (
     <div className="mb-6">
-      <div className="flex flex-wrap gap-4 items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap gap-2">
           <Button
             variant="secondary"
@@ -74,10 +74,10 @@ export default function FilterBar({ onFilterChange, onExport }: FilterBarProps) 
       </div>
 
       {isOpen && (
-        <div className="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="mt-4 space-y-4 rounded-lg border bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Data Inicial
               </label>
               <input
@@ -90,7 +90,7 @@ export default function FilterBar({ onFilterChange, onExport }: FilterBarProps) 
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Data Final
               </label>
               <input
@@ -103,7 +103,7 @@ export default function FilterBar({ onFilterChange, onExport }: FilterBarProps) 
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Produto
               </label>
               <select
@@ -119,7 +119,7 @@ export default function FilterBar({ onFilterChange, onExport }: FilterBarProps) 
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Comparação
               </label>
               <select

@@ -10,6 +10,8 @@ import Panel from '@/components/ui/Panel';
 import { useToast } from '@/hooks/useToast';
 import { Insumo } from '@/lib/types/insumos';
 import PedidoCompraForm from '@/components/insumos/PedidoCompraForm';
+import PageHeader from '@/components/ui/PageHeader';
+import { ShoppingCart } from 'lucide-react';
 
 type CartItem = { insumo: Insumo; quantidade: number };
 
@@ -76,8 +78,11 @@ export default function PedidosCompraPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <Text variant="h1">Ordens de Compra</Text>
+      <PageHeader
+        title="Ordens de Compra"
+        description="Gerencie e acompanhe suas ordens de compra"
+        icon={ShoppingCart}
+      >
         <div className="flex gap-2">
           <Button variant={view === 'grid' ? 'primary' : 'outline'} onClick={() => setView('grid')}>
             Grade
@@ -86,11 +91,11 @@ export default function PedidosCompraPage() {
             Lista
           </Button>
         </div>
-      </div>
+      </PageHeader>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Coluna esquerda: busca + catálogo */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="space-y-4 lg:col-span-2">
           <Panel>
             <div className="flex items-center gap-3">
               <input
@@ -98,7 +103,7 @@ export default function PedidosCompraPage() {
                 placeholder="Buscar insumo pelo nome..."
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                className="w-full p-2 border rounded-md"
+                className="w-full rounded-md border p-2"
               />
               <Button variant="secondary" onClick={() => setBusca('')}>
                 Limpar
@@ -115,21 +120,21 @@ export default function PedidosCompraPage() {
               <Text className="text-gray-500">Nenhum insumo encontrado</Text>
             </Card>
           ) : view === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {insumos.map((insumo) => (
                 <InsumoCard key={insumo.id} insumo={insumo} onAdd={adicionarAoCarrinho} />
               ))}
             </div>
           ) : (
-            <Card className="p-0 overflow-hidden">
+            <Card className="overflow-hidden p-0">
               <table className="min-w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="text-left px-4 py-2">Nome</th>
-                    <th className="text-left px-4 py-2">Unidade</th>
-                    <th className="text-left px-4 py-2">Último Valor</th>
-                    <th className="text-left px-4 py-2">Qtd</th>
-                    <th className="text-right px-4 py-2">Ação</th>
+                    <th className="px-4 py-2 text-left">Nome</th>
+                    <th className="px-4 py-2 text-left">Unidade</th>
+                    <th className="px-4 py-2 text-left">Último Valor</th>
+                    <th className="px-4 py-2 text-left">Qtd</th>
+                    <th className="px-4 py-2 text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -145,13 +150,13 @@ export default function PedidosCompraPage() {
         {/* Coluna direita: carrinho */}
         <div className="space-y-4">
           <Card className="p-4">
-            <div className="flex items-center justify-between mb-2">
+            <div className="mb-2 flex items-center justify-between">
               <Text variant="h3">Carrinho</Text>
               <Text className="text-sm text-gray-500">{cart.length} itens</Text>
             </div>
 
             {cart.length === 0 ? (
-              <Text className="text-gray-500 italic">Nenhum item adicionado</Text>
+              <Text className="italic text-gray-500">Nenhum item adicionado</Text>
             ) : (
               <div className="space-y-3">
                 {cart.map((ci) => (
@@ -175,7 +180,7 @@ export default function PedidosCompraPage() {
                   </div>
                 ))}
 
-                <div className="flex items-center justify-between pt-2 border-t mt-2">
+                <div className="mt-2 flex items-center justify-between border-t pt-2">
                   <Text variant="h4">Total</Text>
                   <Text variant="h4">R$ {total.toFixed(2)}</Text>
                 </div>
@@ -210,7 +215,7 @@ function InsumoCard({
 }) {
   const [qtd, setQtd] = useState(1);
   return (
-    <Card className="p-4 space-y-3">
+    <Card className="space-y-3 p-4">
       <div>
         <Text variant="h4">{insumo.nome}</Text>
         <Text className="text-sm text-gray-500">
@@ -224,7 +229,7 @@ function InsumoCard({
           min={1}
           value={qtd}
           onChange={(e) => setQtd(Math.max(1, Number(e.target.value)))}
-          className="w-24 p-2 border rounded-md"
+          className="w-24 rounded-md border p-2"
         />
         <Button variant="primary" onClick={() => onAdd(insumo, qtd)}>
           Adicionar
@@ -255,7 +260,7 @@ function InsumoListRow({
           min={1}
           value={qtd}
           onChange={(e) => setQtd(Math.max(1, Number(e.target.value)))}
-          className="w-20 p-1 border rounded-md"
+          className="w-20 rounded-md border p-1"
         />
       </td>
       <td className="px-4 py-2 text-right">

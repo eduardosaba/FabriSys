@@ -44,7 +44,6 @@ const supabase = createClient(
     } else {
       console.log('Sucesso com service role:', serviceData ? 'Dados retornados' : 'Nenhum dado');
     }
-
   } catch (err) {
     console.error('Erro geral:', err);
   }

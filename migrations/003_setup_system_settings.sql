@@ -33,7 +33,7 @@ VALUES (
   '{
     "name": "FabriSys",
     "logo_url": "/logo.png",
-    "primary_color": "#2563eb",
+    "primary_color": "#fdfdffff",
     "secondary_color": "#4f46e5",
     "accent_color": "#f97316",
     "background_color": "#ffffff",

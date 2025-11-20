@@ -11,12 +11,12 @@ const supabase = createClient(
 (async () => {
   try {
     console.log('Verificando tabela system_settings...');
-    const { data, error } = await supabase.from('system_settings').select('*');
-    if (error) {
-      console.error('Erro:', error);
+    const res = await supabase.from('system_settings').select('*');
+    if (res.error) {
+      console.error('Erro:', res.error);
     } else {
-      console.log('Registros encontrados:', data.length);
-      console.log('Dados:', JSON.stringify(data, null, 2));
+      console.log('Registros encontrados:', res.data.length);
+      console.log('Dados:', JSON.stringify(res.data, null, 2));
     }
   } catch (err) {
     console.error('Erro geral:', err);

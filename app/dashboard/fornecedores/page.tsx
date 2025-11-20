@@ -12,7 +12,13 @@ import Modal from '@/components/Modal';
 import { Toaster, toast } from 'react-hot-toast';
 import Text from '@/components/ui/Text';
 import Card from '@/components/ui/Card';
+import { Edit, Trash2, Loader2 } from 'lucide-react';
+import { useTableFilters } from '@/hooks/useTableFilters';
+import TableControls from '@/components/ui/TableControls';
+import EmptyState from '@/components/ui/EmptyState';
 // import StatusIcon from '@/components/ui/StatusIcon';
+import PageHeader from '@/components/ui/PageHeader';
+import { Truck } from 'lucide-react';
 
 const fornecedorSchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
@@ -62,6 +68,10 @@ export default function FornecedoresPage() {
       reset({});
     }
   }, [editingFornecedor, reset]);
+
+  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(fornecedores, {
+    searchFields: ['nome', 'cnpj', 'email'],
+  });
 
   async function fetchFornecedores() {
     try {
@@ -156,91 +166,107 @@ export default function FornecedoresPage() {
 
   return (
     <>
-      <div className="mb-6 sm:flex sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
-          Gestão de Fornecedores
-        </h1>
-        <div className="mt-3 sm:mt-0">
-          <Button
-            onClick={() => {
-              setEditingFornecedor(null);
-              reset({});
-              setIsModalOpen(true);
-            }}
-          >
-            Adicionar Fornecedor
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Gestão de Fornecedores"
+        description="Gerencie os fornecedores cadastrados no sistema"
+        icon={Truck}
+      >
+        <Button
+          onClick={() => {
+            setEditingFornecedor(null);
+            reset({});
+            setIsModalOpen(true);
+          }}
+        >
+          Adicionar Fornecedor
+        </Button>
+      </PageHeader>
 
       {loading ? (
         <div className="mt-6 flex items-center justify-center">
-          <div className="flex items-center space-x-2">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-900 border-t-transparent dark:border-white dark:border-t-transparent"></div>
-            <span className="text-gray-700 dark:text-gray-300">Carregando...</span>
-          </div>
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <span className="ml-2 text-gray-600">Carregando fornecedores...</span>
         </div>
-      ) : fornecedores.length === 0 ? (
-        <div className="mt-6 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center dark:border-gray-700">
-          <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
-            Nenhum fornecedor cadastrado
-          </p>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Clique no botão acima para adicionar um novo fornecedor
-          </p>
-        </div>
+      ) : filteredItems.length === 0 ? (
+        <EmptyState
+          type={fornecedores.length === 0 ? 'no-data' : 'no-results'}
+          title={
+            fornecedores.length === 0
+              ? 'Nenhum fornecedor cadastrado'
+              : 'Nenhum fornecedor encontrado'
+          }
+          description={
+            fornecedores.length === 0
+              ? 'Clique no botão acima para adicionar um novo fornecedor'
+              : 'Tente ajustar os filtros de busca para encontrar o que procura.'
+          }
+        />
       ) : (
         <Card variant="default">
+          <TableControls
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Buscar fornecedores por nome, CNPJ ou email..."
+          />
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Nome
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     CNPJ
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Email
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Telefone
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {fornecedores.map((fornecedor) => (
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {filteredItems.map((fornecedor) => (
                   <tr key={fornecedor.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {fornecedor.nome}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {formatCNPJ(fornecedor.cnpj)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {fornecedor.email || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {fornecedor.telefone || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <Button
-                        variant="secondary"
-                        className="mr-2"
-                        onClick={() => {
-                          setEditingFornecedor(fornecedor);
-                          setIsModalOpen(true);
-                        }}
-                      >
-                        Editar
-                      </Button>
-                      <Button variant="primary" onClick={() => handleDelete(fornecedor)}>
-                        Excluir
-                      </Button>
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingFornecedor(fornecedor);
+                            setIsModalOpen(true);
+                          }}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                          aria-label={`Editar fornecedor ${fornecedor.nome}`}
+                          title="Editar"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(fornecedor)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                          aria-label={`Excluir fornecedor ${fornecedor.nome}`}
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

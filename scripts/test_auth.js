@@ -18,7 +18,7 @@ async function testAuth() {
   const users = [
     { email: 'sababrtv@gmail.com', password: 'admin123' },
     { email: 'eduardosaba.rep@gmail.com', password: 'fabrica123' },
-    { email: 'eduardosaba@uol.com', password: 'pdv123' }
+    { email: 'eduardosaba@uol.com', password: 'pdv123' },
   ];
 
   for (const user of users) {
@@ -30,13 +30,13 @@ async function testAuth() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': ANON_KEY,
-          'Authorization': `Bearer ${ANON_KEY}`
+          apikey: ANON_KEY,
+          Authorization: `Bearer ${ANON_KEY}`,
         },
         body: JSON.stringify({
           email: user.email,
           password: user.password,
-        })
+        }),
       });
 
       const loginData = await loginRes.json();
@@ -49,9 +49,9 @@ async function testAuth() {
         // Tentar buscar o perfil usando o token de acesso
         const profileRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*`, {
           headers: {
-            'apikey': ANON_KEY,
-            'Authorization': `Bearer ${loginData.access_token}`
-          }
+            apikey: ANON_KEY,
+            Authorization: `Bearer ${loginData.access_token}`,
+          },
         });
 
         if (profileRes.ok) {
@@ -60,13 +60,11 @@ async function testAuth() {
         } else {
           console.log('❌ Erro ao buscar perfil:', await profileRes.text());
         }
-
       } else {
         console.log('❌ Login falhou:', loginData.error_description || loginData.msg);
       }
 
       console.log(''); // linha em branco para separar
-
     } catch (err) {
       console.log('❌ Erro inesperado:', err instanceof Error ? err.message : String(err));
       console.log('');

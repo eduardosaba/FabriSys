@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 
 type CardVariant = 'default' | 'success' | 'warning' | 'danger' | 'info';
 
@@ -48,7 +48,7 @@ function Card({
             variant === 'warning',
           'border-red-500 bg-red-50 dark:border-red-500/30 dark:bg-red-900/20':
             variant === 'danger',
-          'border-primary bg-primary/5 dark:border-primary/30 dark:bg-primary/20':
+          'bg-primary/5 dark:border-primary/30 dark:bg-primary/20 border-primary':
             variant === 'info',
         },
         className
@@ -91,7 +91,7 @@ const CardDescription = ({
   children,
   ...props
 }: React.HTMLAttributes<HTMLParagraphElement>) => (
-  <p className={cn('text-sm text-muted-foreground', className)} {...props}>
+  <p className={cn('text-muted-foreground text-sm', className)} {...props}>
     {children}
   </p>
 );

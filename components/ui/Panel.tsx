@@ -17,14 +17,14 @@ export default function Panel({
   className = '',
   children,
   header,
-  footer
+  footer,
 }: PanelProps) {
   const baseStyles = 'w-full';
 
   const variantStyles = {
     default: 'bg-background shadow-sm rounded',
     bordered: 'bg-background border border-gray-200 dark:border-gray-700 rounded',
-    flat: 'bg-background/50'
+    flat: 'bg-background/50',
   };
 
   const headerStyles = 'px-6 py-4 border-b border-gray-200 dark:border-gray-700';
@@ -33,19 +33,9 @@ export default function Panel({
 
   return (
     <div className={`${baseStyles} ${variantStyles[variant]} ${className}`}>
-      {header && (
-        <div className={headerStyles}>
-          {header}
-        </div>
-      )}
-      <div className={bodyStyles}>
-        {children}
-      </div>
-      {footer && (
-        <div className={footerStyles}>
-          {footer}
-        </div>
-      )}
+      {header && <div className={headerStyles}>{header}</div>}
+      <div className={bodyStyles}>{children}</div>
+      {footer && <div className={footerStyles}>{footer}</div>}
     </div>
   );
 }

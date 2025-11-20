@@ -5,9 +5,9 @@
 -- Observação: inserir diretamente em auth.users pode exigir permissões de administrador.
 -- Se o seu ambiente não permitir, crie os usuários via Admin API do Supabase.
 
--- Usuário Admin
+-- Usuário Admin - Verificar se já existe antes de inserir
 INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, created_at, updated_at, raw_user_meta_data)
-VALUES (
+SELECT
   '550e8400-e29b-41d4-a716-446655440000'::uuid,
   'sababrtv@gmail.com',
   crypt('admin123', gen_salt('bf')),
@@ -15,6 +15,8 @@ VALUES (
   NOW(),
   NOW(),
   '{"nome": "Administrador"}'::jsonb
+WHERE NOT EXISTS (
+  SELECT 1 FROM auth.users WHERE email = 'sababrtv@gmail.com'
 )
 ON CONFLICT (id) DO UPDATE SET
   email = EXCLUDED.email,
@@ -22,9 +24,9 @@ ON CONFLICT (id) DO UPDATE SET
   email_confirmed_at = EXCLUDED.email_confirmed_at,
   raw_user_meta_data = EXCLUDED.raw_user_meta_data;
 
--- Usuário Fabrica
+-- Usuário Fabrica - Verificar se já existe antes de inserir
 INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, created_at, updated_at, raw_user_meta_data)
-VALUES (
+SELECT
   '550e8400-e29b-41d4-a716-446655440001'::uuid,
   'eduardosaba.rep@gmail.com',
   crypt('fabrica123', gen_salt('bf')),
@@ -32,6 +34,8 @@ VALUES (
   NOW(),
   NOW(),
   '{"nome": "Usuario Fabrica"}'::jsonb
+WHERE NOT EXISTS (
+  SELECT 1 FROM auth.users WHERE email = 'eduardosaba.rep@gmail.com'
 )
 ON CONFLICT (id) DO UPDATE SET
   email = EXCLUDED.email,
@@ -39,16 +43,18 @@ ON CONFLICT (id) DO UPDATE SET
   email_confirmed_at = EXCLUDED.email_confirmed_at,
   raw_user_meta_data = EXCLUDED.raw_user_meta_data;
 
--- Usuário PDV
+-- Usuário PDV - Verificar se já existe antes de inserir
 INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, created_at, updated_at, raw_user_meta_data)
-VALUES (
+SELECT
   '550e8400-e29b-41d4-a716-446655440002'::uuid,
-  'eduardosaba@uol.com',
+  'eduardosaba84@gmail.com',
   crypt('pdv123', gen_salt('bf')),
   NOW(),
   NOW(),
   NOW(),
   '{"nome": "Usuario PDV"}'::jsonb
+WHERE NOT EXISTS (
+  SELECT 1 FROM auth.users WHERE email = 'eduardosaba84@gmail.com'
 )
 ON CONFLICT (id) DO UPDATE SET
   email = EXCLUDED.email,
@@ -60,13 +66,15 @@ ON CONFLICT (id) DO UPDATE SET
 DELETE FROM profiles WHERE email LIKE '%@sistema-lari.com';
 
 INSERT INTO profiles (id, role, nome, email, created_at, updated_at)
-VALUES (
+SELECT
   '550e8400-e29b-41d4-a716-446655440000'::uuid,
   'admin',
   'Administrador',
   'sababrtv@gmail.com',
   NOW(),
   NOW()
+WHERE EXISTS (
+  SELECT 1 FROM auth.users WHERE id = '550e8400-e29b-41d4-a716-446655440000'::uuid
 )
 ON CONFLICT (id) DO UPDATE SET
   role = EXCLUDED.role,
@@ -75,13 +83,15 @@ ON CONFLICT (id) DO UPDATE SET
   updated_at = EXCLUDED.updated_at;
 
 INSERT INTO profiles (id, role, nome, email, created_at, updated_at)
-VALUES (
+SELECT
   '550e8400-e29b-41d4-a716-446655440001'::uuid,
   'fabrica',
   'Usuario Fabrica',
   'eduardosaba.rep@gmail.com',
   NOW(),
   NOW()
+WHERE EXISTS (
+  SELECT 1 FROM auth.users WHERE id = '550e8400-e29b-41d4-a716-446655440001'::uuid
 )
 ON CONFLICT (id) DO UPDATE SET
   role = EXCLUDED.role,
@@ -90,13 +100,15 @@ ON CONFLICT (id) DO UPDATE SET
   updated_at = EXCLUDED.updated_at;
 
 INSERT INTO profiles (id, role, nome, email, created_at, updated_at)
-VALUES (
+SELECT
   '550e8400-e29b-41d4-a716-446655440002'::uuid,
   'pdv',
   'Usuario PDV',
-  'eduardosaba@uol.com',
+  'eduardosaba84@gmail.com',
   NOW(),
   NOW()
+WHERE EXISTS (
+  SELECT 1 FROM auth.users WHERE id = '550e8400-e29b-41d4-a716-446655440002'::uuid
 )
 ON CONFLICT (id) DO UPDATE SET
   role = EXCLUDED.role,
@@ -111,4 +123,4 @@ ON CONFLICT (id) DO UPDATE SET
 --
 -- Admin: sababrtv@gmail.com / admin123
 -- Fábrica: eduardosaba.rep@gmail.com / fabrica123
--- PDV: eduardosaba@uol.com / pdv123
+-- PDV: eduardosaba84@gmail.com / pdv123

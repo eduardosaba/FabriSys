@@ -88,7 +88,7 @@
       "form-data": "2.5.4",
       "glob": "10.5.0",
       "js-yaml": "4.1.1",
-      "url-regex": "1.0.0"
+      "url-regex": "5.0.0"
     }
   }
 }

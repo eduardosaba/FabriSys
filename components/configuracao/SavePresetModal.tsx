@@ -24,8 +24,8 @@ export default function SavePresetModal({
           Salvar como predefinição
         </Text>
         <p className="mb-4 text-sm text-gray-600">
-          Informe um nome para salvar a predefinição com as cores atuais. Você poderá aplicar
-          esta predefinição futuramente.
+          Informe um nome para salvar a predefinição com as cores atuais. Você poderá aplicar esta
+          predefinição futuramente.
         </p>
 
         <label className="mb-3 block text-sm font-medium text-gray-700">Nome</label>

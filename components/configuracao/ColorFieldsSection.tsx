@@ -6,7 +6,11 @@ interface ColorFieldsSectionProps {
   onFieldChange: (key: string, value: string | number) => void;
 }
 
-export function ColorFieldsSection({ availableFields, settings, onFieldChange }: ColorFieldsSectionProps) {
+export function ColorFieldsSection({
+  availableFields,
+  settings,
+  onFieldChange,
+}: ColorFieldsSectionProps) {
   return (
     <div className="mb-6">
       <h3 className="mb-3 font-medium">Cores Principais</h3>
@@ -22,10 +26,17 @@ export function ColorFieldsSection({ availableFields, settings, onFieldChange }:
               className="h-8 w-16 rounded border"
             />
             <div className="mt-2 flex items-center gap-3">
-              <span className="ml-2 font-mono text-xs">{(settings[key] as string) || '#000000'}</span>
+              <span className="ml-2 font-mono text-xs">
+                {(settings[key] as string) || '#000000'}
+              </span>
               <div className="text-xs text-gray-400">
-                <div>Propriedade: <span className="font-mono">{key}</span></div>
-                <div>Caminho (por modo): <span className="font-mono">colors.light.{key}</span> / <span className="font-mono">colors.dark.{key}</span></div>
+                <div>
+                  Propriedade: <span className="font-mono">{key}</span>
+                </div>
+                <div>
+                  Caminho (por modo): <span className="font-mono">colors.light.{key}</span> /{' '}
+                  <span className="font-mono">colors.dark.{key}</span>
+                </div>
               </div>
             </div>
           </div>

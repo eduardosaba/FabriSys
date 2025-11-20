@@ -39,9 +39,7 @@ export function LogoUploadSection({
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `${storagePath}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('logos')
-        .upload(filePath, file);
+      const { error: uploadError } = await supabase.storage.from('logos').upload(filePath, file);
 
       if (uploadError) {
         throw uploadError;
@@ -64,9 +62,7 @@ export function LogoUploadSection({
   return (
     <div className="mb-6">
       <Text className="mb-3 font-medium">{title}</Text>
-      {description && (
-        <p className="mb-3 text-sm text-gray-600">{description}</p>
-      )}
+      {description && <p className="mb-3 text-sm text-gray-600">{description}</p>}
 
       <div className="flex items-center gap-4 rounded-lg border bg-white p-4">
         {logoUrl ? (

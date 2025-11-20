@@ -10,15 +10,18 @@ import SavePresetModal from '@/components/configuracao/SavePresetModal';
 import { supabase } from '@/lib/supabase';
 
 // Importações dos componentes refatorados
-import { ADMIN_FIELDS, MASTER_FIELDS, THEME_PRESETS } from '@/components/configuracao/theme-config';
+import {
+  ADMIN_FIELDS,
+  MASTER_FIELDS,
+  THEME_PRESETS,
+  ThemePreset,
+} from '@/components/configuracao/theme-config';
 import { ColorFieldsSection } from '@/components/configuracao/ColorFieldsSection';
 import { LogoUploadSection } from '@/components/configuracao/LogoUploadSection';
 import { ThemePresetsSection } from '@/components/configuracao/ThemePresetsSection';
 import { FooterSettingsSection } from '@/components/configuracao/FooterSettingsSection';
 import { FontSettingsSection } from '@/components/configuracao/FontSettingsSection';
 import { SystemNameSection } from '@/components/configuracao/SystemNameSection';
-
-
 
 export default function CustomizacaoTab() {
   const { theme, updateTheme, loading } = useTheme();
@@ -40,13 +43,15 @@ export default function CustomizacaoTab() {
       });
     }
   }, [theme]);
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const isMasterAdmin = profile?.role === 'master';
 
   // Estado local para configurações
   const [settings, setSettings] = useState<Record<string, string | number>>({});
   const [appliedPreset, setAppliedPreset] = useState<(typeof THEME_PRESETS)[0] | null>(null);
   const [showSavePresetModal, setShowSavePresetModal] = useState(false);
+  // Predefinições criadas pelo usuário (carregadas do banco)
+  const [userPresets, setUserPresets] = useState<ThemePreset[]>([]);
 
   // Determinar quais campos mostrar baseado no tipo de usuário
   const availableFields = isMasterAdmin ? MASTER_FIELDS : ADMIN_FIELDS;
@@ -154,7 +159,8 @@ export default function CustomizacaoTab() {
 
     // Aplica campos globais do preset (sidebar_bg, sidebar_hover_bg, header_bg, sidebar_text, sidebar_active_text)
     newSettings.sidebar_bg = preset.sidebar_bg || newSettings.sidebar_bg || '#e8e8e8';
-    newSettings.sidebar_hover_bg = preset.sidebar_hover_bg || newSettings.sidebar_hover_bg || '#88544c';
+    newSettings.sidebar_hover_bg =
+      preset.sidebar_hover_bg || newSettings.sidebar_hover_bg || '#88544c';
     newSettings.header_bg = preset.header_bg || newSettings.header_bg || '#e9c4c2';
     if ('sidebar_text' in currentModeColors && typeof currentModeColors.sidebar_text === 'string')
       newSettings.sidebar_text = currentModeColors.sidebar_text;
@@ -199,12 +205,28 @@ export default function CustomizacaoTab() {
       const updatedSettings = { ...theme };
 
       // Se uma predefinição foi aplicada, salvar para ambos os modos
+      // resolve userId: prefer profile, caso não esteja disponível tentar buscar via supabase.auth
+      let userId = profile?.id;
+      if (!userId) {
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          userId = user?.id;
+        } catch (e) {
+          // ignora aqui; updateTheme aceitará undefined e salvará localmente
+          console.warn('Não foi possível obter userId via supabase.auth.getUser()', e);
+        }
+      }
+
       if (appliedPreset) {
         const lightColors = appliedPreset.colors.light || {};
         const darkColors = appliedPreset.colors.dark || {};
 
         // Preparar configurações para light
-        const lightUpdatedColors = { ...lightColors } as unknown as import('@/lib/types').ThemeColors;
+        const lightUpdatedColors = {
+          ...lightColors,
+        } as unknown as import('@/lib/types').ThemeColors;
 
         // Preparar configurações para dark
         const darkUpdatedColors = { ...darkColors } as unknown as import('@/lib/types').ThemeColors;
@@ -231,7 +253,7 @@ export default function CustomizacaoTab() {
             },
           },
           false,
-          profile?.id
+          userId
         );
 
         setAppliedPreset(null); // Reset após salvar
@@ -284,7 +306,7 @@ export default function CustomizacaoTab() {
             },
           },
           false,
-          profile?.id
+          userId
         );
       }
     } catch (error) {
@@ -308,8 +330,8 @@ export default function CustomizacaoTab() {
       // Extrair do tema atual e do settings
       const themeMode = 'light';
       const themeColors = theme.colors || {};
-      colorsForLight = { ...(themeColors.light || {}) } as Record<string, string>;
-      colorsForDark = { ...(themeColors.dark || {}) } as Record<string, string>;
+      colorsForLight = { ...(themeColors.light || {}) } as unknown as Record<string, string>;
+      colorsForDark = { ...(themeColors.dark || {}) } as unknown as Record<string, string>;
 
       // sobrepor com settings do usuário
       Object.entries(settings).forEach(([k, v]) => {
@@ -401,6 +423,17 @@ export default function CustomizacaoTab() {
     }
 
     toast.success('Predefinição salva com sucesso no seu perfil!');
+    // Atualizar estado local com a nova predefinição para que apareça imediatamente
+    try {
+      setUserPresets((prev) => {
+        // Evita duplicatas por chave
+        const exists = prev.some((p) => p.key === presetObj.key || p.name === presetObj.name);
+        if (exists) return prev.map((p) => (p.key === presetObj.key ? presetObj : p));
+        return [...prev, presetObj];
+      });
+    } catch (e) {
+      // não crítico
+    }
   };
 
   const handleSaveAsPreset = async (name: string) => {
@@ -410,6 +443,57 @@ export default function CustomizacaoTab() {
     presetObj.key = (name || 'custom').toLowerCase().replace(/[^a-z0-9]+/g, '_');
     await persistUserPreset(presetObj);
   };
+
+  // Carregar predefinições do usuário (do campo colors_json)
+  const loadUserPresets = async () => {
+    if (!profile?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('user_theme_colors')
+        .select('colors_json')
+        .eq('user_id', profile.id);
+      if (error) {
+        console.error('Erro ao carregar predefinições do usuário:', error);
+        return;
+      }
+
+      const presets: ThemePreset[] = [];
+      (data || []).forEach((row: any) => {
+        if (row?.colors_json) {
+          try {
+            const json = JSON.parse(row.colors_json);
+            if (Array.isArray(json.presets)) {
+              json.presets.forEach((p: any) => {
+                if (p && p.name) presets.push(p as ThemePreset);
+              });
+            }
+          } catch (e) {
+            // ignora JSON inválido
+          }
+        }
+      });
+
+      // remover duplicatas por key
+      const deduped: ThemePreset[] = [];
+      const seen = new Set<string>();
+      presets.forEach((p) => {
+        const k = p.key || p.name;
+        if (!seen.has(k)) {
+          seen.add(k);
+          deduped.push(p);
+        }
+      });
+
+      setUserPresets(deduped);
+    } catch (err) {
+      console.error('Erro ao carregar predefinições do usuário:', err);
+    }
+  };
+
+  // Carregar ao montar / quando o perfil mudar
+  useEffect(() => {
+    void loadUserPresets();
+  }, [profile?.id]);
 
   return (
     <div className="space-y-6">
@@ -446,10 +530,7 @@ export default function CustomizacaoTab() {
                       <Text className="mb-3 font-medium">Logo Personalizado</Text>
 
                       {/* Nome do Sistema */}
-                      <SystemNameSection
-                        settings={settings}
-                        onFieldChange={handleFieldChange}
-                      />
+                      <SystemNameSection settings={settings} onFieldChange={handleFieldChange} />
 
                       <LogoUploadSection
                         title="Upload de Logo"
@@ -466,8 +547,8 @@ export default function CustomizacaoTab() {
                     <div className="mb-6">
                       <Text className="mb-3 font-medium">Logo da Empresa</Text>
                       <p className="mb-3 text-sm text-gray-600">
-                        Este logo aparecerá ao lado do logo do sistema no cabeçalho para identificação da sua
-                        empresa.
+                        Este logo aparecerá ao lado do logo do sistema no cabeçalho para
+                        identificação da sua empresa.
                       </p>
 
                       <LogoUploadSection
@@ -476,7 +557,9 @@ export default function CustomizacaoTab() {
                         logoUrl={settings.company_logo_url as string}
                         logoScale={(settings.company_logo_scale as number) || 1}
                         onLogoUrlChange={(url) => handleFieldChange('company_logo_url', url)}
-                        onLogoScaleChange={(scale) => handleFieldChange('company_logo_scale', scale)}
+                        onLogoScaleChange={(scale) =>
+                          handleFieldChange('company_logo_scale', scale)
+                        }
                         storagePath="company-logo"
                       />
                     </div>
@@ -490,14 +573,11 @@ export default function CustomizacaoTab() {
                 content: (
                   <div className="space-y-6">
                     {/* Seção de Fonte */}
-                    <FontSettingsSection
-                      settings={settings}
-                      onFieldChange={handleFieldChange}
-                    />
+                    <FontSettingsSection settings={settings} onFieldChange={handleFieldChange} />
 
                     {/* Seção de Predefinições */}
                     <ThemePresetsSection
-                      presets={THEME_PRESETS}
+                      presets={[...THEME_PRESETS, ...userPresets]}
                       onApplyPreset={handleApplyPreset}
                     />
 
@@ -517,10 +597,7 @@ export default function CustomizacaoTab() {
                 content: (
                   <div className="space-y-6">
                     {/* Seção de Footer */}
-                    <FooterSettingsSection
-                      settings={settings}
-                      onFieldChange={handleFieldChange}
-                    />
+                    <FooterSettingsSection settings={settings} onFieldChange={handleFieldChange} />
                   </div>
                 ),
               },
@@ -534,8 +611,12 @@ export default function CustomizacaoTab() {
       {(profile?.role === 'admin' || profile?.role === 'master') && (
         <div className="flex flex-col items-center gap-2">
           <div className="flex items-center gap-3">
-            <Button className="px-6 py-2" onClick={handleSave} disabled={loading}>
-              {loading ? 'Salvando...' : appliedPreset ? `Salvar Predefinição "${appliedPreset.name}"` : 'Salvar Customização'}
+            <Button className="px-6 py-2" onClick={handleSave} disabled={loading || authLoading}>
+              {loading || authLoading
+                ? 'Salvando...'
+                : appliedPreset
+                  ? `Salvar Predefinição "${appliedPreset.name}"`
+                  : 'Salvar Customização'}
             </Button>
 
             <Button

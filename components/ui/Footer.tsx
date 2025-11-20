@@ -21,7 +21,7 @@ const Footer: React.FC<FooterProps> = ({
     <footer
       className="border-t px-6 py-4 fixed bottom-0 left-0 z-40 w-full flex justify-center"
       style={{
-        background: 'var(--secondary)',
+        background: 'var(--footer-bg, var(--secondary))',
         borderColor: 'var(--primary)',
       }}
     >

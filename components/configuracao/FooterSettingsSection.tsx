@@ -10,16 +10,14 @@ export function FooterSettingsSection({ settings, onFieldChange }: FooterSetting
     <div className="mb-6">
       <Text className="mb-3 font-medium">Configurações do Footer</Text>
       <p className="mb-3 text-sm text-gray-600">
-        Personalize as informações exibidas no rodapé do sistema para suporte técnico e
-        conformidade legal.
+        Personalize as informações exibidas no rodapé do sistema para suporte técnico e conformidade
+        legal.
       </p>
 
       <div className="space-y-4 rounded-lg border bg-gray-50 p-4 dark:bg-gray-800 dark:border-gray-700">
         {/* Nome da Empresa para Copyright */}
         <div>
-          <label className="mb-2 block text-sm font-medium">
-            Nome da Empresa (Copyright)
-          </label>
+          <label className="mb-2 block text-sm font-medium">Nome da Empresa (Copyright)</label>
           <input
             type="text"
             value={(settings.footer_company_name as string) || 'Eduardo Saba'}

@@ -54,6 +54,8 @@ export interface ThemeColors {
   sidebar_active_text: string;
   // Fundo do cabeçalho quando configurável por modo
   header_bg: string;
+  // Fundo do footer (opcional)
+  footer_bg?: string;
   // Configurações de logo para usuários admin
   logo_url?: string;
   logo_scale?: number;
@@ -79,6 +81,7 @@ export interface ThemeSettings {
   sidebar_text?: string;
   sidebar_active_text?: string;
   header_bg?: string;
+  footer_bg?: string;
   colors: {
     light: ThemeColors;
     dark: ThemeColors;

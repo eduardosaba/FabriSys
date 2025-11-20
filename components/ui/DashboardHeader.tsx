@@ -214,7 +214,7 @@ export default function DashboardHeader() {
   return (
     <header
       className="flex h-16 items-center justify-between border-b px-6"
-      style={{ background: 'var(--secondary)', borderColor: 'var(--primary)' }}
+      style={{ background: 'var(--header-bg, var(--secondary))', borderColor: 'var(--primary)' }}
     >
       {/* Menu Mobile */}
       <button
@@ -248,6 +248,7 @@ export default function DashboardHeader() {
               height={32 * (theme.logo_scale || 1)}
               sizes={`${32 * (theme.logo_scale || 1)}px`}
               className="rounded-md object-contain"
+              style={{ width: 'auto', height: 'auto' }}
               loading="eager"
             />
           )}

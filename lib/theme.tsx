@@ -215,20 +215,41 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       // caso contrário usar valores top-level como fallback.
       root.style.setProperty(
         '--sidebar-bg',
-        (colors as Partial<ThemeColors>).sidebar_bg || themeToApply.sidebar_bg || '#e9c4c2'
+        (colors as Partial<ThemeColors>).sidebar_bg ||
+          themeToApply.sidebar_bg ||
+          colors.secondary ||
+          '#e9c4c2'
       );
       root.style.setProperty(
         '--sidebar-hover-bg',
-        (colors as Partial<ThemeColors>).sidebar_hover_bg || themeToApply.sidebar_hover_bg || '#88544c'
+        (colors as Partial<ThemeColors>).sidebar_hover_bg ||
+          themeToApply.sidebar_hover_bg ||
+          '#88544c'
       );
-      root.style.setProperty('--header-bg', (colors as Partial<ThemeColors>).header_bg || themeToApply.header_bg || '#e9c4c2');
+      root.style.setProperty(
+        '--header-bg',
+        (colors as Partial<ThemeColors>).header_bg ||
+          themeToApply.header_bg ||
+          colors.secondary ||
+          '#e9c4c2'
+      );
+      // Footer background: por padrão usar a cor secundária para consistência
+      root.style.setProperty(
+        '--footer-bg',
+        (colors as Partial<ThemeColors>).footer_bg ||
+          themeToApply.footer_bg ||
+          colors.secondary ||
+          '#e9c4c2'
+      );
       root.style.setProperty(
         '--sidebar-text',
         (colors as Partial<ThemeColors>).sidebar_text || themeToApply.sidebar_text || '#4a2c2b'
       );
       root.style.setProperty(
         '--sidebar-active-text',
-        (colors as Partial<ThemeColors>).sidebar_active_text || themeToApply.sidebar_active_text || '#88544c'
+        (colors as Partial<ThemeColors>).sidebar_active_text ||
+          themeToApply.sidebar_active_text ||
+          '#88544c'
       );
     },
     [resolvedTheme]
@@ -302,7 +323,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             company_logo_url: colors.company_logo_url,
             company_logo_scale: colors.company_logo_scale ?? 1.0,
             font_family: colors.font_family ?? 'Inter',
-            sidebar_bg: colors.sidebar_bg ?? '#e8e8e8',
+            sidebar_bg: colors.sidebar_bg ?? colors.secondary ?? '#e8e8e8',
             sidebar_hover_bg: colors.sidebar_hover_bg ?? '#88544c',
             sidebar_text: colors.sidebar_text ?? '#4a2c2b',
             sidebar_active_text: colors.sidebar_active_text ?? '#88544c',
@@ -324,7 +345,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             company_logo_url: colors.company_logo_url,
             company_logo_scale: colors.company_logo_scale ?? 1.0,
             font_family: colors.font_family ?? 'Inter',
-            sidebar_bg: colors.sidebar_bg ?? '#e8e8e8',
+            sidebar_bg: colors.sidebar_bg ?? colors.secondary ?? '#e8e8e8',
             sidebar_hover_bg: colors.sidebar_hover_bg ?? '#88544c',
             sidebar_text: colors.sidebar_text ?? '#4a2c2b',
             sidebar_active_text: colors.sidebar_active_text ?? '#88544c',
@@ -347,6 +368,53 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       try {
         setLoading(true);
         let updatedTheme = { ...theme, ...newTheme };
+
+        // Se a atualização inclui alteração da cor `secondary` para o modo ativo,
+        // e não especifica `sidebar_bg`/`header_bg`, propagar `secondary` para esses campos.
+        try {
+          const mode = (newTheme.theme_mode ||
+            updatedTheme.theme_mode) as keyof typeof updatedTheme.colors;
+          const incomingModeColors = newTheme.colors && (newTheme.colors as any)[mode];
+          const incomingHasSecondary = !!(incomingModeColors && incomingModeColors.secondary);
+
+          if (incomingHasSecondary) {
+            const newSecondary = incomingModeColors.secondary as string;
+
+            const incomingHasSidebarBg =
+              !!(incomingModeColors && 'sidebar_bg' in incomingModeColors) ||
+              'sidebar_bg' in newTheme;
+            const incomingHasHeaderBg =
+              !!(incomingModeColors && 'header_bg' in incomingModeColors) ||
+              'header_bg' in newTheme;
+
+            if (!incomingHasSidebarBg || !incomingHasHeaderBg) {
+              const prevColorsForMode =
+                (updatedTheme.colors && (updatedTheme.colors as any)[mode]) || {};
+              const merged = {
+                ...prevColorsForMode,
+                ...(incomingModeColors || {}),
+              };
+
+              if (!incomingHasSidebarBg) merged.sidebar_bg = newSecondary;
+              if (!incomingHasHeaderBg) merged.header_bg = newSecondary;
+
+              updatedTheme = {
+                ...updatedTheme,
+                colors: {
+                  ...(updatedTheme.colors || {}),
+                  [mode]: merged,
+                },
+              };
+
+              // Também ajustar top-level fields se o caller não forneceu
+              if (!('sidebar_bg' in newTheme)) updatedTheme.sidebar_bg = newSecondary;
+              if (!('header_bg' in newTheme)) updatedTheme.header_bg = newSecondary;
+            }
+          }
+        } catch (propErr) {
+          // Não bloquear a atualização por erro nesta lógica
+          console.warn('Erro ao propagar secondary para sidebar/header:', propErr);
+        }
 
         // Se apenas o theme_mode está sendo alterado, tentar aplicar cores customizadas do usuário
         if (newTheme.theme_mode && newTheme.theme_mode !== 'system' && !newTheme.colors && userId) {

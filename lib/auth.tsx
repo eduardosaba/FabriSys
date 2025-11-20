@@ -50,12 +50,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void getInitialSession();
 
-    // Timeout de segurança para evitar loading infinito
+    // Timeout de segurança para evitar loading infinito.
+    // Usa atualização funcional para consultar o estado mais recente de `loading`
+    // sem precisar adicionar `loading` ao array de dependências do efeito.
     const _timeout = setTimeout(() => {
-      if (loading) {
-        console.warn('Timeout de loading excedido, forçando fim do loading');
-        setLoading(false);
-      }
+      setLoading((prev) => {
+        if (prev) {
+          console.warn('Timeout de loading excedido, forçando fim do loading');
+          return false;
+        }
+        return prev;
+      });
     }, 5000); // 5 segundos
 
     // Escutar mudanças de auth
@@ -78,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription?.unsubscribe?.();
       clearTimeout(_timeout);
     };
-  }, [loading]);
+  }, []);
 
   const fetchProfile = async (userId: string) => {
     try {

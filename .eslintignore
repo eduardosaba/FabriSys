@@ -1,0 +1,5 @@
+# Ignore project helper scripts that use CJS/require and are not part of runtime
+scripts/
+
+# Ignore generated images
+public/*.png

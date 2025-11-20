@@ -16,7 +16,7 @@ interface TabsProps {
 export function Tabs({ tabs, defaultActiveTab, className = '' }: TabsProps) {
   const [activeTab, setActiveTab] = useState(defaultActiveTab || tabs[0]?.id || '');
 
-  const activeTabContent = tabs.find(tab => tab.id === activeTab)?.content;
+  const activeTabContent = tabs.find((tab) => tab.id === activeTab)?.content;
 
   return (
     <div className={`w-full ${className}`}>
@@ -41,9 +41,7 @@ export function Tabs({ tabs, defaultActiveTab, className = '' }: TabsProps) {
       </div>
 
       {/* Tab Content */}
-      <div className="min-h-0">
-        {activeTabContent}
-      </div>
+      <div className="min-h-0">{activeTabContent}</div>
     </div>
   );
 }

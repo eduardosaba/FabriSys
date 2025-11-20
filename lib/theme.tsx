@@ -71,6 +71,13 @@ const defaultTheme: ThemeSettings = {
       barraSuperiorMenu: '#88544c',
       textoIconeAjuda: '#374151',
       iconeAjuda: '#88544c',
+      // Propriedades do sidebar (valores padrão para manter compatibilidade com ThemeColors)
+      sidebar_bg: '#e8e8e8',
+      sidebar_hover_bg: '#88544c',
+      sidebar_text: '#4a2c2b',
+      sidebar_active_text: '#88544c',
+      // Fundo do cabeçalho (modo claro)
+      header_bg: '#e9c4c2',
     },
     dark: {
       primary: '#e9c4c2', // Rosa Claro - Destaque em fundo escuro
@@ -107,6 +114,13 @@ const defaultTheme: ThemeSettings = {
       barraSuperiorMenu: '#88544c',
       textoIconeAjuda: '#9ca3af',
       iconeAjuda: '#e9c4c2',
+      // Propriedades do sidebar (valores padrão para manter compatibilidade com ThemeColors)
+      sidebar_bg: '#4a2c2b',
+      sidebar_hover_bg: '#88544c',
+      sidebar_text: '#f2e8e3',
+      sidebar_active_text: '#e9c4c2',
+      // Fundo do cabeçalho (modo escuro)
+      header_bg: '#88544c',
     },
   },
 };
@@ -197,9 +211,25 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         '--company-logo-scale',
         (themeToApply.company_logo_scale ?? 1.0).toString()
       );
-      root.style.setProperty('--sidebar-bg', themeToApply.sidebar_bg || '#e9c4c2');
-      root.style.setProperty('--sidebar-hover-bg', themeToApply.sidebar_hover_bg || '#88544c');
-      root.style.setProperty('--header-bg', themeToApply.header_bg || '#e9c4c2');
+      // Preferir cores específicas do modo (light/dark) quando disponíveis,
+      // caso contrário usar valores top-level como fallback.
+      root.style.setProperty(
+        '--sidebar-bg',
+        (colors as Partial<ThemeColors>).sidebar_bg || themeToApply.sidebar_bg || '#e9c4c2'
+      );
+      root.style.setProperty(
+        '--sidebar-hover-bg',
+        (colors as Partial<ThemeColors>).sidebar_hover_bg || themeToApply.sidebar_hover_bg || '#88544c'
+      );
+      root.style.setProperty('--header-bg', (colors as Partial<ThemeColors>).header_bg || themeToApply.header_bg || '#e9c4c2');
+      root.style.setProperty(
+        '--sidebar-text',
+        (colors as Partial<ThemeColors>).sidebar_text || themeToApply.sidebar_text || '#4a2c2b'
+      );
+      root.style.setProperty(
+        '--sidebar-active-text',
+        (colors as Partial<ThemeColors>).sidebar_active_text || themeToApply.sidebar_active_text || '#88544c'
+      );
     },
     [resolvedTheme]
   );
@@ -221,7 +251,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const { data, error } = await supabase
           .from('user_theme_colors')
           .select(
-            'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family'
+            'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family, sidebar_bg, sidebar_hover_bg, sidebar_text, sidebar_active_text'
           )
           .eq('user_id', userId)
           .eq('theme_mode', resolvedTheme)
@@ -242,6 +272,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             company_logo_url: data.company_logo_url as string,
             company_logo_scale: data.company_logo_scale as number,
             font_family: data.font_family as string,
+            sidebar_bg: data.sidebar_bg as string,
+            sidebar_hover_bg: data.sidebar_hover_bg as string,
+            sidebar_text: data.sidebar_text as string,
+            sidebar_active_text: data.sidebar_active_text as string,
           };
         }
 
@@ -268,6 +302,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             company_logo_url: colors.company_logo_url,
             company_logo_scale: colors.company_logo_scale ?? 1.0,
             font_family: colors.font_family ?? 'Inter',
+            sidebar_bg: colors.sidebar_bg ?? '#e8e8e8',
+            sidebar_hover_bg: colors.sidebar_hover_bg ?? '#88544c',
+            sidebar_text: colors.sidebar_text ?? '#4a2c2b',
+            sidebar_active_text: colors.sidebar_active_text ?? '#88544c',
             updated_at: new Date().toISOString(),
           })
           .eq('user_id', userId)
@@ -286,6 +324,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             company_logo_url: colors.company_logo_url,
             company_logo_scale: colors.company_logo_scale ?? 1.0,
             font_family: colors.font_family ?? 'Inter',
+            sidebar_bg: colors.sidebar_bg ?? '#e8e8e8',
+            sidebar_hover_bg: colors.sidebar_hover_bg ?? '#88544c',
+            sidebar_text: colors.sidebar_text ?? '#4a2c2b',
+            sidebar_active_text: colors.sidebar_active_text ?? '#88544c',
           });
 
           if (insertError) throw insertError;
@@ -353,6 +395,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             company_logo_scale:
               newTheme.company_logo_scale ?? updatedTheme.company_logo_scale ?? 1.0,
             font_family: newTheme.font_family || updatedTheme.font_family,
+            sidebar_bg: newTheme.sidebar_bg || updatedTheme.sidebar_bg,
+            sidebar_hover_bg: newTheme.sidebar_hover_bg || updatedTheme.sidebar_hover_bg,
+            sidebar_text: newTheme.sidebar_text || updatedTheme.sidebar_text,
+            sidebar_active_text: newTheme.sidebar_active_text || updatedTheme.sidebar_active_text,
           };
 
           if (colorsToSave) {

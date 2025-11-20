@@ -47,6 +47,13 @@ export interface ThemeColors {
   barraSuperiorMenu: string;
   textoIconeAjuda: string;
   iconeAjuda: string;
+  // Propriedades do sidebar
+  sidebar_bg: string;
+  sidebar_hover_bg: string;
+  sidebar_text: string;
+  sidebar_active_text: string;
+  // Fundo do cabeçalho quando configurável por modo
+  header_bg: string;
   // Configurações de logo para usuários admin
   logo_url?: string;
   logo_scale?: number;
@@ -69,6 +76,8 @@ export interface ThemeSettings {
   footer_system_version?: string;
   sidebar_bg?: string;
   sidebar_hover_bg?: string;
+  sidebar_text?: string;
+  sidebar_active_text?: string;
   header_bg?: string;
   colors: {
     light: ThemeColors;

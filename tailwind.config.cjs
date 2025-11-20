@@ -72,7 +72,7 @@ const config = {
         'overlay-mobile': 'rgba(0, 0, 0, 0.7)', // Overlay mais escuro
         'sidebar-active-bg': '#88544c',         // Caramelo (Fundo do item ativo)
         'sidebar-active-text': '#f2e8e3',       // Branco Suave (Texto do item ativo)
-        'sidebar-bg': '#e8e8e8',                // Fundo fixo da Sidebar
+        'sidebar-bg': '#e9c4c2',                // Fundo fixo da Sidebar
         'sidebar-hover-bg': '#88544c',          // Hover fixo da Sidebar
         'header-bg': '#e9c4c2',                 // Fundo fixo do Header
     

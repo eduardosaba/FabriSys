@@ -73,6 +73,20 @@ export default function NovaFichaTecnicaPage() {
       console.log('📧 Email:', user?.email);
       console.log('🍰 Rendimento:', rendimento, 'unidades');
 
+      // Gerar nome da ficha técnica: FT + nome do produto
+      const nomeFichaTecnica = produtoAtual ? `FT ${produtoAtual.nome}` : '';
+      // Gerar slug do nome
+      function slugify(str: string) {
+        return str
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '') // remove acentos
+          .replace(/[^a-z0-9]+/g, '-') // troca por hífen
+          .replace(/^-+|-+$/g, '') // remove hífens do início/fim
+          .replace(/-+/g, '-'); // hífens únicos
+      }
+      const slugFichaTecnica = nomeFichaTecnica ? slugify(nomeFichaTecnica) : '';
+
       // Inserir nova ficha técnica
       const novaFichaTecnica = insumos
         .filter((insumo) => insumo.insumoId) // Apenas insumos com ID válido
@@ -87,47 +101,48 @@ export default function NovaFichaTecnicaPage() {
           versao: 1,
           ativo: true,
           created_by: user?.id,
+          nome: nomeFichaTecnica,
+          slug: slugFichaTecnica,
         }));
 
       console.log('🔍 Dados a serem inseridos:', novaFichaTecnica);
       console.log('📦 Total de insumos:', novaFichaTecnica.length);
       console.log('📋 Detalhes dos insumos:', JSON.stringify(novaFichaTecnica, null, 2));
 
-      console.log('🚀 Iniciando INSERT na tabela fichas_tecnicas...');
-
+      console.log('Antes do insert');
       const { data: insertData, error: insertError } = await supabase
         .from('fichas_tecnicas')
         .insert(novaFichaTecnica)
         .select();
-
-      console.log('📡 Resposta do INSERT:', { data: insertData, error: insertError });
+      console.log('Depois do insert', { insertData, insertError });
 
       if (insertError) {
-        console.error('❌ Erro detalhado:', insertError);
-        console.error('❌ Código:', insertError.code);
-        console.error('❌ Mensagem:', insertError.message);
-        console.error('❌ Detalhes:', insertError.details);
-        console.error('❌ Hint:', insertError.hint);
+        console.error('❌ Erro detalhado no INSERT:', JSON.stringify(insertError, null, 2));
+        console.error('❌ Dados enviados:', JSON.stringify(novaFichaTecnica, null, 2));
         throw insertError;
       }
 
       console.log('✅ Fichas criadas:', insertData);
 
       // Atualizar preço de venda do produto
+      console.log('Antes do update do preço');
       const { error: updateError } = await supabase
         .from('produtos_finais')
         .update({ preco_venda: precoVenda })
         .eq('id', produtoSelecionado);
+      console.log('Depois do update do preço', { updateError });
 
       if (updateError) {
-        console.error('❌ Erro ao atualizar preço:', updateError);
+        console.error('❌ Erro ao atualizar preço:', JSON.stringify(updateError, null, 2));
         throw updateError;
       }
 
       alert('Ficha técnica criada com sucesso!');
+      console.log('Antes do router.push');
       router.push('/dashboard/producao/fichas-tecnicas');
+      console.log('Depois do router.push');
     } catch (error) {
-      console.error('❌ Erro ao criar ficha técnica:', error);
+      console.error('❌ Erro ao criar ficha técnica:', JSON.stringify(error, null, 2));
       alert(
         `Erro ao criar ficha técnica: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
       );

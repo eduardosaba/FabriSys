@@ -74,21 +74,7 @@
 
 /* Aplica cores do 🌙 tema escuro quando a classe .dark estiver presente */
 .dark {
-  --background: var(--dark-background, #0a0a0a);
-  --foreground: var(--dark-text, #ededed);
-  --primary: var(--dark-primary, #a2a6ac);
-  --secondary: var(--dark-secondary, #6366f1);
-  --accent: var(--dark-accent, #f97316);
-
-  /* Cores dos gráficos */
-  --color-1: #3b82f6;
-  --color-2: #22c55e;
-  --color-3: #ef4444;
-  --color-4: #a855f7;
-  --color-5: #f97316;
-  --color-6: #14b8a6;
-  --color-7: #e11d48;
-  --color-8: #6366f1;
+  /* As variáveis do tema escuro serão definidas dinamicamente via JS conforme o tema customizado */
 }
 
 body {

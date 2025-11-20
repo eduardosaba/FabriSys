@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useFichaTecnica } from '@/hooks/useFichaTecnica';
 import type { InsumoFicha } from '@/lib/types/ficha-tecnica';
+import type { FichaTecnica } from '@/lib/types/producao';
 import { supabase } from '@/lib/supabase';
 import { Trash2, Plus, Search, DollarSign, Package } from 'lucide-react';
 
@@ -11,6 +12,8 @@ interface FichaTecnicaEditorProps {
   nomeProduto: string;
   precoVenda: number;
   onSave: (insumos: InsumoFicha[], precoVenda: number, rendimento: number) => Promise<void>;
+  ficha?: FichaTecnica;
+  modoEdicao?: boolean;
 }
 
 interface InsumoEstoque {
@@ -30,6 +33,8 @@ export function FichaTecnicaEditor({
   nomeProduto,
   precoVenda: initialPrecoVenda,
   onSave,
+  ficha,
+  modoEdicao = false,
 }: FichaTecnicaEditorProps) {
   const {
     insumos,

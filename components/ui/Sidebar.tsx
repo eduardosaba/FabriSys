@@ -112,20 +112,22 @@ export default function Sidebar() {
       )}
 
       <div
-        className={`
-          fixed inset-y-0 left-0 z-50
-          flex flex-col
-          border-r transition-all duration-300
-          ease-in-out lg:translate-x-0
-          ${isCollapsed ? 'w-20 -translate-x-full' : 'w-64 translate-x-0'}
-        `}
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r transition-all duration-300 ease-in-out lg:translate-x-0 ${isCollapsed ? 'w-20 -translate-x-full' : 'w-64 translate-x-0'}`}
         style={{
-          background: 'var(--secondary)',
+          background: 'var(--sidebar-bg)',
           borderColor: 'var(--primary)',
+          color: 'var(--sidebar-text)',
         }}
       >
         {/* Header */}
-        <div className="flex flex-col border-b px-4 py-4" style={{ borderColor: 'var(--primary)' }}>
+        <div
+          className="flex flex-col border-b px-4 py-4"
+          style={{
+            borderColor: 'var(--primary)',
+            background: 'var(--sidebar-bg)',
+            color: 'var(--sidebar-text)',
+          }}
+        >
           <div className="mb-4 flex items-center justify-between">
             <div className="flex flex-1 justify-center">
               <div className="flex items-center gap-2">
@@ -154,7 +156,10 @@ export default function Sidebar() {
                 {/* Fallback quando não há logo da empresa */}
                 {(!theme?.company_logo_url || isCollapsed) && !loading && (
                   <div className="text-center">
-                    <span className="block truncate text-sm font-semibold text-gray-800 dark:text-white">
+                    <span
+                      className="block truncate text-sm font-semibold"
+                      style={{ color: 'var(--sidebar-active-text)' }}
+                    >
                       {theme?.name || 'SysLari'}
                     </span>
                   </div>
@@ -187,7 +192,10 @@ export default function Sidebar() {
           </div>
           {!isCollapsed && !loading && !theme?.company_logo_url && (
             <div className="text-center">
-              <span className="block truncate text-sm font-semibold text-gray-800 dark:text-white">
+              <span
+                className="block truncate text-sm font-semibold"
+                style={{ color: 'var(--sidebar-active-text)' }}
+              >
                 {theme?.name || 'SysLari'}
               </span>
             </div>
@@ -196,9 +204,19 @@ export default function Sidebar() {
 
         {/* Favoritos */}
         {pinnedPages.length > 0 && (
-          <div className="border-b border-gray-200 px-4 py-2 dark:border-gray-700">
+          <div
+            className="border-b px-4 py-2"
+            style={{
+              borderColor: 'var(--sidebar-hover-bg)',
+              background: 'var(--sidebar-bg)',
+              color: 'var(--sidebar-text)',
+            }}
+          >
             {!isCollapsed && (
-              <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              <h3
+                className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider"
+                style={{ color: 'var(--sidebar-active-text)' }}
+              >
                 <Star className="h-3 w-3" />
                 Favoritos
               </h3>
@@ -218,20 +236,16 @@ export default function Sidebar() {
                   <Link
                     key={`fav-${displayHref}`}
                     href={displayHref}
-                    className={`
-                      flex items-center rounded-md p-2
-                      transition-all duration-200
-                      ${!isCollapsed ? 'space-x-2' : 'w-full justify-center'}
-                      ${
-                        isActive(displayHref)
-                          ? 'bg-sidebar-active-bg text-sidebar-active-text dark:bg-indigo-900/50 dark:text-indigo-400'
-                          : 'text-gray-600 hover:bg-sidebar-hover dark:text-gray-300 dark:hover:bg-gray-800'
-                      }
-                    `}
+                    className={`flex items-center rounded-md p-2 transition-all duration-200 ${!isCollapsed ? 'space-x-2' : 'w-full justify-center'}`}
+                    style={{ color: 'var(--sidebar-active-text)' }}
                     title={isCollapsed ? displayItem.name : undefined}
                   >
                     {item.icon}
-                    {!isCollapsed && <span className="truncate">{displayItem.name}</span>}
+                    {!isCollapsed && (
+                      <span className="truncate" style={{ color: 'var(--sidebar-active-text)' }}>
+                        {displayItem.name}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -245,16 +259,18 @@ export default function Sidebar() {
             {sidebarItems.map((item) => (
               <li key={item.name}>
                 <div
-                  className={`group relative flex items-center rounded-md p-2 transition-all duration-200 ${
-                    isActive(item.href) || isSubmenuActive(item)
-                      ? 'text-sidebar-active-text dark:text-indigo-400'
-                      : 'text-gray-700 dark:text-gray-300'
-                  }`}
-                  style={
-                    isActive(item.href) || isSubmenuActive(item)
-                      ? { background: 'var(--primary)' }
-                      : { transition: 'background 0.2s' }
-                  }
+                  className={`group relative flex items-center rounded-md p-2 transition-all duration-200`}
+                  style={{
+                    color:
+                      isActive(item.href) || isSubmenuActive(item)
+                        ? 'var(--sidebar-active-text)'
+                        : 'var(--sidebar-text)',
+                    background:
+                      isActive(item.href) || isSubmenuActive(item)
+                        ? 'var(--sidebar-hover-bg)'
+                        : 'var(--sidebar-bg)',
+                    transition: 'background 0.2s',
+                  }}
                   onMouseEnter={(e) => {
                     if (!isActive(item.href) && !isSubmenuActive(item)) {
                       (e.currentTarget as HTMLElement).style.background = 'var(--primary)';
@@ -269,8 +285,8 @@ export default function Sidebar() {
                   <Link
                     href={item.href}
                     className={`flex flex-1 items-center ${!isCollapsed ? 'space-x-2' : 'justify-center'}`}
+                    style={{ color: 'var(--sidebar-active-text)' }}
                     onClick={() => {
-                      // Se houver filhos, apenas abre/fecha o submenu sem prevenir navegação
                       if (item.children) {
                         toggleSubmenu(item.name);
                       }
@@ -280,13 +296,10 @@ export default function Sidebar() {
                     {item.icon}
                     {!isCollapsed && (
                       <>
-                        <span>{item.name}</span>
+                        <span style={{ color: 'var(--sidebar-active-text)' }}>{item.name}</span>
                         {item.children && (
                           <ChevronRight
-                            className={`
-                              ml-auto h-4 w-4 transition-transform
-                              ${openSubmenu === item.name ? 'rotate-90' : ''}
-                            `}
+                            className={`ml-auto h-4 w-4 transition-transform ${openSubmenu === item.name ? 'rotate-90' : ''}`}
                           />
                         )}
                       </>
@@ -353,14 +366,15 @@ export default function Sidebar() {
                     {item.children.map((child) => (
                       <li key={child.name}>
                         <div
-                          className={`group flex items-center rounded-md p-2 pl-4 ${
-                            isActive(child.href)
-                              ? 'text-sidebar-active-text dark:text-indigo-400'
-                              : 'text-gray-600 dark:text-gray-400'
-                          }`}
-                          style={
-                            isActive(child.href) ? { background: 'var(--primary)' } : undefined
-                          }
+                          className={`group flex items-center rounded-md p-2 pl-4`}
+                          style={{
+                            color: isActive(child.href)
+                              ? 'var(--sidebar-active-text)'
+                              : 'var(--sidebar-text)',
+                            background: isActive(child.href)
+                              ? 'var(--sidebar-hover-bg)'
+                              : 'var(--sidebar-bg)',
+                          }}
                           onMouseEnter={(e) => {
                             if (!isActive(child.href)) {
                               const color = getPrimaryWithOpacity(theme, 0.8);
@@ -375,7 +389,15 @@ export default function Sidebar() {
                             }
                           }}
                         >
-                          <Link href={child.href} className="flex-1">
+                          <Link
+                            href={child.href}
+                            className="flex-1"
+                            style={{
+                              color: isActive(child.href)
+                                ? 'var(--sidebar-active-text)'
+                                : 'var(--sidebar-text)',
+                            }}
+                          >
                             {child.name}
                           </Link>
                           <button
@@ -425,10 +447,11 @@ export default function Sidebar() {
                           <div className="flex items-center justify-between">
                             <Link
                               href={child.href}
-                              className={`flex-1 px-4 py-2 ${isActive(child.href) ? 'text-sidebar-active-text dark:text-indigo-400' : 'text-gray-600 dark:text-gray-400'}`}
-                              style={
-                                isActive(child.href) ? { background: 'var(--primary)' } : undefined
-                              }
+                              className={`flex-1 px-4 py-2`}
+                              style={{
+                                color: 'var(--sidebar-active-text)',
+                                background: isActive(child.href) ? 'var(--primary)' : undefined,
+                              }}
                               onMouseEnter={(e) => {
                                 if (!isActive(child.href)) {
                                   const color = getPrimaryWithOpacity(theme, 0.8);

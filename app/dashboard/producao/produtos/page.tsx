@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { ProdutoFinal } from '@/lib/types/producao';
 import ListaProdutos from '@/components/producao/ListaProdutos';
 import Loading from '@/components/ui/Loading';
+import { useRouter } from 'next/navigation';
 
 export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<ProdutoFinal[]>([]);
@@ -41,6 +42,7 @@ export default function ProdutosPage() {
     void loadProdutos();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const router = useRouter();
   if (loading)
     return (
       <Loading
@@ -57,7 +59,7 @@ export default function ProdutosPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <PageHeader title="Produto Final" description="Gerenciamento de produtos finais" icon={Box}>
-        <Button onClick={() => (window.location.href = '/dashboard/producao/produtos/novo')}>
+        <Button onClick={() => router.push('/dashboard/producao/produtos/novo')}>
           <Plus className="mr-2 h-4 w-4" />
           Novo Produto Final
         </Button>

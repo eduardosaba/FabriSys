@@ -68,18 +68,18 @@ BEGIN
     DROP POLICY IF EXISTS "Admin tem acesso total" ON fichas_tecnicas;
     DROP POLICY IF EXISTS "Fábrica pode visualizar fichas técnicas ativas" ON fichas_tecnicas;
     
-    CREATE POLICY ''Admin tem acesso total''
+    CREATE POLICY "Admin tem acesso total"
       ON fichas_tecnicas
       FOR ALL
       TO authenticated
-      USING (auth.jwt() ->> ''role'' = ''admin'');
+      USING (auth.jwt() ->> 'role' = 'admin');
 
-    CREATE POLICY ''Fábrica pode visualizar fichas técnicas ativas''
+    CREATE POLICY "Fábrica pode visualizar fichas técnicas ativas"
       ON fichas_tecnicas
       FOR SELECT
       TO authenticated
       USING (
-        auth.jwt() ->> ''role'' IN (''admin'', ''fabrica'') 
+        auth.jwt() ->> 'role' IN ('admin', 'fabrica') 
         AND ativo = true
       );
 

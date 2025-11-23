@@ -24,6 +24,13 @@ export const produtoFinalSchema = z.object({
   ),
   codigo_interno: z.preprocess((val) => (val === '' ? null : val), z.string().nullable()),
   tipo: z.enum(['final', 'semi_acabado']).default('final'),
+  peso_unitario: z.number().optional(),
+  categoria_id: z.preprocess((val) => {
+    // aceitar string vazia => null, string numérica => number, ou number direto
+    if (val === '') return null;
+    if (typeof val === 'string' && /^\d+$/.test(val)) return parseInt(val, 10);
+    return val;
+  }, z.number().int().nullable().optional()),
   created_at: z.string().datetime().optional(),
   updated_at: z.string().datetime().optional(),
 });

@@ -82,3 +82,66 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+/* Utilitários de botão primário que usam variáveis de tema definidas pelo ThemeProvider */
+.btn-primary {
+  background: var(--primary);
+  color: inherit;
+  border-radius: var(--radius);
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    filter 200ms ease;
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+.btn-primary:disabled {
+  background: var(--primary);
+  color: var(--botao-salvar-ativo);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Botão secundário (aparência leve, usa cores do tema quando aplicável) */
+.btn-secondary {
+  /* agora usa mesma cor do primary conforme solicitado */
+  background: var(--primary);
+  color: var(--botao-salvar-ativo);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    filter 200ms ease;
+}
+.btn-secondary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+.btn-secondary:disabled {
+  background: var(--primary);
+  color: var(--botao-salvar-ativo);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Botão cancelar - usa variáveis de tema específicas para botão de cancelar */
+.btn-cancel {
+  background: var(--botao-cancelar, #ef4444);
+  color: #fff;
+  border-radius: var(--radius);
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    filter 200ms ease;
+}
+.btn-cancel:hover:not(:disabled) {
+  background: var(--botao-cancelar-ativo, #f87171);
+  filter: brightness(1.03);
+}
+.btn-cancel:disabled {
+  background: var(--botao-cancelar-desabilitado, #9ca3af);
+  color: #fff;
+  cursor: not-allowed;
+  opacity: 0.8;
+}

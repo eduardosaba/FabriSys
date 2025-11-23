@@ -1,11 +1,24 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import util from 'util';
 import {
   PedidoCompraSchema,
   PedidoCompraDetalhadoArraySchema,
   PedidoCompraDetalhadoSchema,
 } from '@/lib/validations/pedidos';
+
+// Helper para extrair mensagem de erro de forma segura
+function getErrorMessage(err: unknown) {
+  if (!err) return 'Erro desconhecido';
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
 
 function getSupabase() {
   return createClient(
@@ -68,8 +81,25 @@ export async function POST(request: Request) {
 
     return NextResponse.json(pedidoParsed, { status: 201 });
   } catch (error) {
-    console.error('[POST /api/pedidos] Erro ao criar pedido:', error);
-    return NextResponse.json({ error: 'Erro ao criar pedido' }, { status: 500 });
+    // Erros de validação do Zod devem retornar 400 com detalhes úteis para debug
+    if (error instanceof z.ZodError) {
+      console.error('[POST /api/pedidos] Validação falhou:', error.errors);
+      return NextResponse.json(
+        { error: 'Payload inválido', details: error.errors },
+        { status: 400 }
+      );
+    }
+
+    // Log mais detalhado para objetos de erro não-Error
+    if (error instanceof Error) {
+      console.error('[POST /api/pedidos] Erro ao criar pedido:', error.stack || error.message);
+    } else {
+      console.error('[POST /api/pedidos] Erro não-Error:', util.inspect(error, { depth: null }));
+    }
+    return NextResponse.json(
+      { error: getErrorMessage(error) || 'Erro ao criar pedido' },
+      { status: 500 }
+    );
   }
 }
 
@@ -156,8 +186,14 @@ export async function GET(request: Request) {
     console.log('[GET /api/pedidos] Pedidos validados:', parsed);
     return NextResponse.json(parsed);
   } catch (error) {
-    console.error('[GET /api/pedidos] Erro ao listar pedidos:', error);
-    return NextResponse.json({ error: 'Erro ao listar pedidos' }, { status: 500 });
+    console.error(
+      '[GET /api/pedidos] Erro ao listar pedidos:',
+      util.inspect(error, { depth: null })
+    );
+    return NextResponse.json(
+      { error: getErrorMessage(error) || 'Erro ao listar pedidos' },
+      { status: 500 }
+    );
   }
 }
 
@@ -245,8 +281,11 @@ export async function PATCH(request: Request) {
     const parsed = PedidoCompraSchema.parse(r4.data);
     return NextResponse.json(parsed);
   } catch (error) {
-    console.error('Erro ao atualizar status:', error);
-    return NextResponse.json({ error: 'Erro ao atualizar status' }, { status: 500 });
+    console.error('Erro ao atualizar status:', util.inspect(error, { depth: null }));
+    return NextResponse.json(
+      { error: getErrorMessage(error) || 'Erro ao atualizar status' },
+      { status: 500 }
+    );
   }
 }
 
@@ -262,7 +301,10 @@ export async function DELETE(request: Request) {
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {
-    console.error('Erro ao excluir pedido:', error);
-    return NextResponse.json({ error: 'Erro ao excluir pedido' }, { status: 500 });
+    console.error('Erro ao excluir pedido:', util.inspect(error, { depth: null }));
+    return NextResponse.json(
+      { error: getErrorMessage(error) || 'Erro ao excluir pedido' },
+      { status: 500 }
+    );
   }
 }

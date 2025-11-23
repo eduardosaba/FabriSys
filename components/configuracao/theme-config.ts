@@ -209,8 +209,8 @@ export const THEME_PRESETS: ThemePreset[] = [
       dark: {
         primary: '#e9c4c2',
         tituloPaginas: '#f2e8e3',
-        secondary: '#88544c',
-        accent: '#f87171',
+        secondary: '#4a2c2b',
+        accent: '#f59e0b',
         background: '#4a2c2b',
         text: '#f2e8e3',
         hover3Submenu: '#88544c',

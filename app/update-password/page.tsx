@@ -9,10 +9,12 @@ import Text from '@/components/ui/Text';
 import Button from '@/components/Button';
 import { toast } from 'react-hot-toast';
 import { useTheme } from '@/lib/theme';
+import { Eye, EyeOff } from 'lucide-react';
 
 function UpdatePasswordForm() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -152,16 +154,27 @@ function UpdatePasswordForm() {
               >
                 Nova Senha
               </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-                placeholder="••••••••"
-                minLength={6}
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  placeholder="••••••••"
+                  minLength={6}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <div>
@@ -171,16 +184,27 @@ function UpdatePasswordForm() {
               >
                 Confirmar Nova Senha
               </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-                placeholder="••••••••"
-                minLength={6}
-              />
+              <div className="relative">
+                <input
+                  id="confirmPassword"
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  placeholder="••••••••"
+                  minLength={6}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <Button type="submit" disabled={loading} className="w-full" size="lg">

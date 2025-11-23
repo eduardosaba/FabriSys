@@ -1,24 +1,37 @@
-// Função utilitária para cor primária com opacidade
 'use client';
 
-import { usePathname } from 'next/navigation';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
-import { useState } from 'react';
-import { useTheme } from '@/lib/theme';
-import { usePageTracking } from '@/hooks/usePageTracking';
+import { usePathname } from 'next/navigation';
 import {
-  Home,
+  LayoutDashboard,
   Package,
   Truck,
   Settings,
-  Menu,
   X,
   ChevronRight,
   BarChart2,
   Factory,
   Star,
+  Calendar,
+  ClipboardList,
+  ChefHat,
+  HelpCircle,
+  BookOpen,
 } from 'lucide-react';
+
+import { useTheme } from '@/lib/theme';
+
+// Hook para rastrear páginas favoritas (fixadas)
+const usePageTracking = () => {
+  const [pinned, setPinned] = useState<string[]>(['/dashboard/producao/kanban']);
+  return {
+    pinnedPages: pinned,
+    togglePinPage: (href: string) =>
+      setPinned((prev) => (prev.includes(href) ? prev.filter((p) => p !== href) : [...prev, href])),
+    isPagePinned: (href: string) => pinned.includes(href),
+  };
+};
 
 interface SidebarItem {
   name: string;
@@ -28,51 +41,63 @@ interface SidebarItem {
     name: string;
     href: string;
   }[];
+  section?: string;
 }
 
+// Definição dos itens do menu seguindo o novo fluxo da fábrica
 const sidebarItems: SidebarItem[] = [
   {
     name: 'Dashboard',
     href: '/dashboard',
-    icon: <Home className="h-5 w-5" />,
+    icon: <LayoutDashboard className="h-5 w-5" />,
   },
   {
-    name: 'Mercadorias',
-    href: '/dashboard/insumos',
-    icon: <Package className="h-5 w-5" />,
-    children: [
-      { name: 'Cadastro Produto', href: '/dashboard/insumos/cadastro' },
-      { name: 'Estoque', href: '/dashboard/insumos/lotes' },
-      { name: 'Alertas', href: '/dashboard/insumos/alertas' },
-      { name: 'Categorias', href: '/dashboard/producao/categorias' },
-      { name: 'Ordem de Compra', href: '/dashboard/producao/pedidos-compra' },
-    ],
-  },
-  {
-    name: 'Fornecedores',
-    href: '/dashboard/fornecedores',
-    icon: <Truck className="h-5 w-5" />,
+    name: 'Planejamento',
+    href: '/dashboard/producao/planejamento',
+    icon: <Calendar className="h-5 w-5" />,
   },
   {
     name: 'Produção',
     href: '/dashboard/producao',
     icon: <Factory className="h-5 w-5" />,
     children: [
-      { name: 'Produto Final', href: '/dashboard/producao/produtos' },
+      { name: 'Dashboard Produção', href: '/dashboard/producao/' },
+      { name: 'Chão de Fábrica (Kanban)', href: '/dashboard/producao/kanban' },
       { name: 'Ordens de Produção', href: '/dashboard/producao/ordens' },
+      { name: 'Produtos Finais', href: '/dashboard/producao/produtos' },
       { name: 'Fichas Técnicas', href: '/dashboard/producao/fichas-tecnicas' },
-      { name: 'Relatórios', href: '/dashboard/producao/relatorios' },
     ],
   },
-
+  {
+    name: 'Suprimentos',
+    href: '/dashboard/insumos',
+    icon: <Package className="h-5 w-5" />,
+    children: [
+      { name: 'Dashboard Suprimentos', href: '/dashboard/insumos/' },
+      { name: 'Sugestão de Compras (MRP)', href: '/dashboard/compras/sugestao' },
+      { name: 'Pedidos de Compra', href: '/dashboard/insumos/pedidos-compra' },
+      { name: 'Entrada de Notas', href: '/dashboard/insumos/lotes' },
+      { name: 'Monitor de Riscos', href: '/dashboard/insumos/alertas' },
+      { name: 'Cadastro de Insumos', href: '/dashboard/insumos/cadastro' },
+      { name: 'Categorias', href: '/dashboard/insumos/categorias' },
+      { name: 'Fornecedores', href: '/dashboard/fornecedores' },
+    ],
+  },
   {
     name: 'Relatórios',
     href: '/dashboard/relatorios',
     icon: <BarChart2 className="h-5 w-5" />,
     children: [
+      { name: 'Dashboard', href: '/dashboard/relatorios/' },
       { name: 'Validade', href: '/dashboard/relatorios/validade' },
       { name: 'Estoque', href: '/dashboard/relatorios/estoque' },
     ],
+  },
+  // Seção de Suporte e Ajuda
+  {
+    name: 'Manual & Ajuda',
+    href: '/dashboard/ajuda',
+    icon: <HelpCircle className="h-5 w-5" />,
   },
   {
     name: 'Configurações',
@@ -81,11 +106,19 @@ const sidebarItems: SidebarItem[] = [
   },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>('Produção');
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const pathname = usePathname();
+
   const { pinnedPages, togglePinPage, isPagePinned } = usePageTracking();
+  const { theme, loading } = useTheme();
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
@@ -102,434 +135,303 @@ export default function Sidebar() {
   const isSubmenuActive = (item: SidebarItem) =>
     item.children?.some((child) => pathname === child.href);
 
-  const { theme, loading } = useTheme();
-
   return (
-    <>
-      {/* Overlay for mobile */}
-      {!isCollapsed && (
-        <div className="fixed inset-0 z-40 bg-overlay-mobile lg:hidden" onClick={toggleSidebar} />
+    <aside
+      className={`
+        fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'} 
+        lg:translate-x-0
+        ${isCollapsed ? 'w-20' : 'w-64'}
+      `}
+      style={{
+        backgroundColor: 'var(--sidebar-bg)',
+        borderRight: '1px solid var(--sidebar-active-text)',
+      }}
+    >
+      {/* Header do Sidebar */}
+      <div
+        className="relative flex h-20 flex-col justify-center px-4 py-4"
+        style={{ borderBottom: '1px solid var(--sidebar-active-text)' }}
+      >
+        <div className="flex items-center justify-between">
+          <div className={`flex flex-1 ${isCollapsed ? 'justify-center' : 'justify-start'}`}>
+            <div className="flex items-center gap-3">
+              {/* Logo da empresa */}
+              {!isCollapsed && (
+                <img
+                  src={theme?.company_logo_url ?? theme?.logo_url ?? '/logo.png'}
+                  alt="Logo"
+                  className="h-8 w-auto object-contain"
+                  style={{
+                    maxHeight: 32,
+                    transform: `scale(var(--company-logo-scale, var(--logo-scale, ${theme?.company_logo_scale ?? theme?.logo_scale ?? 1})))`,
+                    transformOrigin: 'left center',
+                  }}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
+
+              {/* Ícone Placeholder quando colapsado ou sem logo */}
+              {(isCollapsed || (!theme?.logo_url && !theme?.company_logo_url && !loading)) && (
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-pink-500 to-pink-600 text-white font-bold shadow-lg shadow-pink-500/20">
+                  {isCollapsed ? 'C' : <ChefHat size={20} />}
+                </div>
+              )}
+
+              {/* Nome do Sistema (Confectio) */}
+              {!isCollapsed && (
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-xl font-bold tracking-tight"
+                    style={{ color: 'var(--sidebar-text)' }}
+                  >
+                    {theme?.name || 'Confectio'}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Botão Colapsar (Desktop) */}
+          <button
+            onClick={toggleSidebar}
+            className="absolute -right-3 top-1/2 z-50 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm transition-colors hover:border-pink-200 hover:text-pink-600 lg:flex"
+          >
+            {isCollapsed ? <ChevronRight size={14} /> : <X size={14} />}
+          </button>
+
+          {/* Botão Fechar (Mobile) */}
+          <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-slate-600">
+            <X size={24} />
+          </button>
+        </div>
+      </div>
+
+      {/* Área de Favoritos */}
+      {pinnedPages.length > 0 && (
+        <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--sidebar-active-text)' }}>
+          {!isCollapsed && (
+            <h3 className="mb-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-green-700">
+              <Star className="h-3 w-3" /> Favoritos
+            </h3>
+          )}
+          <div className={`space-y-1 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
+            {pinnedPages.slice(0, isCollapsed ? 5 : 10).map((href) => {
+              const item =
+                sidebarItems.find((si) => si.href === href) ||
+                sidebarItems.find((si) => si.children?.some((c) => c.href === href));
+              if (!item) return null;
+
+              const childItem = item.children?.find((c) => c.href === href);
+              const displayItem = childItem || item;
+
+              return (
+                <Link
+                  key={`fav-${displayItem.href}`}
+                  href={displayItem.href}
+                  onMouseEnter={() => setHoveredItem(displayItem.href)}
+                  onMouseLeave={() => setHoveredItem(null)}
+                  className={`flex items-center rounded-md p-2 text-sm transition-colors text-slate-600 ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
+                  title={isCollapsed ? displayItem.name : undefined}
+                  style={
+                    hoveredItem === displayItem.href
+                      ? {
+                          backgroundColor: 'var(--sidebar-hover-bg)',
+                          color: 'var(--sidebar-active-text)',
+                          opacity: 0.92,
+                        }
+                      : undefined
+                  }
+                >
+                  <span style={{ color: 'var(--sidebar-text)' }}>
+                    {childItem ? <ChevronRight size={14} /> : item.icon}
+                  </span>
+                  {!isCollapsed && (
+                    <span className="truncate font-medium" style={{ color: 'var(--sidebar-text)' }}>
+                      {displayItem.name}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       )}
 
-      <div
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r transition-all duration-300 ease-in-out lg:translate-x-0 ${isCollapsed ? 'w-20 -translate-x-full' : 'w-64 translate-x-0'}`}
-        style={{
-          background: 'var(--sidebar-bg)',
-          borderColor: 'var(--primary)',
-          color: 'var(--sidebar-text)',
-        }}
+      {/* Navegação Principal */}
+      <nav
+        className="custom-scrollbar flex-1 overflow-y-auto p-3"
+        style={{ color: 'var(--sidebar-text)' }}
       >
-        {/* Header */}
-        <div
-          className="flex flex-col border-b px-4 py-4"
-          style={{
-            borderColor: 'var(--primary)',
-            background: 'var(--sidebar-bg)',
-            color: 'var(--sidebar-text)',
-          }}
-        >
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex flex-1 justify-center">
-              <div className="flex items-center gap-2">
-                {/* Logo da Empresa (Marca B - foco na personalização do cliente) */}
-                {theme?.company_logo_url && !isCollapsed && (
-                  <div className="flex-shrink-0">
-                    <Image
-                      src={theme.company_logo_url}
-                      alt="Logo da Empresa"
-                      width={32}
-                      height={32}
-                      className="rounded object-contain"
-                      unoptimized
-                      loading="eager"
-                      style={{
-                        width: `calc(32px * var(--company-logo-scale, 1))`,
-                        height: `calc(32px * var(--company-logo-scale, 1))`,
-                        maxWidth: '160px',
-                        maxHeight: '160px',
-                      }}
-                    />
-                  </div>
-                )}
-                {/* Ícone quando menu está encolhido */}
-                {isCollapsed && <Menu className="h-6 w-6 text-primary" />}
-                {/* Fallback quando não há logo da empresa */}
-                {(!theme?.company_logo_url || isCollapsed) && !loading && (
-                  <div className="text-center">
-                    <span
-                      className="block truncate text-sm font-semibold"
-                      style={{ color: 'var(--sidebar-active-text)' }}
-                    >
-                      {theme?.name || 'SysLari'}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* Botão interno para desktop */}
-            <button
-              onClick={toggleSidebar}
-              className="absolute right-2 top-2 hidden rounded-md p-2 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-800 lg:block"
-            >
-              {isCollapsed ? <Menu className="h-5 w-5" /> : <X className="h-5 w-5" />}
-            </button>
+        <ul className="space-y-1">
+          {sidebarItems.map((item) => {
+            const active = isActive(item.href) || isSubmenuActive(item);
+            const isHovered = hoveredItem === item.href;
 
-            {/* Botão externo para mobile */}
-            <button
-              onClick={toggleSidebar}
-              className={`
-                fixed left-4
-                top-4 z-50 rounded-md
-                bg-white p-2 shadow-md hover:bg-gray-100
-                dark:bg-gray-900 dark:text-white
-                dark:hover:bg-gray-800
-                lg:hidden
-                ${!isCollapsed && 'hidden'}
-              `}
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          </div>
-          {!isCollapsed && !loading && !theme?.company_logo_url && (
-            <div className="text-center">
-              <span
-                className="block truncate text-sm font-semibold"
-                style={{ color: 'var(--sidebar-active-text)' }}
-              >
-                {theme?.name || 'SysLari'}
-              </span>
-            </div>
-          )}
-        </div>
+            const itemStyle = active
+              ? { backgroundColor: 'var(--sidebar-hover-bg)', color: 'var(--sidebar-active-text)' }
+              : isHovered
+                ? {
+                    backgroundColor: 'var(--sidebar-hover-bg)',
+                    color: 'var(--sidebar-active-text)',
+                    opacity: 0.92,
+                  }
+                : undefined;
 
-        {/* Favoritos */}
-        {pinnedPages.length > 0 && (
-          <div
-            className="border-b px-4 py-2"
-            style={{
-              borderColor: 'var(--sidebar-hover-bg)',
-              background: 'var(--sidebar-bg)',
-              color: 'var(--sidebar-text)',
-            }}
-          >
-            {!isCollapsed && (
-              <h3
-                className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider"
-                style={{ color: 'var(--sidebar-active-text)' }}
-              >
-                <Star className="h-3 w-3" />
-                Favoritos
-              </h3>
-            )}
-            <div className={`space-y-1 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
-              {pinnedPages.slice(0, isCollapsed ? 5 : 10).map((href) => {
-                const item =
-                  sidebarItems.find((si) => si.href === href) ||
-                  sidebarItems.find((si) => si.children?.some((c) => c.href === href));
-                if (!item) return null;
-
-                const childItem = item.children?.find((c) => c.href === href);
-                const displayItem = childItem || item;
-                const displayHref = childItem?.href || item.href;
-
-                return (
-                  <Link
-                    key={`fav-${displayHref}`}
-                    href={displayHref}
-                    className={`flex items-center rounded-md p-2 transition-all duration-200 ${!isCollapsed ? 'space-x-2' : 'w-full justify-center'}`}
-                    style={{ color: 'var(--sidebar-active-text)' }}
-                    title={isCollapsed ? displayItem.name : undefined}
-                  >
-                    {item.icon}
-                    {!isCollapsed && (
-                      <span className="truncate" style={{ color: 'var(--sidebar-active-text)' }}>
-                        {displayItem.name}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-4">
-          <ul className="space-y-2">
-            {sidebarItems.map((item) => (
+            return (
               <li key={item.name}>
                 <div
-                  className={`group relative flex items-center rounded-md p-2 transition-all duration-200`}
-                  style={{
-                    color:
-                      isActive(item.href) || isSubmenuActive(item)
-                        ? 'var(--sidebar-active-text)'
-                        : 'var(--sidebar-text)',
-                    background:
-                      isActive(item.href) || isSubmenuActive(item)
-                        ? 'var(--sidebar-hover-bg)'
-                        : 'var(--sidebar-bg)',
-                    transition: 'background 0.2s',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive(item.href) && !isSubmenuActive(item)) {
-                      (e.currentTarget as HTMLElement).style.background = 'var(--primary)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive(item.href) && !isSubmenuActive(item)) {
-                      (e.currentTarget as HTMLElement).style.background = '';
-                    }
-                  }}
+                  className={`group relative flex cursor-pointer items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200`}
+                  onClick={() => (item.children ? toggleSubmenu(item.name) : null)}
+                  onMouseEnter={() => setHoveredItem(item.href)}
+                  onMouseLeave={() => setHoveredItem(null)}
+                  style={itemStyle}
                 >
-                  <Link
-                    href={item.href}
-                    className={`flex flex-1 items-center ${!isCollapsed ? 'space-x-2' : 'justify-center'}`}
-                    style={{ color: 'var(--sidebar-active-text)' }}
-                    onClick={() => {
-                      if (item.children) {
-                        toggleSubmenu(item.name);
-                      }
-                    }}
-                    title={isCollapsed ? item.name : undefined}
-                  >
-                    {item.icon}
-                    {!isCollapsed && (
-                      <>
-                        <span style={{ color: 'var(--sidebar-active-text)' }}>{item.name}</span>
-                        {item.children && (
+                  {!item.children ? (
+                    <Link
+                      href={item.href}
+                      className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
+                    >
+                      <span
+                        style={{
+                          color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+                        }}
+                      >
+                        {item.icon}
+                      </span>
+                      {!isCollapsed && <span className="flex-1">{item.name}</span>}
+                    </Link>
+                  ) : (
+                    <div
+                      className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
+                    >
+                      <span
+                        style={{
+                          color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+                        }}
+                      >
+                        {item.icon}
+                      </span>
+                      {!isCollapsed && (
+                        <>
+                          <span className="flex-1">{item.name}</span>
                           <ChevronRight
-                            className={`ml-auto h-4 w-4 transition-transform ${openSubmenu === item.name ? 'rotate-90' : ''}`}
+                            className={`h-4 w-4 transition-transform duration-200 ${openSubmenu === item.name ? 'rotate-90' : ''}`}
+                            style={{ color: 'var(--sidebar-text)' }}
                           />
-                        )}
-                      </>
-                    )}
-                  </Link>
+                        </>
+                      )}
+                    </div>
+                  )}
 
-                  {/* Botão de favorito */}
-                  {!isCollapsed && (
+                  {!isCollapsed && !item.children && (
                     <button
                       onClick={(e) => {
-                        e.preventDefault();
                         e.stopPropagation();
+                        e.preventDefault();
                         togglePinPage(item.href);
                       }}
-                      className={`rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 ${
+                      className={`ml-2 opacity-60 transition-opacity group-hover:opacity-100 ${isPagePinned(item.href) ? 'opacity-100' : ''}`}
+                      style={
                         isPagePinned(item.href)
-                          ? 'text-yellow-500 hover:text-yellow-600'
-                          : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-                      }`}
-                      title={
-                        isPagePinned(item.href)
-                          ? 'Remover dos favoritos'
-                          : 'Adicionar aos favoritos'
+                          ? { color: 'var(--yellow-400, #f6c90a)' }
+                          : { color: 'var(--sidebar-active-text)' }
                       }
                     >
                       <Star
-                        className="h-3 w-3"
+                        size={14}
                         fill={isPagePinned(item.href) ? 'currentColor' : 'none'}
+                        stroke={'var(--sidebar-active-text)'}
+                        strokeWidth={1.5}
                       />
                     </button>
                   )}
 
-                  {/* Botão de favorito para sidebar colapsada */}
                   {isCollapsed && (
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        togglePinPage(item.href);
-                      }}
-                      className={`absolute -right-2 -top-2 rounded-full border bg-white p-1 shadow-md dark:bg-gray-800 ${
-                        isPagePinned(item.href)
-                          ? 'border-yellow-200 text-yellow-500'
-                          : 'border-gray-200 text-gray-400'
-                      }`}
-                      title={
-                        isPagePinned(item.href)
-                          ? 'Remover dos favoritos'
-                          : 'Adicionar aos favoritos'
-                      }
-                    >
-                      <Star
-                        className="h-3 w-3"
-                        fill={isPagePinned(item.href) ? 'currentColor' : 'none'}
-                      />
-                    </button>
+                    <div className="pointer-events-none absolute left-14 top-1/2 z-50 ml-2 w-max -translate-y-1/2 rounded-md bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                      {item.name}
+                    </div>
                   )}
                 </div>
 
-                {/* Submenu */}
-                {/* Submenu para sidebar expandida */}
                 {!isCollapsed && item.children && openSubmenu === item.name && (
-                  <ul className="ml-6 mt-2 space-y-2 border-l-2 border-gray-200">
-                    {item.children.map((child) => (
-                      <li key={child.name}>
-                        <div
-                          className={`group flex items-center rounded-md p-2 pl-4`}
-                          style={{
-                            color: isActive(child.href)
-                              ? 'var(--sidebar-active-text)'
-                              : 'var(--sidebar-text)',
-                            background: isActive(child.href)
-                              ? 'var(--sidebar-hover-bg)'
-                              : 'var(--sidebar-bg)',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isActive(child.href)) {
-                              const color = getPrimaryWithOpacity(theme, 0.8);
-                              (e.currentTarget as HTMLElement).style.background = color;
-                              (e.currentTarget as HTMLElement).style.color = '#fff';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isActive(child.href)) {
-                              (e.currentTarget as HTMLElement).style.background = '';
-                              (e.currentTarget as HTMLElement).style.color = '';
-                            }
-                          }}
-                        >
-                          <Link
-                            href={child.href}
-                            className="flex-1"
-                            style={{
-                              color: isActive(child.href)
-                                ? 'var(--sidebar-active-text)'
-                                : 'var(--sidebar-text)',
-                            }}
-                          >
-                            {child.name}
-                          </Link>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              togglePinPage(child.href);
-                            }}
-                            className={`ml-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 ${
-                              isPagePinned(child.href)
-                                ? 'text-yellow-500 hover:text-yellow-600'
-                                : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-                            }`}
-                            title={
-                              isPagePinned(child.href)
-                                ? 'Remover dos favoritos'
-                                : 'Adicionar aos favoritos'
-                            }
-                          >
-                            <Star
-                              className="h-3 w-3"
-                              fill={isPagePinned(child.href) ? 'currentColor' : 'none'}
-                            />
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {/* Tooltip submenu para sidebar colapsada */}
-                {isCollapsed && item.children && (
-                  <div
-                    className={`
-                      invisible absolute left-full top-0 
-                      z-50 ml-2 
-                      rounded-md border
-                      border-gray-200 bg-white opacity-0
-                      shadow-lg transition-all duration-200 group-hover:visible
-                      group-hover:opacity-100 dark:border-gray-700
-                      dark:bg-gray-800
-                    `}
-                  >
-                    <ul className="w-48 py-2">
-                      {item.children.map((child) => (
+                  <ul className="mt-1 ml-9 animate-fade-up space-y-1 border-l border-slate-200 pl-2">
+                    {item.children.map((child) => {
+                      const childActive = isActive(child.href);
+                      const childIsHovered = hoveredItem === child.href;
+                      return (
                         <li key={child.name}>
-                          <div className="flex items-center justify-between">
+                          <div className="group/sub flex items-center justify-between">
                             <Link
                               href={child.href}
-                              className={`flex-1 px-4 py-2`}
-                              style={{
-                                color: 'var(--sidebar-active-text)',
-                                background: isActive(child.href) ? 'var(--primary)' : undefined,
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!isActive(child.href)) {
-                                  const color = getPrimaryWithOpacity(theme, 0.8);
-                                  (e.currentTarget as HTMLElement).style.background = color;
-                                  (e.currentTarget as HTMLElement).style.color = '#fff';
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!isActive(child.href)) {
-                                  (e.currentTarget as HTMLElement).style.background = '';
-                                  (e.currentTarget as HTMLElement).style.color = '';
-                                }
-                              }}
+                              onMouseEnter={() => setHoveredItem(child.href)}
+                              onMouseLeave={() => setHoveredItem(null)}
+                              className={`flex-1 block rounded-md px-3 py-2 text-sm transition-colors`}
+                              style={
+                                childActive
+                                  ? {
+                                      backgroundColor: 'var(--sidebar-hover-bg)',
+                                      color: 'var(--sidebar-active-text)',
+                                    }
+                                  : childIsHovered
+                                    ? {
+                                        backgroundColor: 'var(--sidebar-hover-bg)',
+                                        color: 'var(--sidebar-active-text)',
+                                        opacity: 0.92,
+                                      }
+                                    : undefined
+                              }
                             >
                               {child.name}
                             </Link>
                             <button
                               onClick={(e) => {
-                                e.preventDefault();
                                 e.stopPropagation();
+                                e.preventDefault();
                                 togglePinPage(child.href);
                               }}
-                              className={`
-                                mr-2 rounded p-1
-                                transition-colors duration-200
-                                ${
-                                  isPagePinned(child.href)
-                                    ? 'text-yellow-500 hover:text-yellow-600'
-                                    : 'text-gray-400 hover:text-yellow-500'
-                                }
-                              `}
-                              title={
+                              className={`pr-2 opacity-60 transition-opacity group-hover/sub:opacity-100 ${isPagePinned(child.href) ? 'opacity-100' : ''}`}
+                              style={
                                 isPagePinned(child.href)
-                                  ? 'Remover dos favoritos'
-                                  : 'Adicionar aos favoritos'
+                                  ? { color: 'var(--yellow-400, #f6c90a)' }
+                                  : { color: 'var(--sidebar-active-text)' }
                               }
                             >
                               <Star
-                                size={14}
+                                size={12}
                                 fill={isPagePinned(child.href) ? 'currentColor' : 'none'}
+                                stroke={'var(--sidebar-active-text)'}
+                                strokeWidth={1.2}
                               />
                             </button>
                           </div>
                         </li>
-                      ))}
-                    </ul>
-                  </div>
+                      );
+                    })}
+                  </ul>
                 )}
               </li>
-            ))}
-          </ul>
-        </nav>
+            );
+          })}
+        </ul>
+      </nav>
+
+      {/* Footer do Sidebar (Perfil) */}
+      <div className={`border-t border-slate-100 p-4 ${isCollapsed ? 'flex justify-center' : ''}`}>
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-bold text-slate-500">
+            ES
+          </div>
+          {!isCollapsed && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-slate-700">Eduardo Saba</p>
+              <p className="truncate text-xs text-slate-500">eduardopedro.fsa@gmail.com</p>
+            </div>
+          )}
+        </div>
       </div>
-    </>
+    </aside>
   );
-}
-
-// Função utilitária para cor primária com opacidade
-import type { ThemeSettings } from '@/lib/types';
-
-function getPrimaryWithOpacity(_theme: Partial<ThemeSettings> | undefined, opacity: number) {
-  // Busca a cor da variável CSS --primary, que sempre reflete a cor customizada
-  let color = '#88544c';
-  if (typeof window !== 'undefined') {
-    const cssPrimary = getComputedStyle(document.documentElement)
-      .getPropertyValue('--primary')
-      .trim();
-    if (cssPrimary) color = cssPrimary;
-  }
-  if (typeof color === 'string' && color.startsWith('#') && color.length === 7) {
-    // hex para rgba
-    const r = parseInt(color.slice(1, 3), 16);
-    const g = parseInt(color.slice(3, 5), 16);
-    const b = parseInt(color.slice(5, 7), 16);
-    return `rgba(${r},${g},${b},${opacity})`;
-  } else if (typeof color === 'string' && color.startsWith('rgb')) {
-    // rgb para rgba
-    return color.replace('rgb', 'rgba').replace(')', `,${opacity})`);
-  }
-  return color;
 }

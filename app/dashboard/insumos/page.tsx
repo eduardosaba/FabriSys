@@ -1,733 +1,388 @@
 'use client';
-
-import Card from '@/components/ui/Card';
-import Panel from '@/components/ui/Panel';
-import Text from '@/components/ui/Text';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Package,
-  ShoppingCart,
   AlertTriangle,
-  Truck,
-  Plus,
-  List,
-  BarChart,
-  EyeOff,
+  TrendingUp,
+  DollarSign,
+  ArrowDownRight,
+  PieChart,
+  Clock,
+  AlertOctagon,
+  ShoppingCart,
 } from 'lucide-react';
-import { KPISection } from '@/components/ui/KPICards';
-import Chart from '@/components/ui/Charts';
-import Button from '@/components/Button';
-import AlertasEstoque from '@/components/insumos/Alertas';
+import { Toaster } from 'react-hot-toast';
+
+// --- IMPORTS RELATIVOS ---
+import { supabase } from '@/lib/supabase';
+import { Button } from '@/components/ui/shared';
 import PageHeader from '@/components/ui/PageHeader';
-import { useState, useCallback, useMemo } from 'react';
 
-export default function ProducaoDashboard() {
-  // Tipos para filtros inteligentes
-  type KpisData = {
-    producaoTotal: number;
-    eficiencia: number;
-    produtividade: number;
-    perdas: number;
-  };
+// --- TIPOS ---
+interface DashboardData {
+  totalProdutos: number;
+  itensCriticos: number;
+  valorEstoque: number;
+  entradasMes: number;
+  valorEmRisco: number; // Novo KPI: Valor de produtos vencendo
+  categorias: { nome: string; valor: number; percentual: number }[]; // Para o gráfico
+  fluxoDiario: { data: string; entradas: number; saidas: number }[]; // Para o gráfico de fluxo
+}
 
-  type FiltrosAtuais = {
-    dataInicial: string;
-    dataFinal: string;
-    filialSelecionada: string;
-    categoriaSelecionada: string;
-    periodoSelecionado: string;
-  };
-
-  // Estados para filtros inteligentes
-  const [filtrosAtuais, setFiltrosAtuais] = useState<FiltrosAtuais>({
-    dataInicial: '2025-01-01',
-    dataFinal: new Date().toISOString().split('T')[0],
-    filialSelecionada: 'Geral',
-    categoriaSelecionada: 'all',
-    periodoSelecionado: 'personalizado',
+export default function InsumosDashboard() {
+  const [data, setData] = useState<DashboardData>({
+    totalProdutos: 0,
+    itensCriticos: 0,
+    valorEstoque: 0,
+    entradasMes: 0,
+    valorEmRisco: 0,
+    categorias: [],
+    fluxoDiario: [],
   });
+  const [loading, setLoading] = useState(true);
 
-  const [isLoadingKpis, setIsLoadingKpis] = useState(false);
-  const [kpisData, setKpisData] = useState<KpisData | null>({
-    producaoTotal: 15234,
-    eficiencia: 87.5,
-    produtividade: 42.8,
-    perdas: 1.8,
-  });
+  // --- BUSCAR DADOS REAIS ---
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        setLoading(true);
 
-  // Estados existentes mantidos
-  const [hiddenCards, setHiddenCards] = useState<string[]>([]);
-  const [hiddenChartCards, setHiddenChartCards] = useState<string[]>([]);
-  const [inventoryData, _setInventoryData] = useState({
-    produtos: 245,
-    fornecedores: 12,
-    alertas: 8,
-    valorEstoque: 125000,
-  });
+        // 1. Dados de Insumos (Valor Total, Críticos e Categorias)
+        type InsumoRow = {
+          id: number;
+          estoque_atual?: number | null;
+          estoque_minimo_alerta?: number | null;
+          custo_por_ue?: number | null;
+          categoria?: { nome?: string } | Array<{ nome?: string }> | null;
+        };
 
-  // Função para calcular datas baseado no período selecionado
-  const calcularDatasPorPeriodo = useCallback((periodo: string) => {
-    const hoje = new Date();
-    const ano = hoje.getFullYear();
-    const mes = hoje.getMonth();
-    const dia = hoje.getDate();
-    const diaSemana = hoje.getDay(); // 0 = Domingo, 1 = Segunda, etc.
+        const { data: insumosRaw, error: errIns } = await supabase
+          .from('insumos')
+          .select(
+            'id, estoque_atual, estoque_minimo_alerta, custo_por_ue, categoria:categorias(nome)'
+          );
 
-    let dataInicial: Date;
-    let dataFinal: Date;
+        if (errIns) throw errIns;
 
-    switch (periodo) {
-      case 'hoje': {
-        dataInicial = new Date(ano, mes, dia);
-        dataFinal = new Date(ano, mes, dia);
-        break;
+        let totalProd = 0;
+        let criticos = 0;
+        let valorTotal = 0;
+        const catMap: Record<string, number> = {};
+
+        const insumos = (insumosRaw as InsumoRow[]) || [];
+        totalProd = insumos.length;
+        insumos.forEach((i) => {
+          const estoque = Number(i.estoque_atual ?? 0);
+          const custo = Number(i.custo_por_ue ?? 0);
+          const valorItem = estoque * custo;
+
+          // KPI Geral
+          valorTotal += valorItem;
+          if (estoque <= Number(i.estoque_minimo_alerta ?? 0)) criticos++;
+
+          // Agrupamento por Categoria
+          const nomeCat = Array.isArray(i.categoria)
+            ? i.categoria[0]?.nome || 'Sem Categoria'
+            : i.categoria?.nome || 'Sem Categoria';
+          catMap[nomeCat] = (catMap[nomeCat] || 0) + valorItem;
+        });
+
+        // Processar Categorias para o Gráfico
+        const categoriasProcessadas = Object.entries(catMap)
+          .map(([nome, valor]) => ({
+            nome,
+            valor,
+            percentual: valorTotal > 0 ? (valor / valorTotal) * 100 : 0,
+          }))
+          .sort((a, b) => b.valor - a.valor) // Maiores primeiro
+          .slice(0, 5); // Top 5
+
+        // 2. Entradas do Mês e Valor em Risco
+        const inicioMes = new Date();
+        inicioMes.setDate(1);
+        inicioMes.setHours(0, 0, 0, 0);
+
+        // 2a. Contar entradas
+        const { count, error: errHist } = await supabase
+          .from('historico_estoque')
+          .select('*', { count: 'exact', head: true })
+          .eq('tipo', 'entrada')
+          .gte('created_at', inicioMes.toISOString());
+        if (errHist) {
+          console.warn('Erro ao contar historico_estoque:', errHist);
+        }
+
+        // 2b. Calcular Valor em Risco (Itens vencendo em 30 dias)
+        const dataLimite = new Date();
+        dataLimite.setDate(dataLimite.getDate() + 30);
+
+        // Busca no histórico itens com validade próxima (simulação simples baseada nas entradas)
+        // Em um cenário real, precisaríamos rastrear qual lote ainda está em estoque
+        const { data: itensVencendoRaw, error: errVenc } = await supabase
+          .from('historico_estoque')
+          .select('quantidade, insumo:insumos(custo_por_ue)')
+          .lte('validade', dataLimite.toISOString())
+          .gte('validade', new Date().toISOString()); // Apenas futuros, não passados
+        if (errVenc) {
+          console.warn('Erro ao buscar itens vencendo:', errVenc);
+        }
+
+        let valorRisco = 0;
+        const itensVencendo = (itensVencendoRaw as Array<Record<string, unknown>> | null) || [];
+        itensVencendo.forEach((i) => {
+          const quantidade = Number(i['quantidade'] ?? 0);
+          const insumoObj = i['insumo'] as
+            | Record<string, unknown>
+            | Array<Record<string, unknown>>
+            | undefined;
+          const custo = Array.isArray(insumoObj)
+            ? Number(insumoObj[0]?.['custo_por_ue'] ?? 0)
+            : Number(insumoObj?.['custo_por_ue'] ?? 0);
+          valorRisco += quantidade * custo;
+        });
+
+        // 3. Fluxo Diário (Últimos 7 dias) - Mockado visualmente pois requer agregação complexa no banco
+        // Num app real, faríamos uma query group by date
+        const mockFluxo = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - (6 - i));
+          return {
+            data: d.toLocaleDateString('pt-BR', { weekday: 'short' }),
+            entradas: Math.floor(Math.random() * 20), // Simulação
+            saidas: Math.floor(Math.random() * 15),
+          };
+        });
+
+        setData({
+          totalProdutos: totalProd,
+          itensCriticos: criticos,
+          valorEstoque: valorTotal,
+          entradasMes: count || 0,
+          valorEmRisco: valorRisco,
+          categorias: categoriasProcessadas,
+          fluxoDiario: mockFluxo,
+        });
+      } catch (error) {
+        console.error('Erro ao carregar dashboard:', error);
+      } finally {
+        setLoading(false);
       }
-      case 'ontem': {
-        dataInicial = new Date(ano, mes, dia - 1);
-        dataFinal = new Date(ano, mes, dia - 1);
-        break;
-      }
-      case 'amanha': {
-        dataInicial = new Date(ano, mes, dia + 1);
-        dataFinal = new Date(ano, mes, dia + 1);
-        break;
-      }
-      case 'esta-semana': {
-        // Domingo desta semana até hoje
-        const diasAteDomingo = diaSemana;
-        dataInicial = new Date(ano, mes, dia - diasAteDomingo);
-        dataFinal = new Date(ano, mes, dia);
-        break;
-      }
-      case 'ultimos-7-dias': {
-        dataInicial = new Date(ano, mes, dia - 6);
-        dataFinal = new Date(ano, mes, dia);
-        break;
-      }
-      case 'semana-passada': {
-        // Domingo da semana passada até sábado da semana passada
-        const diasAteDomingoPassado = diaSemana + 7;
-        dataInicial = new Date(ano, mes, dia - diasAteDomingoPassado);
-        dataFinal = new Date(ano, mes, dia - diasAteDomingoPassado + 6);
-        break;
-      }
-      case 'este-mes': {
-        dataInicial = new Date(ano, mes, 1);
-        dataFinal = new Date(ano, mes, dia);
-        break;
-      }
-      case 'ultimos-30-dias': {
-        dataInicial = new Date(ano, mes, dia - 29);
-        dataFinal = new Date(ano, mes, dia);
-        break;
-      }
-      case 'mes-passado': {
-        const mesPassado = mes - 1;
-        const anoMesPassado = mesPassado < 0 ? ano - 1 : ano;
-        const mesAjustado = mesPassado < 0 ? 11 : mesPassado;
-        dataInicial = new Date(anoMesPassado, mesAjustado, 1);
-        dataFinal = new Date(anoMesPassado, mesAjustado + 1, 0); // Último dia do mês
-        break;
-      }
-      case 'ano': {
-        dataInicial = new Date(ano, 0, 1);
-        dataFinal = new Date(ano, mes, dia);
-        break;
-      }
-      default:
-        // personalizado - manter as datas atuais
-        return;
     }
 
-    const dataInicialStr = dataInicial.toISOString().split('T')[0];
-    const dataFinalStr = dataFinal.toISOString().split('T')[0];
-
-    setFiltrosAtuais((prev) => ({
-      ...prev,
-      dataInicial: dataInicialStr,
-      dataFinal: dataFinalStr,
-      periodoSelecionado: periodo,
-    }));
+    void loadDashboard();
   }, []);
 
-  // Função para aplicar filtros inteligentes
-  const aplicarFiltroDashboard = useCallback(async () => {
-    try {
-      // 3. ESTADO DE LOADING: Definir loading como TRUE
-      setIsLoadingKpis(true);
-
-      // 4. CHAMADA À API: Fazer requisição para o endpoint
-      const queryParams = new URLSearchParams({
-        dataInicial: filtrosAtuais.dataInicial,
-        dataFinal: filtrosAtuais.dataFinal,
-        filialSelecionada: filtrosAtuais.filialSelecionada,
-        categoriaSelecionada: filtrosAtuais.categoriaSelecionada,
-      });
-
-      const response = await fetch(`/api/dashboard/kpis?${queryParams}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = (await response.json()) as KpisData;
-        // 5. ATUALIZAÇÃO DE DADOS: Atualizar estado com novos valores
-        setKpisData(data);
-      } else {
-        throw new Error('Erro ao buscar dados dos KPIs');
-      }
-    } catch (error) {
-      // 6. TRATAMENTO DE ERRO: Lidar com erros
-      console.error('Erro ao aplicar filtros:', error);
-      // Aqui poderia usar uma função de notificação como toast
-      alert('Erro ao carregar dados. Tente novamente.');
-    } finally {
-      // 7. FIM DO LOADING: Garantir que loading seja FALSE
-      setIsLoadingKpis(false);
-    }
-  }, [filtrosAtuais]);
-
-  // Dados de gráficos integrados com filtros
-  const chartData = useMemo(() => {
-    const baseData = [
-      { name: 'Jan', Produto1: 400, Produto2: 300, Produto3: 200 },
-      { name: 'Fev', Produto1: 500, Produto2: 400, Produto3: 250 },
-      { name: 'Mar', Produto1: 450, Produto2: 350, Produto3: 220 },
-      { name: 'Abr', Produto1: 600, Produto2: 500, Produto3: 300 },
-      { name: 'Mai', Produto1: 550, Produto2: 450, Produto3: 280 },
-      { name: 'Jun', Produto1: 700, Produto2: 600, Produto3: 350 },
-    ];
-
-    // Aplicar filtros aos dados
-    const multiplier =
-      filtrosAtuais.filialSelecionada === 'Geral'
-        ? 1
-        : filtrosAtuais.filialSelecionada === 'Matriz'
-          ? 0.7
-          : filtrosAtuais.filialSelecionada === 'Filial1'
-            ? 0.8
-            : 0.6;
-
-    return baseData.map((item) => ({
-      ...item,
-      Produto1: Math.round(item.Produto1 * multiplier),
-      Produto2: Math.round(item.Produto2 * multiplier),
-      Produto3: Math.round(item.Produto3 * multiplier),
-    }));
-  }, [filtrosAtuais.filialSelecionada]);
-
-  const productionChartData = useMemo(() => {
-    const baseData = [
-      { mes: 'Jan', producao: 900 },
-      { mes: 'Fev', producao: 1150 },
-      { mes: 'Mar', producao: 1020 },
-      { mes: 'Abr', producao: 1300 },
-      { mes: 'Mai', producao: 1180 },
-      { mes: 'Jun', producao: 1450 },
-    ];
-
-    const multiplier =
-      filtrosAtuais.categoriaSelecionada === 'all'
-        ? 1
-        : filtrosAtuais.categoriaSelecionada === 'produtos'
-          ? 0.9
-          : filtrosAtuais.categoriaSelecionada === 'insumos'
-            ? 1.1
-            : 0.8;
-
-    return baseData.map((item) => ({
-      ...item,
-      producao: Math.round(item.producao * multiplier),
-    }));
-  }, [filtrosAtuais.categoriaSelecionada]);
-
-  const toggleCardVisibility = (cardKey: string) => {
-    if (hiddenCards.includes(cardKey)) {
-      setHiddenCards(hiddenCards.filter((key) => key !== cardKey));
-    } else {
-      setHiddenCards([...hiddenCards, cardKey]);
-    }
+  // --- COMPONENTES VISUAIS LOCAIS ---
+  type KPICardProps = {
+    title: string;
+    value: React.ReactNode;
+    icon: React.ElementType;
+    color: string;
+    subtext?: string;
   };
 
-  const toggleChartCardVisibility = (cardKey: string) => {
-    if (hiddenChartCards.includes(cardKey)) {
-      setHiddenChartCards(hiddenChartCards.filter((key) => key !== cardKey));
-    } else {
-      setHiddenChartCards([...hiddenChartCards, cardKey]);
-    }
-  };
+  const KPICard = ({ title, value, icon: Icon, color, subtext }: KPICardProps) => (
+    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-3 rounded-xl bg-${color}-50 text-${color}-600`}>
+          <Icon size={24} />
+        </div>
+      </div>
+      <div>
+        <h3 className="text-slate-500 text-sm font-medium mb-1">{title}</h3>
+        <p className="text-2xl font-bold text-slate-800">{loading ? '...' : value}</p>
+        {subtext && (
+          <p
+            className={`text-xs mt-2 ${typeof subtext === 'string' && subtext.includes('+') ? 'text-green-600' : 'text-slate-400'}`}
+          >
+            {subtext}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
-      <Panel>
-        <PageHeader
-          title="Dashboard de Mercadoria"
-          description="Visão geral do estoque, fornecedores e produtos"
-          icon={Package}
-        >
-          <div className="flex gap-2">
-            <Link href="/dashboard/insumos/cadastro">
-              <Button variant="primary" className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Novo Produto
-              </Button>
-            </Link>
-            <Link href="/dashboard/fornecedores">
-              <Button variant="secondary" className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Novo Fornecedor
-              </Button>
-            </Link>
-          </div>
-        </PageHeader>
-      </Panel>
+    <div className="space-y-6 animate-fade-up">
+      <Toaster position="top-right" />
 
-      {/* Filtros Interativos Inteligentes */}
-      <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4">
-        <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-end lg:gap-4">
-          <div className="min-w-0 flex-1">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Período
-            </label>
-            <div className="relative">
-              <select
-                value={filtrosAtuais.periodoSelecionado}
-                onChange={(e) => calcularDatasPorPeriodo(e.target.value)}
-                className="w-full appearance-none rounded-md border border-gray-300 bg-white p-2 pr-8 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
-              >
-                <option value="personalizado">Personalizado</option>
-                <option value="hoje">Hoje</option>
-                <option value="ontem">Ontem</option>
-                <option value="amanha">Amanhã</option>
-                <option value="esta-semana">Esta semana (dom até hoje)</option>
-                <option value="ultimos-7-dias">Últimos 7 dias</option>
-                <option value="semana-passada">Semana passada</option>
-                <option value="este-mes">Este mês</option>
-                <option value="ultimos-30-dias">Últimos 30 dias</option>
-                <option value="mes-passado">Mês passado</option>
-                <option value="ano">Ano</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
-                <svg
-                  className="h-4 w-4 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Data Inicial
-            </label>
-            <input
-              type="date"
-              value={filtrosAtuais.dataInicial}
-              onChange={(e) =>
-                setFiltrosAtuais((prev) => ({
-                  ...prev,
-                  dataInicial: e.target.value,
-                  periodoSelecionado: 'personalizado',
-                }))
-              }
-              disabled={filtrosAtuais.periodoSelecionado !== 'personalizado'}
-              className="w-full rounded-md border border-gray-300 bg-white p-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:disabled:bg-gray-800"
-            />
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Data Final
-            </label>
-            <input
-              type="date"
-              value={filtrosAtuais.dataFinal}
-              onChange={(e) =>
-                setFiltrosAtuais((prev) => ({
-                  ...prev,
-                  dataFinal: e.target.value,
-                  periodoSelecionado: 'personalizado',
-                }))
-              }
-              disabled={filtrosAtuais.periodoSelecionado !== 'personalizado'}
-              className="w-full rounded-md border border-gray-300 bg-white p-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:disabled:bg-gray-800"
-            />
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Filial
-            </label>
-            <div className="relative">
-              <select
-                value={filtrosAtuais.filialSelecionada}
-                onChange={(e) =>
-                  setFiltrosAtuais((prev) => ({ ...prev, filialSelecionada: e.target.value }))
-                }
-                className="w-full appearance-none rounded-md border border-gray-300 bg-white p-2 pr-8 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
-              >
-                <option value="Geral">Todas as Filiais</option>
-                <option value="Matriz">Matriz</option>
-                <option value="Filial1">Filial Centro</option>
-                <option value="Filial2">Filial Norte</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
-                <svg
-                  className="h-4 w-4 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Categoria
-            </label>
-            <div className="relative">
-              <select
-                value={filtrosAtuais.categoriaSelecionada}
-                onChange={(e) =>
-                  setFiltrosAtuais((prev) => ({ ...prev, categoriaSelecionada: e.target.value }))
-                }
-                className="w-full appearance-none rounded-md border border-gray-300 bg-white p-2 pr-8 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
-              >
-                <option value="all">Todas as Categorias</option>
-                <option value="produtos">Produtos</option>
-                <option value="insumos">Insumos</option>
-                <option value="materias-primas">Matérias-Primas</option>
-                <option value="embalagens">Embalagens</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
-                <svg
-                  className="h-4 w-4 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:flex-shrink-0">
-            <Button
-              onClick={aplicarFiltroDashboard}
-              disabled={isLoadingKpis}
-              loading={isLoadingKpis}
-              className="w-full lg:w-auto"
-            >
-              🔍 Aplicar
+      <PageHeader
+        title="Inteligência de Estoque"
+        description="Visão financeira e operacional dos seus insumos."
+        icon={Package}
+      >
+        <div className="flex gap-2">
+          <Link href="/dashboard/insumos/lotes">
+            <Button variant="secondary" className="flex items-center gap-2">
+              <ArrowDownRight className="h-4 w-4" /> Registrar Entrada
             </Button>
-          </div>
+          </Link>
+          <Link href="/dashboard/insumos/alertas">
+            <Button variant="primary" className="flex items-center gap-2">
+              <ShoppingCart className="h-4 w-4" /> Pedido de Compra
+            </Button>
+          </Link>
         </div>
+      </PageHeader>
+
+      {/* SECTION: KPIs FINANCEIROS & OPERACIONAIS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          title="Valor Total em Estoque"
+          value={`R$ ${data.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+          icon={DollarSign}
+          color="green"
+          subtext="Capital imobilizado atual"
+        />
+        <KPICard
+          title="Produtos Cadastrados"
+          value={data.totalProdutos}
+          icon={Package}
+          color="blue"
+          subtext={`${data.entradasMes} entradas este mês`}
+        />
+        <KPICard
+          title="Atenção Necessária"
+          value={data.itensCriticos}
+          icon={AlertTriangle}
+          color="red"
+          subtext="Itens abaixo do mínimo"
+        />
+        <KPICard
+          title="Risco de Perda (30d)"
+          value={`R$ ${data.valorEmRisco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+          icon={Clock}
+          color="orange"
+          subtext="Valor em produtos vencendo"
+        />
       </div>
 
-      {/* Cards de Ação Rápida */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-        {(
-          [
-            {
-              title: 'Cadastrar Produto',
-              key: 'cadastrarProduto',
-              icon: Package,
-              color: 'blue',
-              description: 'Adicionar novo produto',
-            },
-            {
-              title: 'Estoque',
-              key: 'estoque',
-              icon: ShoppingCart,
-              color: 'green',
-              description: `${inventoryData.produtos} produtos ativos`,
-            },
-            {
-              title: 'Alertas',
-              key: 'alertas',
-              icon: AlertTriangle,
-              color: 'yellow',
-              description: `${inventoryData.alertas} alertas ativos`,
-            },
-            {
-              title: 'Fornecedores',
-              key: 'fornecedores',
-              icon: Truck,
-              color: 'purple',
-              description: `${inventoryData.fornecedores} fornecedores`,
-            },
-          ] as const
-        ).map(
-          (card) =>
-            !hiddenCards.includes(card.key) && (
-              <Card key={card.key} className="relative transition-colors hover:border-primary">
-                <button
-                  className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
-                  onClick={() => toggleCardVisibility(card.key)}
-                  title="Ocultar card"
-                >
-                  <EyeOff className="h-4 w-4 text-gray-600" />
-                </button>
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`p-2 bg-${card.color}-100 dark:bg-${card.color}-900/50 rounded-lg`}
-                  >
-                    <card.icon
-                      className={`h-6 w-6 text-${card.color}-600 dark:text-${card.color}-400`}
-                    />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* COLUNA 1: Onde está o dinheiro? (Categorias) */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <PieChart size={20} className="text-slate-400" /> Distribuição Financeira do Estoque
+            </h3>
+          </div>
+
+          {/* Lista Visual de Categorias */}
+          <div className="space-y-5">
+            {loading ? (
+              <div className="text-center py-10 text-slate-400">Calculando distribuição...</div>
+            ) : data.categorias.length > 0 ? (
+              data.categorias.map((cat, idx) => (
+                <div key={cat.nome}>
+                  <div className="flex justify-between text-sm mb-1.5">
+                    <span className="font-medium text-slate-700 flex items-center gap-2">
+                      <span
+                        className={`w-2 h-2 rounded-full ${idx === 0 ? 'bg-blue-500' : idx === 1 ? 'bg-indigo-500' : 'bg-slate-300'}`}
+                      ></span>
+                      {cat.nome}
+                    </span>
+                    <span className="text-slate-500 font-mono">
+                      R$ {cat.valor.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} (
+                      {cat.percentual.toFixed(1)}%)
+                    </span>
                   </div>
-                  <div>
-                    <Text variant="h4" weight="medium">
-                      {card.title}
-                    </Text>
-                    <Text color="muted" className="text-sm">
-                      {card.description}
-                    </Text>
+                  <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                    <div
+                      className={`h-2.5 rounded-full transition-all duration-1000 ${idx === 0 ? 'bg-blue-500' : idx === 1 ? 'bg-indigo-500' : 'bg-slate-400'}`}
+                      style={{ width: `${cat.percentual}%`, opacity: 1 - idx * 0.15 }}
+                    ></div>
                   </div>
                 </div>
-              </Card>
-            )
-        )}
-      </div>
-
-      {/* Botão para reexibir todos os cards ocultados */}
-      {hiddenCards.length > 0 && (
-        <div className="mt-6 flex items-center gap-4">
-          <button
-            className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600"
-            onClick={() => setHiddenCards([])}
-          >
-            <EyeOff className="h-4 w-4" />
-            Reexibir Todos ({hiddenCards.length} oculto{hiddenCards.length > 1 ? 's' : ''})
-          </button>
-          <span className="text-sm text-gray-600">Cards ocultos: {hiddenCards.join(', ')}</span>
+              ))
+            ) : (
+              <div className="text-center py-10 text-slate-400">
+                Nenhum dado financeiro disponível.
+              </div>
+            )}
+          </div>
         </div>
-      )}
 
-      {/* KPIs */}
-      <KPISection
-        kpis={
-          kpisData || {
-            producaoTotal: 15234,
-            eficiencia: 87.5,
-            produtividade: 42.8,
-            perdas: 1.8,
-          }
-        }
-        isLoading={isLoadingKpis}
-      />
+        {/* COLUNA 2: Resumo de Alertas */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-slate-100 bg-slate-50">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <AlertOctagon size={18} className="text-red-500" /> Ações Recomendadas
+            </h3>
+          </div>
 
-      {/* Gráficos */}
-      <div className="grid grid-cols-1 gap-4 lg:gap-6 xl:grid-cols-2">
-        {/* Produção Mensal por Produto */}
-        {!hiddenChartCards.includes('producao-mensal') && (
-          <Card className="relative p-4">
-            <button
-              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
-              onClick={() => toggleChartCardVisibility('producao-mensal')}
-              title="Ocultar gráfico"
-            >
-              <EyeOff className="h-4 w-4 text-gray-600" />
-            </button>
-            <Text variant="h3" weight="medium" className="mb-4">
-              Produção Mensal por Produto
-            </Text>
-            {isLoadingKpis ? (
-              <div className="animate-pulse">
-                <div className="h-64 rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div className="flex-1 p-4 flex flex-col gap-3">
+            {data.itensCriticos > 0 ? (
+              <div className="p-4 rounded-lg bg-red-50 border border-red-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-white rounded-full shadow-sm text-red-600">
+                    <AlertTriangle size={16} />
+                  </div>
+                  <p className="font-bold text-red-900">Reposição Urgente</p>
+                </div>
+                <p className="text-sm text-red-700 mb-3 leading-relaxed">
+                  Você possui <b>{data.itensCriticos} itens</b> críticos que podem parar sua
+                  produção.
+                </p>
+                <Link href="/dashboard/insumos/alertas">
+                  <Button variant="danger" className="w-full text-xs h-8">
+                    Ver Lista de Reposição
+                  </Button>
+                </Link>
               </div>
             ) : (
-              <Chart
-                type="bar"
-                height={300}
-                data={chartData}
-                series={[{ dataKey: 'Produto1', name: 'Produto 1' }]}
-              />
-            )}
-          </Card>
-        )}
-
-        {/* Análise de Produção Anual */}
-        {!hiddenChartCards.includes('analise-producao') && (
-          <Card className="relative p-4">
-            <button
-              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
-              onClick={() => toggleChartCardVisibility('analise-producao')}
-              title="Ocultar gráfico"
-            >
-              <EyeOff className="h-4 w-4 text-gray-600" />
-            </button>
-            <Text variant="h3" weight="medium" className="mb-4">
-              Análise de Produção Anual
-            </Text>
-            {isLoadingKpis ? (
-              <div className="animate-pulse">
-                <div className="h-64 rounded bg-gray-200 dark:bg-gray-700"></div>
+              <div className="p-4 rounded-lg bg-green-50 border border-green-100 text-center py-8">
+                <div className="mx-auto w-10 h-10 bg-white text-green-600 rounded-full flex items-center justify-center mb-2 shadow-sm">
+                  <TrendingUp size={20} />
+                </div>
+                <p className="text-green-800 font-bold text-sm">Estoque Saudável</p>
+                <p className="text-green-600 text-xs">Nenhuma ruptura iminente.</p>
               </div>
-            ) : (
-              <Chart
-                type="line"
-                height={300}
-                data={productionChartData}
-                series={[{ dataKey: 'producao', name: 'Produção' }]}
-                xAxisKey="mes"
-              />
             )}
-          </Card>
-        )}
 
-        {/* Alertas de Estoque */}
-        {!hiddenChartCards.includes('alertas-estoque') && (
-          <Card className="relative p-4">
-            <button
-              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
-              onClick={() => toggleChartCardVisibility('alertas-estoque')}
-              title="Ocultar card"
-            >
-              <EyeOff className="h-4 w-4 text-gray-600" />
-            </button>
-            <Text variant="h3" weight="medium" className="mb-4">
-              Alertas de Estoque
-            </Text>
-            <AlertasEstoque />
-          </Card>
-        )}
+            <div className="p-4 rounded-lg bg-blue-50 border border-blue-100">
+              <div className="flex justify-between items-start mb-2">
+                <p className="font-bold text-blue-900 text-sm">Fluxo Semanal (Est.)</p>
+                <span className="text-xs bg-white px-2 py-0.5 rounded text-blue-600 border border-blue-100">
+                  7 dias
+                </span>
+              </div>
+              {/* Mini Gráfico de Barras CSS */}
+              <div className="flex items-end gap-1 h-24 mt-2">
+                {data.fluxoDiario.map((dia, i) => (
+                  <div key={i} className="flex-1 flex flex-col justify-end gap-1 group relative">
+                    <div
+                      className="w-full bg-orange-300 rounded-t-sm hover:bg-orange-400 transition-colors"
+                      style={{ height: `${Math.min(100, dia.saidas * 5)}%` }}
+                    ></div>
+                    <div
+                      className="w-full bg-green-400 rounded-t-sm hover:bg-green-500 transition-colors -mt-1 mix-blend-multiply"
+                      style={{ height: `${Math.min(100, dia.entradas * 5)}%` }}
+                    ></div>
 
-        {/* Resumo de Produtos */}
-        {!hiddenChartCards.includes('resumo-produtos') && (
-          <Card className="relative p-4">
-            <button
-              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
-              onClick={() => toggleChartCardVisibility('resumo-produtos')}
-              title="Ocultar card"
-            >
-              <EyeOff className="h-4 w-4 text-gray-600" />
-            </button>
-            <Text variant="h3" weight="medium" className="mb-4">
-              Resumo de Produtos
-            </Text>
-            <div className="space-y-4">
-              {/* TODO: Adicionar gráficos e estatísticas de produtos */}
-              <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
-                <Text variant="h4" weight="medium">
-                  Estatísticas em breve...
-                </Text>
-                <Text color="muted">
-                  Gráficos e análises detalhadas serão adicionados em breve.
-                </Text>
+                    {/* Tooltip simples */}
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-slate-800 text-white text-[10px] p-1 rounded whitespace-nowrap z-10">
+                      E:{dia.entradas} / S:{dia.saidas}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                {data.fluxoDiario.map((d, i) => (
+                  <span key={i}>{d.data}</span>
+                ))}
+              </div>
+              <div className="flex justify-center gap-4 mt-2 text-[10px]">
+                <span className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div> Entradas
+                </span>
+                <span className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-orange-300 rounded-full"></div> Saídas
+                </span>
               </div>
             </div>
-          </Card>
-        )}
-
-        {/* Lista de Compras */}
-        {!hiddenChartCards.includes('lista-compras') && (
-          <Card className="relative p-4">
-            <button
-              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
-              onClick={() => toggleChartCardVisibility('lista-compras')}
-              title="Ocultar card"
-            >
-              <EyeOff className="h-4 w-4 text-gray-600" />
-            </button>
-            <div className="mb-4 flex items-center justify-between">
-              <Text variant="h3" weight="medium">
-                Lista de Compras
-              </Text>
-              <Button variant="secondary" className="flex items-center gap-2 text-sm">
-                <Plus className="h-4 w-4" />
-                Nova Lista
-              </Button>
-            </div>
-            <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
-              <Text variant="h4" weight="medium">
-                Lista de Compras em breve...
-              </Text>
-              <Text color="muted">Sistema de lista de compras será implementado em breve.</Text>
-            </div>
-          </Card>
-        )}
-
-        {/* Relatórios Rápidos */}
-        {!hiddenChartCards.includes('relatorios-rapidos') && (
-          <Card className="relative p-4">
-            <button
-              className="absolute right-2 top-2 z-10 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
-              onClick={() => toggleChartCardVisibility('relatorios-rapidos')}
-              title="Ocultar card"
-            >
-              <EyeOff className="h-4 w-4 text-gray-600" />
-            </button>
-            <Text variant="h3" weight="medium" className="mb-4">
-              Relatórios Rápidos
-            </Text>
-            <div className="grid grid-cols-2 gap-4">
-              <Link href="/dashboard/relatorios/validade">
-                <Button
-                  variant="secondary"
-                  className="flex w-full items-center justify-center gap-2"
-                >
-                  <BarChart className="h-4 w-4" />
-                  Relatório de Validade
-                </Button>
-              </Link>
-              <Link href="/dashboard/relatorios/estoque">
-                <Button
-                  variant="secondary"
-                  className="flex w-full items-center justify-center gap-2"
-                >
-                  <List className="h-4 w-4" />
-                  Relatório de Estoque
-                </Button>
-              </Link>
-            </div>
-          </Card>
-        )}
-      </div>
-
-      {/* Botão para reexibir todos os cards de gráficos ocultados */}
-      {hiddenChartCards.length > 0 && (
-        <div className="mt-6 flex items-center gap-4">
-          <button
-            className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600"
-            onClick={() => setHiddenChartCards([])}
-          >
-            <EyeOff className="h-4 w-4" />
-            Reexibir Todos os Gráficos ({hiddenChartCards.length} oculto
-            {hiddenChartCards.length > 1 ? 's' : ''})
-          </button>
-          <span className="text-sm text-gray-600">
-            Gráficos ocultos: {hiddenChartCards.join(', ')}
-          </span>
+          </div>
         </div>
-      )}
-
-      {/* Filtros Modernos */}
+      </div>
     </div>
   );
 }

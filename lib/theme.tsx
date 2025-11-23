@@ -16,6 +16,8 @@ interface ThemeContextType {
     userId?: string
   ) => Promise<void>;
   resetToSystemTheme: () => void;
+  // Atualiza variáveis CSS de preview em tempo real (não persiste no banco)
+  setPreviewVars?: (partial: Partial<ThemeSettings>) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -253,6 +255,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     },
     [resolvedTheme]
   );
+
+  // Atualiza variáveis CSS para preview em tempo real sem alterar o estado salvo
+  const setPreviewVars = useCallback((partial: Partial<ThemeSettings>) => {
+    if (typeof window === 'undefined') return;
+    const root = document.documentElement;
+    if (partial.logo_scale !== undefined) {
+      root.style.setProperty('--logo-scale', String(partial.logo_scale));
+    }
+    if (partial.company_logo_scale !== undefined) {
+      root.style.setProperty('--company-logo-scale', String(partial.company_logo_scale));
+    }
+    // Caso queira também visualizar troca de logo em tempo real, o componente
+    // de configurações pode chamar updateTheme com preview=false ou setTheme localmente.
+  }, []);
 
   const resetToSystemTheme = useCallback(() => {
     setTheme(systemTheme);
@@ -607,6 +623,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     systemTheme,
     updateTheme,
     resetToSystemTheme,
+    setPreviewVars,
   };
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

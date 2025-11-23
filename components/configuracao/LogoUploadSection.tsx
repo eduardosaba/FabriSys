@@ -1,5 +1,8 @@
+'use client';
+
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useTheme } from '@/lib/theme';
 import { toast } from 'react-hot-toast';
 import Text from '@/components/ui/Text';
 
@@ -26,6 +29,7 @@ export function LogoUploadSection({
 }: LogoUploadSectionProps) {
   const [uploading, setUploading] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string>('');
+  const { setPreviewVars } = useTheme();
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -139,7 +143,16 @@ export function LogoUploadSection({
               max="5"
               step="0.1"
               value={logoScale}
-              onChange={(e) => onLogoScaleChange(parseFloat(e.target.value))}
+              onChange={(e) => {
+                const newScale = parseFloat(e.target.value);
+                onLogoScaleChange(newScale);
+                try {
+                  setPreviewVars?.({ logo_scale: newScale, company_logo_scale: newScale });
+                } catch (err) {
+                  // não bloquear a UI se preview falhar
+                  console.error('Erro ao atualizar preview das variáveis de tema:', err);
+                }
+              }}
               className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
             />
             <div className="flex justify-between text-xs text-gray-500 mt-1">

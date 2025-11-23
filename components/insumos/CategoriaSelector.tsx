@@ -2,7 +2,8 @@
 
 import { useCallback, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Categoria } from '@/lib/types/insumos';
+// Usamos um tipo local para evitar dependência direta do shape do DB aqui
+type SelectCategoria = { id: string; nome: string };
 
 interface Props {
   value?: string;
@@ -12,13 +13,16 @@ interface Props {
 }
 
 export default function CategoriaSelector({ value, onChange, required, className }: Props) {
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [categorias, setCategorias] = useState<SelectCategoria[]>([]);
 
   const fetchCategorias = useCallback(async () => {
     try {
       const { data, error } = await supabase.from('categorias').select('*').order('nome');
       if (error) throw error;
-      setCategorias(data || []);
+      const normalized = ((data as { id?: number | string; nome?: string }[] | null) || []).map(
+        (r, idx) => ({ id: String(r?.id ?? `cat-${idx}`), nome: String(r?.nome ?? '') })
+      );
+      setCategorias(normalized);
     } catch (err) {
       console.error('Erro ao buscar categorias:', err);
     }
@@ -45,8 +49,8 @@ export default function CategoriaSelector({ value, onChange, required, className
         ${className || ''}`}
     >
       <option value="">Selecione uma categoria</option>
-      {categorias.map((categoria) => (
-        <option key={categoria.id} value={categoria.id}>
+      {categorias.map((categoria, idx) => (
+        <option key={String(categoria.id ?? `cat-${idx}`)} value={String(categoria.id ?? '')}>
           {categoria.nome}
         </option>
       ))}

@@ -1,77 +1,94 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { z } from 'zod';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { supabase } from '@/lib/supabase';
-import { type Fornecedor } from '@/lib/types/fornecedores';
-import { maskCNPJ, onlyDigits, formatCNPJ } from '@/lib/utils';
-import Button from '@/components/Button';
-import Modal from '@/components/Modal';
+import { z } from 'zod';
+import {
+  Truck,
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  Mail,
+  Phone,
+  MapPin,
+  Loader2,
+  FileText,
+  Star,
+  Filter,
+} from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
-import Text from '@/components/ui/Text';
-import Card from '@/components/ui/Card';
-import { Edit, Trash2, Loader2 } from 'lucide-react';
-import { useTableFilters } from '@/hooks/useTableFilters';
-import TableControls from '@/components/ui/TableControls';
-import EmptyState from '@/components/ui/EmptyState';
-// import StatusIcon from '@/components/ui/StatusIcon';
-import PageHeader from '@/components/ui/PageHeader';
-import { Truck } from 'lucide-react';
 
+// --- IMPORTS (Ajuste conforme sua estrutura de pastas real) ---
+import { supabase } from '@/lib/supabase';
+import { Button, Modal, InputField } from '@/components/ui/shared';
+import PageHeader from '@/components/ui/PageHeader';
+import { maskCpfCnpj, onlyDigits, formatCpfCnpj } from '@/lib/utils';
+
+// --- SCHEMAS & TYPES ---
 const fornecedorSchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
-  cnpj: z.string().refine((v) => onlyDigits(v).length === 14, 'CNPJ inválido'),
-  email: z.string().email('Email inválido').optional().nullish(),
-  telefone: z
-    .string()
-    .min(10, 'Telefone inválido')
-    .max(11, 'Telefone inválido')
-    .optional()
-    .nullish(),
-  endereco: z.string().optional().nullish(),
+  cnpj: z.string().refine((v) => {
+    const l = onlyDigits(v || '').length;
+    return l === 11 || l === 14;
+  }, 'CPF/CNPJ inválido (11 ou 14 dígitos)'),
+  email: z.string().email('Email inválido').optional().or(z.literal('')),
+  telefone: z.string().optional().or(z.literal('')),
+  endereco: z.string().optional().or(z.literal('')),
+  categoria: z.array(z.string()).optional(), // agora aceita múltiplas categorias
+  avaliacao: z.string().optional(), // Novo Campo (1-5)
 });
 
 type FornecedorFormData = z.infer<typeof fornecedorSchema>;
+
+interface Fornecedor {
+  id: number;
+  nome: string;
+  cnpj: string;
+  email?: string;
+  telefone?: string;
+  endereco?: string;
+  // pode ser string (legado) ou array de strings (novo comportamento)
+  categoria?: string | string[];
+  avaliacao?: number;
+}
+
+// Categorias sugeridas para o sistema
+const CATEGORIAS_FORNECEDOR = [
+  'Laticínios',
+  'Hortifruti',
+  'Carnes',
+  'Secos e Molhados',
+  'Embalagens',
+  'Bebidas',
+  'Serviços',
+  'Outros',
+];
 
 export default function FornecedoresPage() {
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategoria, setFilterCategoria] = useState(''); // Estado do filtro
   const [editingFornecedor, setEditingFornecedor] = useState<Fornecedor | null>(null);
 
   const {
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    setValue,
+    watch,
+    formState: { errors, isSubmitting },
   } = useForm<FornecedorFormData>({
     resolver: zodResolver(fornecedorSchema),
   });
 
+  // --- BUSCAR DADOS ---
   useEffect(() => {
     void fetchFornecedores();
   }, []);
-
-  useEffect(() => {
-    if (editingFornecedor) {
-      reset({
-        nome: editingFornecedor.nome,
-        cnpj: editingFornecedor.cnpj ?? '',
-        email: editingFornecedor.email ?? undefined,
-        telefone: editingFornecedor.telefone ?? undefined,
-        endereco: editingFornecedor.endereco ?? undefined,
-      });
-    } else {
-      reset({});
-    }
-  }, [editingFornecedor, reset]);
-
-  const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(fornecedores, {
-    searchFields: ['nome', 'cnpj', 'email'],
-  });
 
   async function fetchFornecedores() {
     try {
@@ -81,190 +98,307 @@ export default function FornecedoresPage() {
       if (error) throw error;
       setFornecedores(data || []);
     } catch (err) {
-      console.error('Erro ao buscar fornecedores:', err);
+      console.error(err);
       toast.error('Erro ao carregar fornecedores');
     } finally {
       setLoading(false);
     }
   }
 
+  // --- PREPARAR EDIÇÃO ---
+  useEffect(() => {
+    if (editingFornecedor) {
+      reset({
+        nome: editingFornecedor.nome,
+        cnpj: formatCpfCnpj(editingFornecedor.cnpj),
+        email: editingFornecedor.email || '',
+        telefone: editingFornecedor.telefone || '',
+        endereco: editingFornecedor.endereco || '',
+        // normalize categoria to array for the form
+        categoria: Array.isArray(editingFornecedor.categoria)
+          ? editingFornecedor.categoria
+          : editingFornecedor.categoria
+            ? String(editingFornecedor.categoria)
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : ['Outros'],
+        avaliacao: String(editingFornecedor.avaliacao || '5'),
+      });
+    } else {
+      reset({
+        nome: '',
+        cnpj: '',
+        email: '',
+        telefone: '',
+        endereco: '',
+        categoria: ['Outros'],
+        avaliacao: '5',
+      });
+    }
+  }, [editingFornecedor, reset]);
+
+  // --- SALVAR ---
   async function handleSave(values: FornecedorFormData) {
     try {
-      setSaving(true);
+      // normalize payload values
+      const categoriaField = values.categoria;
+      const categoriaToStore = Array.isArray(categoriaField)
+        ? categoriaField.join(',')
+        : (categoriaField as unknown as string) || 'Outros';
+
       const payload = {
         ...values,
-        cnpj: onlyDigits(values.cnpj || ''),
+        cnpj: onlyDigits(String(values.cnpj ?? '')),
+        email: (values.email as string) || null,
+        telefone: (values.telefone as string) || null,
+        endereco: (values.endereco as string) || null,
+        categoria: categoriaToStore,
+        avaliacao: Number(values.avaliacao) || 5,
       };
+
       let error;
 
       if (editingFornecedor) {
-        const result = await supabase
+        const { error: updateError } = await supabase
           .from('fornecedores')
           .update(payload)
           .eq('id', editingFornecedor.id);
-        error = result.error;
-
-        if (!error) {
-          toast.success('Fornecedor atualizado com sucesso!');
-        }
+        error = updateError;
       } else {
-        const result = await supabase.from('fornecedores').insert(payload);
-        error = result.error;
-
-        if (!error) {
-          toast.success('Fornecedor cadastrado com sucesso!');
-        }
+        const { error: insertError } = await supabase.from('fornecedores').insert(payload);
+        error = insertError;
       }
 
       if (error) throw error;
 
+      toast.success(editingFornecedor ? 'Fornecedor atualizado!' : 'Fornecedor cadastrado!');
       await fetchFornecedores();
       handleCloseModal();
-    } catch (err) {
-      console.error(err);
-      const code = (err as { code?: string })?.code;
+    } catch (err: unknown) {
+      const e = err as Record<string, unknown>;
+      const code = String(e?.code ?? '');
+      const message = String(e?.message ?? '');
       if (code === '23505') {
         toast.error('Já existe um fornecedor com este CNPJ.');
       } else {
-        toast.error('Não foi possível salvar o fornecedor. Tente novamente.');
+        toast.error('Erro ao salvar: ' + message);
       }
-    } finally {
-      setSaving(false);
     }
   }
 
-  async function handleDelete(fornecedor: Fornecedor) {
-    try {
-      setSaving(true);
-      const { error } = await supabase.from('fornecedores').delete().eq('id', fornecedor.id);
+  // --- EXCLUIR ---
+  async function handleDelete(id: number) {
+    if (!confirm('Tem certeza que deseja excluir este fornecedor?')) return;
 
+    try {
+      const { error } = await supabase.from('fornecedores').delete().eq('id', id);
       if (error) throw error;
 
-      toast.success('Fornecedor excluído com sucesso!');
-      await fetchFornecedores();
-    } catch (err) {
-      console.error(err);
-      const code = (err as { code?: string })?.code;
+      toast.success('Fornecedor excluído!');
+      setFornecedores((prev) => prev.filter((f) => f.id !== id));
+    } catch (err: unknown) {
+      const e = err as Record<string, unknown>;
+      const code = String(e?.code ?? '');
       if (code === '23503') {
-        toast.error(
-          'Este fornecedor não pode ser excluído pois está vinculado a um ou mais lotes.'
-        );
+        toast.error('Não é possível excluir: Fornecedor vinculado a produtos ou notas.');
       } else {
-        toast.error('Não foi possível excluir o fornecedor. Tente novamente.');
+        toast.error('Erro ao excluir.');
       }
-    } finally {
-      setSaving(false);
     }
   }
 
   function handleCloseModal() {
-    if (!saving) {
-      setIsModalOpen(false);
-      setEditingFornecedor(null);
-    }
+    setIsModalOpen(false);
+    setEditingFornecedor(null);
+    reset();
   }
 
+  // --- FILTRO COMBINADO ---
+  const filteredItems = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    return fornecedores.filter((f) => {
+      const matchesSearch =
+        f.nome.toLowerCase().includes(term) ||
+        f.cnpj.includes(term) ||
+        (f.email && f.email.toLowerCase().includes(term));
+
+      const matchesCategory = filterCategoria ? f.categoria === filterCategoria : true;
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [fornecedores, searchTerm, filterCategoria]);
+
+  // Helper para cor da categoria
+  const getCategoryColor = (cat?: string) => {
+    switch (cat) {
+      case 'Laticínios':
+        return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'Hortifruti':
+        return 'bg-green-100 text-green-700 border-green-200';
+      case 'Carnes':
+        return 'bg-red-100 text-red-700 border-red-200';
+      case 'Embalagens':
+        return 'bg-gray-100 text-gray-700 border-gray-200';
+      default:
+        return 'bg-orange-50 text-orange-700 border-orange-200';
+    }
+  };
+
   return (
-    <>
+    <div className="space-y-6 animate-fade-up">
+      <Toaster position="top-right" />
+
       <PageHeader
         title="Gestão de Fornecedores"
-        description="Gerencie os fornecedores cadastrados no sistema"
+        description="Gerencie parceiros, contatos e categorias de compra."
         icon={Truck}
       >
         <Button
           onClick={() => {
             setEditingFornecedor(null);
-            reset({});
             setIsModalOpen(true);
           }}
+          icon={Plus}
         >
-          Adicionar Fornecedor
+          Novo Fornecedor
         </Button>
       </PageHeader>
 
-      {loading ? (
-        <div className="mt-6 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <span className="ml-2 text-gray-600">Carregando fornecedores...</span>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* Barra de Busca e Filtros */}
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
+            <input
+              type="text"
+              placeholder="Buscar por nome, CNPJ, CPF ou email..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 outline-none transition-all bg-white"
+            />
+          </div>
+          <div className="relative w-full md:w-64">
+            <Filter className="absolute left-3 top-2.5 text-slate-400" size={18} />
+            <select
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 outline-none transition-all bg-white appearance-none"
+              value={filterCategoria}
+              onChange={(e) => setFilterCategoria(e.target.value)}
+            >
+              <option value="">Todas as Categorias</option>
+              {CATEGORIAS_FORNECEDOR.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-      ) : filteredItems.length === 0 ? (
-        <EmptyState
-          type={fornecedores.length === 0 ? 'no-data' : 'no-results'}
-          title={
-            fornecedores.length === 0
-              ? 'Nenhum fornecedor cadastrado'
-              : 'Nenhum fornecedor encontrado'
-          }
-          description={
-            fornecedores.length === 0
-              ? 'Clique no botão acima para adicionar um novo fornecedor'
-              : 'Tente ajustar os filtros de busca para encontrar o que procura.'
-          }
-        />
-      ) : (
-        <Card variant="default">
-          <TableControls
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            searchPlaceholder="Buscar fornecedores por nome, CNPJ ou email..."
-          />
 
+        {/* Tabela */}
+        {loading ? (
+          <div className="flex h-48 items-center justify-center text-slate-400">
+            <Loader2 className="animate-spin mr-2" /> Carregando lista...
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="p-12 text-center text-slate-400">
+            <Truck size={48} className="mx-auto mb-3 opacity-20" />
+            <p>Nenhum fornecedor encontrado.</p>
+          </div>
+        ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-500 uppercase text-xs font-semibold">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Nome
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    CNPJ
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Telefone
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Ações
-                  </th>
+                  <th className="px-6 py-3">Empresa</th>
+                  <th className="px-6 py-3">Categoria / Avaliação</th>
+                  <th className="px-6 py-3">Contato</th>
+                  <th className="px-6 py-3 text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+              <tbody className="divide-y divide-slate-100">
                 {filteredItems.map((fornecedor) => (
-                  <tr key={fornecedor.id}>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                      {fornecedor.nome}
+                  <tr key={fornecedor.id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="px-6 py-4">
+                      <p className="font-bold text-slate-800 text-base">{fornecedor.nome}</p>
+                      <div className="flex items-center gap-1 text-slate-500 text-xs mt-1 font-mono">
+                        <FileText size={12} /> {formatCpfCnpj(fornecedor.cnpj)}
+                      </div>
+                      {fornecedor.endereco && (
+                        <div
+                          className="flex items-center gap-1 text-slate-400 text-xs mt-1 truncate max-w-[200px]"
+                          title={fornecedor.endereco}
+                        >
+                          <MapPin size={12} /> {fornecedor.endereco}
+                        </div>
+                      )}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {formatCNPJ(fornecedor.cnpj)}
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-2">
+                        {(() => {
+                          const cats = Array.isArray(fornecedor.categoria)
+                            ? fornecedor.categoria
+                            : fornecedor.categoria
+                              ? String(fornecedor.categoria)
+                                  .split(',')
+                                  .map((s) => s.trim())
+                                  .filter(Boolean)
+                              : ['Outros'];
+                          return cats.map((c) => (
+                            <span
+                              key={c}
+                              className={`px-2 py-0.5 rounded border text-xs font-medium w-fit ${getCategoryColor(c)}`}
+                            >
+                              {c}
+                            </span>
+                          ));
+                        })()}
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              size={12}
+                              className={`${star <= (fornecedor.avaliacao || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-slate-200'}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {fornecedor.email || '-'}
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1.5">
+                        {fornecedor.email && (
+                          <div className="flex items-center gap-2 text-slate-600 text-xs">
+                            <Mail size={14} className="text-slate-400" /> {fornecedor.email}
+                          </div>
+                        )}
+                        {fornecedor.telefone && (
+                          <div className="flex items-center gap-2 text-slate-600 text-xs">
+                            <Phone size={14} className="text-slate-400" /> {fornecedor.telefone}
+                          </div>
+                        )}
+                        {!fornecedor.email && !fornecedor.telefone && (
+                          <span className="text-slate-400 italic">-</span>
+                        )}
+                      </div>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {fornecedor.telefone || '-'}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                      <div className="flex justify-end gap-2">
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => {
                             setEditingFornecedor(fornecedor);
                             setIsModalOpen(true);
                           }}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
-                          aria-label={`Editar fornecedor ${fornecedor.nome}`}
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                           title="Editar"
                         >
-                          <Edit className="h-4 w-4" />
+                          <Edit size={18} />
                         </button>
                         <button
-                          onClick={() => handleDelete(fornecedor)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                          aria-label={`Excluir fornecedor ${fornecedor.nome}`}
+                          onClick={() => handleDelete(fornecedor.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                           title="Excluir"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     </td>
@@ -273,114 +407,136 @@ export default function FornecedoresPage() {
               </tbody>
             </table>
           </div>
-        </Card>
-      )}
+        )}
+      </div>
 
-      <Toaster position="top-right" />
-
+      {/* Modal de Cadastro */}
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         title={editingFornecedor ? 'Editar Fornecedor' : 'Novo Fornecedor'}
+        size="md"
       >
-        <form onSubmit={handleSubmit((data) => handleSave(data))} className="space-y-4">
-          <div>
-            <Text variant="body-sm" weight="semibold">
-              Nome
-            </Text>
-            <input
-              {...register('nome')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
-            {errors.nome && (
-              <Text variant="caption" color="danger">
-                {errors.nome.message}
-              </Text>
-            )}
+        <form onSubmit={handleSubmit(handleSave)} className="space-y-4">
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Razão Social / Nome
+              </label>
+              <input
+                {...register('nome')}
+                className={`w-full rounded-lg border px-3 py-2 outline-none focus:ring-2 ${errors.nome ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:border-orange-500 focus:ring-orange-100'}`}
+                placeholder="Ex: Distribuidora Aliança"
+              />
+              {errors.nome && <p className="mt-1 text-xs text-red-500">{errors.nome.message}</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">CNPJ / CPF</label>
+                <input
+                  {...register('cnpj')}
+                  onChange={(e) => {
+                    const val = maskCpfCnpj(e.target.value);
+                    setValue('cnpj', val);
+                  }}
+                  className={`w-full rounded-lg border px-3 py-2 outline-none focus:ring-2 ${errors.cnpj ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:border-orange-500 focus:ring-orange-100'}`}
+                  placeholder="00.000.000/0000-00"
+                />
+                {errors.cnpj && <p className="mt-1 text-xs text-red-500">{errors.cnpj.message}</p>}
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Categoria</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(watch('categoria') || ['Outros']) && null}
+                  {CATEGORIAS_FORNECEDOR.map((cat) => {
+                    const selected = Array.isArray(watch('categoria'))
+                      ? (watch('categoria') as string[]).includes(cat)
+                      : false;
+                    return (
+                      <label key={cat} className="inline-flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={(e) => {
+                            const current = watch('categoria') || [];
+                            const next = e.target.checked
+                              ? Array.from(new Set([...current, cat]))
+                              : current.filter((c) => c !== cat);
+                            setValue('categoria', next, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            });
+                          }}
+                          className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                        />
+                        <span className="text-slate-700">{cat}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Email</label>
+                <input
+                  {...register('email')}
+                  type="email"
+                  className={`w-full rounded-lg border px-3 py-2 outline-none focus:ring-2 ${errors.email ? 'border-red-500 focus:ring-red-200' : 'border-gray-300 focus:border-orange-500 focus:ring-orange-100'}`}
+                  placeholder="contato@empresa.com"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Telefone</label>
+                <input
+                  {...register('telefone')}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Avaliação (1-5)
+              </label>
+              <select
+                {...register('avaliacao')}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100 bg-white"
+              >
+                <option value="5">⭐⭐⭐⭐⭐ Excelente</option>
+                <option value="4">⭐⭐⭐⭐ Bom</option>
+                <option value="3">⭐⭐⭐ Regular</option>
+                <option value="2">⭐⭐ Ruim</option>
+                <option value="1">⭐ Péssimo</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Endereço Completo
+              </label>
+              <textarea
+                {...register('endereco')}
+                rows={2}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100 resize-none"
+                placeholder="Rua, Número, Bairro, Cidade - UF"
+              />
+            </div>
           </div>
 
-          <div>
-            <Text variant="body-sm" weight="semibold">
-              CNPJ
-            </Text>
-            <input
-              {...register('cnpj')}
-              onChange={(e) => {
-                const masked = maskCNPJ(e.target.value);
-                const setter = Object.getOwnPropertyDescriptor(
-                  window.HTMLInputElement.prototype,
-                  'value'
-                )?.set;
-                setter?.call(e.target, masked);
-                e.target.dispatchEvent(new Event('input', { bubbles: true }));
-              }}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
-            {errors.cnpj && (
-              <Text variant="caption" color="danger">
-                {errors.cnpj.message}
-              </Text>
-            )}
-          </div>
-
-          <div>
-            <Text variant="body-sm" weight="semibold">
-              Email
-            </Text>
-            <input
-              type="email"
-              {...register('email')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
-            {errors.email && (
-              <Text variant="caption" color="danger">
-                {errors.email.message}
-              </Text>
-            )}
-          </div>
-
-          <div>
-            <Text variant="body-sm" weight="semibold">
-              Telefone
-            </Text>
-            <input
-              type="tel"
-              {...register('telefone')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
-            {errors.telefone && (
-              <Text variant="caption" color="danger">
-                {errors.telefone.message}
-              </Text>
-            )}
-          </div>
-
-          <div>
-            <Text variant="body-sm" weight="semibold">
-              Endereço
-            </Text>
-            <textarea
-              {...register('endereco')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              rows={3}
-            />
-            {errors.endereco && (
-              <Text variant="caption" color="danger">
-                {errors.endereco.message}
-              </Text>
-            )}
-          </div>
-
-          <div className="mt-5 flex justify-end space-x-2">
-            <Button type="button" variant="secondary" onClick={handleCloseModal} disabled={saving}>
+          <div className="flex gap-3 pt-4 border-t mt-2">
+            <Button type="button" variant="secondary" onClick={handleCloseModal} className="flex-1">
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Salvando...' : 'Salvar'}
+            <Button type="submit" disabled={isSubmitting} loading={isSubmitting} className="flex-1">
+              Salvar
             </Button>
           </div>
         </form>
       </Modal>
-    </>
+    </div>
   );
 }

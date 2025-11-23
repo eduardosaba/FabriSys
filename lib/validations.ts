@@ -98,7 +98,11 @@ export const insumoSchema = z.object({
     .number()
     .min(0, 'Estoque mínimo não pode ser negativo')
     .max(999999, 'Valor muito alto para estoque mínimo'),
-  categoria_id: z.string().uuid('ID da categoria inválido').optional(),
+  categoria_id: z.preprocess((val) => {
+    if (val === '' || val === null || val === undefined) return null;
+    if (typeof val === 'string' && /^\d+$/.test(val)) return parseInt(val, 10);
+    return val;
+  }, z.number().int().nullable().optional()),
   atributos_dinamicos: z.record(z.unknown()).optional().default({}),
   unidade_estoque: z
     .enum(

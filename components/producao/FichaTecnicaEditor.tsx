@@ -11,7 +11,13 @@ interface FichaTecnicaEditorProps {
   produtoFinalId: string;
   nomeProduto: string;
   precoVenda: number;
-  onSave: (insumos: InsumoFicha[], precoVenda: number, rendimento: number) => Promise<void>;
+  // ATUALIZADO: Adicionado rendimentoTotalG na assinatura da função
+  onSave: (
+    insumos: InsumoFicha[],
+    precoVenda: number,
+    rendimento: number,
+    rendimentoTotalG: number
+  ) => Promise<void>;
   ficha?: Partial<FichaTecnica>;
   modoEdicao?: boolean;
 }
@@ -19,9 +25,8 @@ interface FichaTecnicaEditorProps {
 interface InsumoEstoque {
   id: string;
   nome: string;
-  unidade_medida: string; // Mantido para compatibilidade
-  custo_unitario?: number; // Mantido para compatibilidade
-  // Novos campos do sistema de unidades duplas
+  unidade_medida: string;
+  custo_unitario?: number;
   unidade_estoque: string;
   custo_por_ue?: number;
   unidade_consumo: string;
@@ -57,7 +62,11 @@ export function FichaTecnicaEditor({
   const [mostrarBusca, setMostrarBusca] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [precoVendaInput, setPrecoVendaInput] = useState('');
+
+  // Estado para Rendimento em Unidades (Ex: 20 doces)
   const [rendimentoUnidades, setRendimentoUnidades] = useState<number>(1);
+  // NOVO: Estado para Rendimento em Gramas (Ex: 450g de massa)
+  const [rendimentoTotalG, setRendimentoTotalG] = useState<number>(0);
 
   // Formatar valor para Real
   const formatarReal = (valor: number): string => {
@@ -70,29 +79,22 @@ export function FichaTecnicaEditor({
     return parseFloat(numero) || 0;
   };
 
-  // Inicializar input com preço formatado
   useEffect(() => {
     setPrecoVendaInput(formatarReal(precoVenda));
   }, [precoVenda]);
 
   const handlePrecoVendaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target.value;
-
-    // Permitir apenas números e vírgula
     const apenasNumeros = input.replace(/[^\d,]/g, '');
-
-    // Limitar a duas casas decimais
     const partes = apenasNumeros.split(',');
     if (partes[1] && partes[1].length > 2) {
       partes[1] = partes[1].slice(0, 2);
     }
     const valorFormatado = partes.join(',');
-
     setPrecoVendaInput(valorFormatado);
     setPrecoVenda(parseReal(valorFormatado));
   };
 
-  // Carregar insumos disponíveis
   useEffect(() => {
     async function carregarInsumos() {
       const { data, error } = await supabase
@@ -109,13 +111,11 @@ export function FichaTecnicaEditor({
     void carregarInsumos();
   }, []);
 
-  // Filtrar insumos pela busca
   const insumosFiltrados = insumosDisponiveis.filter((insumo) =>
     insumo.nome.toLowerCase().includes(buscaInsumo.toLowerCase())
   );
 
   const handleSelectInsumo = (idLocal: string, insumo: InsumoEstoque) => {
-    // Calcular custo por unidade de consumo (UC)
     const custoPorUC =
       insumo.custo_por_ue && insumo.fator_conversao
         ? insumo.custo_por_ue / insumo.fator_conversao
@@ -124,9 +124,8 @@ export function FichaTecnicaEditor({
     updateInsumoFull(idLocal, {
       insumoId: insumo.id,
       nomeInsumo: insumo.nome,
-      unidadeMedida: insumo.unidade_consumo, // Agora usa UC
-      custoUnitario: custoPorUC, // Custo por UC
-      // Adicionar informações extras para exibição
+      unidadeMedida: insumo.unidade_consumo,
+      custoUnitario: custoPorUC,
       unidadeEstoque: insumo.unidade_estoque,
       custoPorUE: insumo.custo_por_ue,
       fatorConversao: insumo.fator_conversao,
@@ -138,7 +137,8 @@ export function FichaTecnicaEditor({
   const handleSave = async () => {
     setLoading(true);
     try {
-      await onSave(insumos, precoVenda, rendimentoUnidades);
+      // ATUALIZADO: Passando o rendimentoTotalG para a função pai
+      await onSave(insumos, precoVenda, rendimentoUnidades, rendimentoTotalG);
     } finally {
       setLoading(false);
     }
@@ -151,12 +151,14 @@ export function FichaTecnicaEditor({
         <h2 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">
           Ficha Técnica - {nomeProduto}
         </h2>
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        {/* ATUALIZADO: Mudado para grid-cols-3 para caber os 3 campos lado a lado */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          {/* Campo 1: Preço */}
           <div>
             <label className="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
               <div className="flex items-center gap-2">
                 <DollarSign size={18} />
-                Preço de Venda Unitário (R$)
+                Preço de Venda (R$)
               </div>
             </label>
             <div className="relative">
@@ -172,15 +174,16 @@ export function FichaTecnicaEditor({
               />
             </div>
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              Preço de venda por unidade do produto
+              Preço de venda por unidade
             </p>
           </div>
 
+          {/* Campo 2: Rendimento Unidades */}
           <div>
             <label className="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
               <div className="flex items-center gap-2">
                 <Package size={18} />
-                Rendimento da Receita (unidades)
+                Rendimento (Unidades)
               </div>
             </label>
             <input
@@ -191,8 +194,32 @@ export function FichaTecnicaEditor({
               placeholder="1"
               className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-lg font-semibold transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             />
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Ex: 20 cones</p>
+          </div>
+
+          {/* Campo 3: NOVO - Peso da Massa (Rendimento da Panela) */}
+          <div>
+            <label className="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+              <div className="flex items-center gap-2">
+                <Package size={18} />
+                Peso da Massa Cozida
+              </div>
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                step="0.01"
+                value={rendimentoTotalG}
+                onChange={(e) => setRendimentoTotalG(parseFloat(e.target.value) || 0)}
+                placeholder="Ex: 450"
+                className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-lg font-semibold transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              />
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4">
+                <span className="text-gray-500 font-medium">g</span>
+              </div>
+            </div>
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              Quantas unidades esta receita produz? Ex: 20 cones
+              Essencial p/ cálculo de panelas
             </p>
           </div>
         </div>
@@ -205,8 +232,7 @@ export function FichaTecnicaEditor({
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Receita Completa</h3>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
               💡 <strong>Dica:</strong> Adicione as quantidades em{' '}
-              <strong>Unidade de Consumo (UC)</strong> (ex: 30g de leite condensado). O sistema
-              calcula automaticamente a conversão para Unidade de Estoque (UE) durante a produção.
+              <strong>Unidade de Consumo (UC)</strong>. O sistema converte automaticamente.
             </p>
           </div>
           <button
@@ -281,29 +307,7 @@ export function FichaTecnicaEditor({
                             <div className="space-y-1 text-sm text-gray-500 dark:text-gray-400">
                               <div>
                                 <span className="font-medium">Estoque:</span> {ins.unidade_estoque}
-                                {ins.custo_por_ue && (
-                                  <span>
-                                    {' '}
-                                    - R$ {ins.custo_por_ue.toFixed(2)}/{ins.unidade_estoque}
-                                  </span>
-                                )}
                               </div>
-                              <div>
-                                <span className="font-medium">Consumo:</span> {ins.unidade_consumo}
-                                {ins.custo_por_ue && ins.fator_conversao && (
-                                  <span>
-                                    {' '}
-                                    - R$ {(ins.custo_por_ue / ins.fator_conversao).toFixed(4)}/
-                                    {ins.unidade_consumo}
-                                  </span>
-                                )}
-                              </div>
-                              {ins.fator_conversao && (
-                                <div className="text-xs">
-                                  <span className="font-medium">FC:</span> {ins.fator_conversao}{' '}
-                                  {ins.unidade_consumo}/{ins.unidade_estoque}
-                                </div>
-                              )}
                             </div>
                           </button>
                         ))
@@ -332,7 +336,7 @@ export function FichaTecnicaEditor({
                 {/* Unidade */}
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Unidade de Consumo (UC)
+                    Unidade (UC)
                   </label>
                   <input
                     type="text"
@@ -340,28 +344,9 @@ export function FichaTecnicaEditor({
                     disabled
                     className="w-full cursor-not-allowed rounded-xl border-2 border-gray-300 bg-gray-100 px-4 py-3 dark:border-gray-600 dark:bg-gray-600"
                   />
-                  {/* Informações do sistema de unidades duplas */}
                   {insumo.unidadeEstoque && (
-                    <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2 dark:border-blue-800 dark:bg-blue-900/20">
-                      <div className="space-y-1 text-xs text-blue-800 dark:text-blue-200">
-                        <div>
-                          <strong>Estoque (UE):</strong> {insumo.unidadeEstoque}
-                        </div>
-                        {insumo.custoPorUE && (
-                          <div>
-                            <strong>Custo por UE:</strong> R$ {insumo.custoPorUE.toFixed(2)}
-                          </div>
-                        )}
-                        {insumo.fatorConversao && (
-                          <div>
-                            <strong>Fator Conversão:</strong> {insumo.fatorConversao}{' '}
-                            {insumo.unidadeMedida}/{insumo.unidadeEstoque}
-                          </div>
-                        )}
-                        <div>
-                          <strong>Custo por UC:</strong> R$ {insumo.custoUnitario.toFixed(4)}
-                        </div>
-                      </div>
+                    <div className="mt-2 text-xs text-blue-800 dark:text-blue-200">
+                      Estoque em: {insumo.unidadeEstoque}
                     </div>
                   )}
                 </div>

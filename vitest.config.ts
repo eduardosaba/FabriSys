@@ -1,6 +1,7 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vitest/config';
 import dotenv from 'dotenv';
+import path from 'path';
 
 // Carregar variáveis do .env.test antes dos testes
 dotenv.config({ path: '.env.test' });
@@ -34,7 +35,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': '.',
+      '@': path.resolve(__dirname, './'),
     },
   },
 });

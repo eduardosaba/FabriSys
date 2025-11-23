@@ -49,10 +49,9 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
-export default function DashboardHeader() {
+export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => void }) {
   const _router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAISearch, setShowAISearch] = useState(false);
@@ -205,9 +204,11 @@ export default function DashboardHeader() {
   ];
 
   // Filtrar ações baseado no role do usuário
+  const roleVal = profile?.role ?? '';
+  const allowedRoles = ['admin', 'fabrica', 'fábrica', 'master'];
   const filteredActions = quickActions.filter((action) => {
-    if (profile?.role === 'admin') return true;
-    if (profile?.role === 'fabrica') return action.label !== 'Novo PDV';
+    if (allowedRoles.includes(roleVal)) return true;
+    if (roleVal === 'fabrica') return action.label !== 'Novo PDV';
     return false;
   });
 
@@ -220,6 +221,7 @@ export default function DashboardHeader() {
       <button
         className="rounded-md p-2 lg:hidden"
         style={{ transition: 'background 0.2s' }}
+        onClick={() => onMenuClick?.()}
         onMouseEnter={(e) => {
           (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
           (e.currentTarget as HTMLElement).style.color = '';
@@ -241,14 +243,19 @@ export default function DashboardHeader() {
         <Link href="/dashboard" className="flex items-center gap-2">
           {/* Logo do Sistema (Marca A - sempre visível se existir) */}
           {theme.logo_url && (
-            <Image
+            <img
               src={theme.logo_url}
               alt={theme.name || 'Sistema'}
-              width={32 * (theme.logo_scale || 1)}
-              height={32 * (theme.logo_scale || 1)}
-              sizes={`${32 * (theme.logo_scale || 1)}px`}
+              // Mantemos um tamanho base para layout e aplicamos escala via variável CSS
+              width={32}
+              height={32}
               className="rounded-md object-contain"
-              style={{ width: 'auto', height: 'auto' }}
+              style={{
+                // A largura é recalculada com a variável --logo-scale, o que afeta o layout
+                width: `calc(32px * var(--logo-scale, ${theme?.logo_scale ?? 1}))`,
+                height: 'auto',
+                imageRendering: 'auto',
+              }}
               loading="eager"
             />
           )}
@@ -339,7 +346,7 @@ export default function DashboardHeader() {
       {/* Ações e Ferramentas */}
       <div className="flex items-center gap-4">
         {/* Atalhos Rápidos */}
-        {(profile?.role === 'admin' || profile?.role === 'fabrica') && (
+        {allowedRoles.includes(profile?.role ?? '') && (
           <div className="relative">
             <button
               onClick={() => {

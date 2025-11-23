@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useForm } from 'react-hook-form';
+import type { Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 import { Upload } from 'lucide-react';
 import Button from '@/components/Button';
+import Modal from '@/components/Modal';
 import { useToast } from '@/hooks/useToast';
 import { supabase } from '@/lib/supabase';
 import { ProdutoFinal } from '@/lib/types/producao';
@@ -61,11 +63,16 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
   const [precoDisplay, setPrecoDisplay] = useState<string>(
     produto?.preco_venda ? formatCurrency(produto.preco_venda) : ''
   );
+  const [categorias, setCategorias] = useState<Array<{ id: number; nome: string }>>([]);
+  const [isCategoriaModalOpen, setIsCategoriaModalOpen] = useState(false);
+  const [newCategoriaName, setNewCategoriaName] = useState('');
 
-  console.log('=== DEBUG PRODUTO FORM RENDER ===');
-  console.log('Produto prop:', produto);
-  console.log('Image preview:', imagePreview);
-  console.log('Preço display:', precoDisplay);
+  if (process.env.NODE_ENV === 'development') {
+    console.log('=== DEBUG PRODUTO FORM RENDER ===');
+    console.log('Produto prop:', produto);
+    console.log('Image preview:', imagePreview);
+    console.log('Preço display:', precoDisplay);
+  }
 
   const {
     register,
@@ -73,57 +80,210 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
     formState: { errors, isSubmitting },
     setValue,
     trigger,
-  } = useForm({
-    resolver: zodResolver(produtoFinalSchema),
+  } = useForm<ProdutoFormData>({
+    resolver: zodResolver(produtoFinalSchema) as Resolver<ProdutoFormData>,
     defaultValues: produto || {
       ativo: true,
       imagem_url: null,
       codigo_interno: null,
       descricao: null,
       tipo: 'final',
+      peso_unitario: 0,
     },
   });
-  console.log('=== DEBUG FORM INITIALIZATION ===');
-  console.log(
-    'Default values:',
-    produto || {
-      ativo: true,
-      imagem_url: null,
-      codigo_interno: null,
-      descricao: null,
-    }
-  );
-  console.log('Form errors:', errors);
-  console.log('Is submitting:', isSubmitting);
+  if (process.env.NODE_ENV === 'development') {
+    console.log('=== DEBUG FORM INITIALIZATION ===');
+    console.log(
+      'Default values:',
+      produto || {
+        ativo: true,
+        imagem_url: null,
+        codigo_interno: null,
+        descricao: null,
+      }
+    );
+    console.log('Form errors:', errors);
+    console.log('Is submitting:', isSubmitting);
+  }
 
   // Atualizar precoDisplay quando produto muda
   useEffect(() => {
     if (produto?.preco_venda) {
-      setPrecoDisplay(formatCurrency(produto.preco_venda));
+      setPrecoDisplay(formatCurrency(produto.preco_venda ?? 0));
     }
   }, [produto?.preco_venda]);
 
   // Reset form values when produto changes (for edit mode)
   useEffect(() => {
     if (produto) {
-      console.log('=== RESETTING FORM FOR EDIT MODE ===');
-      console.log('Produto data:', produto);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('=== RESETTING FORM FOR EDIT MODE ===');
+        console.log('Produto data:', produto);
+      }
 
-      // Reset all form values with produto data
-      setValue('nome', produto.nome);
-      setValue('preco_venda', produto.preco_venda);
-      setValue('imagem_url', produto.imagem_url || null);
-      setValue('codigo_interno', produto.codigo_interno || null);
-      setValue('descricao', produto.descricao || null);
-      setValue('ativo', produto.ativo);
-      setValue('tipo', produto.tipo || 'final');
+      // Reset all form values with produto data (acesso dinâmico para propriedades opcionais)
+      const prodRec = produto as unknown as Record<string, unknown>;
+      setValue('nome', (prodRec['nome'] as string) ?? '');
+      setValue('preco_venda', (prodRec['preco_venda'] as number) ?? 0);
+      setValue('imagem_url', (prodRec['imagem_url'] as string) ?? null);
+      setValue('codigo_interno', (prodRec['codigo_interno'] as string) ?? null);
+      setValue('descricao', (prodRec['descricao'] as string) ?? null);
+      setValue('ativo', (prodRec['ativo'] as boolean) ?? true);
+      const tipoVal = prodRec['tipo'];
+      if (tipoVal === 'final' || tipoVal === 'semi_acabado') {
+        setValue('tipo', tipoVal);
+      } else {
+        setValue('tipo', 'final');
+      }
+
+      if ('categoria_id' in prodRec) {
+        const cat = prodRec['categoria_id'];
+        setValue('categoria_id', cat != null ? Number(cat) : null);
+      }
+      if ('peso_unitario' in prodRec) {
+        setValue('peso_unitario', Number(prodRec['peso_unitario'] ?? 0));
+      }
 
       // Update image preview
-      setImagePreview(produto.imagem_url || null);
+      setImagePreview((prodRec['imagem_url'] as string) ?? null);
 
-      console.log('Form values reset completed');
+      if (process.env.NODE_ENV === 'development') console.log('Form values reset completed');
     }
   }, [produto, setValue]);
+
+  useEffect(() => {
+    // carregar categorias para select
+    let mounted = true;
+    const fetchCategorias = async () => {
+      try {
+        const { data, error } = await supabase.from('categorias').select('id, nome').order('nome');
+        if (error) throw error;
+        if (mounted) {
+          const normalized = ((data as { id: number | string; nome: string }[] | null) || []).map(
+            (r) => ({ ...r, id: Number(r.id) })
+          );
+          setCategorias(normalized);
+        }
+      } catch (err) {
+        console.error(
+          'Erro ao carregar categorias:',
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    };
+
+    void fetchCategorias();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const openCreateCategoria = () => {
+    setNewCategoriaName('');
+    setIsCategoriaModalOpen(true);
+  };
+
+  const handleCreateCategoria = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const nome = newCategoriaName?.trim();
+    if (!nome) {
+      toast({
+        title: 'Nome obrigatório',
+        description: 'Informe o nome da categoria',
+        variant: 'error',
+      });
+      return;
+    }
+
+    try {
+      // Verificar se já existe categoria com mesmo nome (case-insensitive)
+      const { data: existing, error: existingError } = await supabase
+        .from('categorias')
+        .select('id, nome')
+        .ilike('nome', nome)
+        .limit(1);
+
+      if (existingError) throw existingError;
+
+      if (existing && existing.length > 0) {
+        // Selecionar existente e fechar modal
+        setValue('categoria_id', Number(existing[0].id));
+        setIsCategoriaModalOpen(false);
+        toast({
+          title: 'Categoria existente',
+          description: 'Categoria já existe e foi selecionada',
+          variant: 'info',
+        });
+        // Atualizar lista local por segurança
+        const updated = await supabase.from('categorias').select('id, nome').order('nome');
+        if (!updated.error) {
+          const normalized = (
+            (updated.data as { id: number | string; nome: string }[] | null) || []
+          ).map((r) => ({ ...r, id: Number(r.id) }));
+          setCategorias(normalized);
+        }
+        return;
+      }
+
+      // Inserir nova categoria
+      const { data, error } = await supabase
+        .from('categorias')
+        .insert([{ nome }])
+        .select()
+        .limit(1);
+      if (error) {
+        // Se houver conflito de unicidade, tentar buscar novamente e selecionar existente
+        console.error('Erro ao inserir categoria, tentando buscar existente:', error);
+        const retry = await supabase
+          .from('categorias')
+          .select('id, nome')
+          .ilike('nome', nome)
+          .limit(1);
+        if (!retry.error && retry.data && retry.data.length > 0) {
+          setValue('categoria_id', Number((retry.data as { id: number | string }[])[0].id));
+          setIsCategoriaModalOpen(false);
+          toast({
+            title: 'Categoria existente',
+            description: 'Categoria já existe e foi selecionada',
+            variant: 'info',
+          });
+          const updated = await supabase.from('categorias').select('id, nome').order('nome');
+          if (!updated.error)
+            setCategorias(
+              ((updated.data as { id: number | string; nome: string }[] | null) || []).map((r) => ({
+                ...r,
+                id: Number(r.id),
+              }))
+            );
+          return;
+        }
+        throw error;
+      }
+
+      const created = ((data as { id?: number | string }[]) || [])[0];
+      // atualizar lista local e selecionar a nova categoria
+      const updated = await supabase.from('categorias').select('id, nome').order('nome');
+      if (updated.error) throw updated.error;
+      const list = ((updated.data as { id: number | string; nome: string }[]) || []).map((r) => ({
+        ...r,
+        id: Number(r.id),
+      }));
+      setCategorias(list);
+      if (created?.id) {
+        setValue('categoria_id', Number(created.id));
+      }
+
+      setIsCategoriaModalOpen(false);
+      toast({
+        title: 'Categoria criada',
+        description: 'Categoria adicionada com sucesso',
+        variant: 'success',
+      });
+    } catch (err) {
+      console.error('Erro ao criar categoria:', err);
+      toast({ title: 'Erro', description: 'Não foi possível criar a categoria', variant: 'error' });
+    }
+  };
 
   async function handleImageUpload(file: File) {
     try {
@@ -172,17 +332,34 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
     };
   };
 
+  // Normaliza dados antes de enviar ao servidor (converte categoria_id para number/null)
+  const normalizeForInsert = (data: ProdutoFormData) => {
+    const base = cleanData(data) as unknown as Record<string, unknown>;
+    if (base.categoria_id === '' || base.categoria_id === null || base.categoria_id === undefined) {
+      base.categoria_id = null;
+    } else {
+      // pode vir como string (do select) ou number
+      base.categoria_id = Number(base.categoria_id as string | number);
+      if (Number.isNaN(base.categoria_id)) base.categoria_id = null;
+    }
+    return base as ProdutoFormData;
+  };
+
   const onSubmit = async (data: ProdutoFormData) => {
-    console.log('=== DEBUG PRODUTO FORM SUBMIT ===');
-    console.log('Data recebida:', data);
-    console.log('Produto existente:', produto);
-    console.log('Usuário autenticado:', user);
-    console.log('Perfil do usuário:', profile);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('=== DEBUG PRODUTO FORM SUBMIT ===');
+      console.log('Data recebida:', data);
+      console.log('Produto existente:', produto);
+      console.log('Usuário autenticado:', user);
+      console.log('Perfil do usuário:', profile);
+    }
 
     // Validar todos os campos antes de tentar salvar
     const isValid = await trigger();
-    console.log('Formulário válido:', isValid);
-    console.log('Erros de validação:', errors);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Formulário válido:', isValid);
+      console.log('Erros de validação:', errors);
+    }
 
     if (!isValid) {
       const errorMessages = Object.values(errors)
@@ -198,14 +375,15 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
       return;
     }
 
-    const cleanedData = cleanData(data);
-    console.log('Dados limpos:', cleanedData);
+    const cleanedData = normalizeForInsert(data);
+    if (process.env.NODE_ENV === 'development') console.log('Dados limpos:', cleanedData);
 
     try {
-      console.log('Tentando salvar produto...');
+      if (process.env.NODE_ENV === 'development') console.log('Tentando salvar produto...');
 
       if (produto) {
-        console.log('Fazendo UPDATE do produto ID:', produto.id);
+        if (process.env.NODE_ENV === 'development')
+          console.log('Fazendo UPDATE do produto ID:', produto.id);
         const { error } = await supabase
           .from('produtos_finais')
           .update(cleanedData)
@@ -246,36 +424,30 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
         router.push('/dashboard/producao/produtos');
       }
     } catch (error: unknown) {
-      console.error('Erro ao salvar produto:', error);
-      console.error('Tipo do erro:', typeof error);
       console.error(
-        'Propriedades do erro:',
-        error && typeof error === 'object' ? Object.keys(error) : 'N/A'
+        'Erro ao salvar produto:',
+        error instanceof Error ? error.message : String(error)
       );
 
       let errorMessage = 'Ocorreu um erro ao salvar o produto.';
 
-      if (error && typeof error === 'object' && 'code' in error && error.code === '42501') {
-        errorMessage =
-          'Você não tem permissão para criar produtos. Faça login com uma conta de administrador.';
-      } else if (
-        error &&
-        typeof error === 'object' &&
-        'message' in error &&
-        typeof error.message === 'string' &&
-        error.message.includes('violates row-level security policy')
-      ) {
-        errorMessage =
-          'Você não tem permissão para editar produtos. Faça login com uma conta de administrador.';
+      if (error && typeof error === 'object' && error !== null) {
+        const errObj = error as Record<string, unknown>;
+        if (String(errObj['code']) === '42501') {
+          errorMessage =
+            'Você não tem permissão para criar produtos. Faça login com uma conta de administrador.';
+        } else if (
+          typeof errObj['message'] === 'string' &&
+          String(errObj['message']).includes('violates row-level security policy')
+        ) {
+          errorMessage =
+            'Você não tem permissão para editar produtos. Faça login com uma conta de administrador.';
+        }
       }
 
       console.error('Mensagem de erro final:', errorMessage);
 
-      toast({
-        title: 'Erro ao salvar',
-        description: errorMessage,
-        variant: 'error',
-      });
+      toast({ title: 'Erro ao salvar', description: errorMessage, variant: 'error' });
     }
   };
 
@@ -379,7 +551,31 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
             </p>
           )}
         </div>
-
+        {/* --- BLOCO DO PESO UNITÁRIO (NOVO) --- */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Peso Unitário (Gramas) <span className="text-red-500">*</span>
+          </label>
+          <div className="relative mt-1 rounded-md shadow-sm">
+            <input
+              type="number"
+              step="0.01"
+              {...register('peso_unitario', { valueAsNumber: true })}
+              className={`block w-full rounded-md border-gray-300 pr-12 focus:border-blue-500 focus:ring-blue-500 sm:text-sm
+        ${errors.peso_unitario ? 'border-red-300' : ''}`}
+              placeholder="Ex: 20"
+            />
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+              <span className="text-gray-500 sm:text-sm font-bold">g</span>
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            Peso individual do produto final. Usado para calcular a massa total.
+          </p>
+          {errors.peso_unitario && (
+            <p className="mt-1 text-sm text-red-600">{errors.peso_unitario.message}</p>
+          )}
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Status</label>
           <select
@@ -392,6 +588,38 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
             <option value="true">Ativo</option>
             <option value="false">Inativo</option>
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Categoria</label>
+          <div className="flex items-center gap-2">
+            <select
+              {...register('categoria_id')}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              defaultValue={
+                produto
+                  ? String((produto as unknown as Record<string, unknown>)['categoria_id'] ?? '')
+                  : ''
+              }
+            >
+              <option value="">-- Sem categoria --</option>
+              {categorias.map((c, idx) => (
+                <option key={String(c.id ?? `cat-${idx}`)} value={String(c.id ?? '')}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={openCreateCategoria}
+              className="mt-1 inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm hover:bg-gray-50"
+              aria-label="Criar nova categoria"
+              title="Criar nova categoria"
+            >
+              Novo
+            </button>
+          </div>
         </div>
 
         <div className="md:col-span-2">
@@ -454,6 +682,39 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
           {produto ? 'Salvar Alterações' : 'Cadastrar Produto'}
         </Button>
       </div>
+
+      <Modal
+        isOpen={isCategoriaModalOpen}
+        onClose={() => setIsCategoriaModalOpen(false)}
+        title="Nova Categoria"
+      >
+        <form onSubmit={handleCreateCategoria} className="space-y-4">
+          <div>
+            <label htmlFor="nova-categoria" className="block text-sm font-medium text-gray-700">
+              Nome da Categoria
+            </label>
+            <input
+              id="nova-categoria"
+              type="text"
+              value={newCategoriaName}
+              onChange={(e) => setNewCategoriaName(e.target.value)}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              placeholder="Ex: Panificação"
+              required
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsCategoriaModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit">Criar</Button>
+          </div>
+        </form>
+      </Modal>
     </form>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { insumoSchema, unidadesMedida, unidadesEstoque, unidadesConsumo } from '@/lib/validations';
 import Button from '@/components/Button';
 import { z } from 'zod';
@@ -152,20 +153,74 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
     e.preventDefault();
 
     try {
+      // Use os valores atuais do formulário, com fallback para os valores iniciais
+      const categoriaId =
+        formData.categoria_id ||
+        (initialValues && typeof initialValues === 'object' && 'categoria_id' in initialValues
+          ? (initialValues as { categoria_id?: string }).categoria_id
+          : '');
+
+      const custoPorUE =
+        typeof formData.custo_por_ue === 'number'
+          ? formData.custo_por_ue
+          : safeInitialValues.custo_por_ue;
+      const estoqueMin =
+        typeof formData.estoque_minimo_alerta === 'number'
+          ? formData.estoque_minimo_alerta
+          : safeInitialValues.estoque_minimo_alerta;
+      const fatorConv =
+        typeof formData.fator_conversao === 'number'
+          ? formData.fator_conversao
+          : safeInitialValues.fator_conversao;
+
       const safeFormData = {
         ...formData,
-        categoria_id: safeInitialValues.categoria_id,
-        custo_por_ue: safeInitialValues.custo_por_ue,
-        estoque_minimo_alerta: safeInitialValues.estoque_minimo_alerta,
-        custo_por_uc: calcularCustoPorUC(
-          safeInitialValues.custo_por_ue,
-          safeInitialValues.fator_conversao
-        ),
+        categoria_id: categoriaId,
+        custo_por_ue: custoPorUE,
+        estoque_minimo_alerta: estoqueMin,
+        custo_por_uc: calcularCustoPorUC(custoPorUE, fatorConv),
       };
 
       const parsedData = insumoSchema.parse(safeFormData);
 
-      await onSubmit(parsedData);
+      // Se for criação (sem initialValues), verificar duplicidade por nome (case-insensitive)
+      if (!initialValues) {
+        try {
+          const { data: existing, error: existingError } = await supabase
+            .from('insumos')
+            .select('id')
+            .ilike('nome', parsedData.nome)
+            .limit(1);
+          if (existingError) throw existingError;
+          if (existing && existing.length > 0) {
+            setErrors((prev) => ({ ...prev, nome: 'Já existe um insumo com esse nome.' }));
+            return;
+          }
+        } catch (err) {
+          console.error('Erro ao checar duplicidade de insumo:', err);
+          // continuar e tentar submeter — o DB também bloqueará se houver duplicata
+        }
+      }
+
+      try {
+        await onSubmit(parsedData);
+      } catch (err: unknown) {
+        console.error('Erro ao salvar insumo (onSubmit):', err);
+        // Tratar erro de violação de unicidade vindo do servidor
+        const e = err as { message?: string; code?: string };
+        const msg = e?.message || String(err);
+        if (
+          String(msg).includes('duplicate key value') ||
+          String(msg).includes('insumos_nome_key') ||
+          e?.code === '23505'
+        ) {
+          setErrors((prev) => ({ ...prev, nome: 'Já existe um insumo com esse nome.' }));
+          return;
+        }
+        // fallback: mostrar erro genérico no campo nome
+        setErrors((prev) => ({ ...prev, nome: 'Erro ao salvar insumo.' }));
+        return;
+      }
     } catch (err) {
       if (err instanceof z.ZodError) {
         const fieldErrors: Record<string, string> = {};

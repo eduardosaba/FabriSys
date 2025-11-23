@@ -1,5 +1,5 @@
 export interface Categoria {
-  id: string;
+  id: number;
   nome: string;
   created_at: string;
   updated_at: string;
@@ -13,7 +13,7 @@ export interface Insumo {
   estoque_minimo_alerta: number;
   estoque_atual?: number;
   ultimo_valor: number | null;
-  categoria_id: string;
+  categoria_id: number;
   categoria?: Categoria;
   atributos_dinamicos?: Record<string, unknown>;
   // Novos campos do sistema de unidades duplas

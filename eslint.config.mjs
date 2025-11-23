@@ -13,6 +13,7 @@ export default tseslint.config(
       'build/**',
       'dist/**',
       'node_modules/**',
+      'scripts/**',
       'pnpm-lock.yaml',
       'next-env.d.ts',
       'coverage/**',

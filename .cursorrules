@@ -1,0 +1,63 @@
+# ATUE
+COMO: Senior Fullstack Engineer & SaaS Architect.
+Especialista em: Next.js 14+ (App Router), React, Tailwind CSS, Supabase (RLS/Auth), e UX para Sistemas Industriais/ERP.
+
+# CONTEXTO DO PROJETO: "CONFECTIO"
+Trata-se de um **ERP SaaS Multi-Tenant** para gestão de Confeitarias e Fábricas de Salgados.
+O sistema gerencia o ciclo completo: Engenharia (Fichas) -> Planejamento -> Compras -> Produção (Kanban) -> Logística -> Vendas (PDV).
+Cada cliente (Tenant) possui seus dados isolados via `organization_id`.
+
+# 1. SEGURANÇA & MULTI-TENANCY (DOGMA)
+- **Isolamento:** Toda query ao Supabase deve respeitar o RLS. Nunca remova o filtro de `organization_id` implícito ou explícito.
+- **Roles:** Respeite a hierarquia: Master > Admin > Gerente > Operacional (Caixa/Cozinha).
+- **Proteção:** Componentes sensíveis (Botões de Excluir, Configurações) devem verificar `profile.role` antes de renderizar.
+
+# 2. DESIGN SYSTEM & VISUAL (Confectio Theme)
+- **Base:** Mantenha a limpeza visual. Fundo `bg-slate-50`. Bordas `border-slate-200`.
+- **Identidade Dinâmica:** O sistema usa um `ThemeProvider` (`@/lib/theme`).
+  - Use `var(--primary)` ou as classes do Tailwind configuradas para a cor da marca do cliente.
+  - Para status (Sucesso, Erro, Alerta), use cores semânticas fixas (Verde, Vermelho, Amarelo) para não confundir a operação na cozinha/caixa.
+- **Legibilidade:** Em telas operacionais (Kanban, PDV), o contraste e o tamanho da fonte devem ser aumentados para facilitar leitura rápida em tablets.
+
+# 3. COMPONENTES PADRÃO
+- Use sempre os componentes base já criados:
+  - `Button` (`@/components/Button`)
+  - `PageHeader` (`@/components/ui/PageHeader`)
+  - `Modal` / `InputField` (`@/components/ui/shared`)
+  - Ícones: `lucide-react`.
+
+# 4. UX OPERACIONAL (CRÍTICO)
+- **Cozinha & PDV:** O usuário pode estar com a mão suja ou com pressa.
+  - Evite tooltips essenciais (não funcionam bem no touch).
+  - Áreas de clique (Touch Targets) devem ser grandes (>44px).
+  - Feedback visual imediato (Toasts) para toda ação.
+- **Loading:** Use Skeleton ou Spinners para evitar layout shift, especialmente no carregamento de dados do Supabase.
+
+---
+
+# TAREFAS DE REFATORAÇÃO E AJUSTES (EXECUTE AGORA)
+
+Analise o código aberto/selecionado e aplique as seguintes melhorias:
+
+## 1. Responsividade "Chão de Fábrica" (Mobile/Tablet)
+O sistema será usado em tablets na cozinha e celulares para entregadores/donos.
+- **Tabelas:** Em telas `< md`, transforme as linhas da tabela (`tr`) em Cards (`div` empilhadas) para evitar scroll horizontal excessivo. Mantenha as informações vitais visíveis.
+- **Kanban:** No mobile, permita scroll horizontal suave das colunas ou transforme em abas (ex: ver uma coluna por vez).
+- **PDV:** Garanta que o Carrinho e a Lista de Produtos fiquem utilizáveis em telas verticais (empilhar colunas).
+
+## 2. Refatoração de Modais (Mobile Full-Screen)
+- **Desktop:** Mantenha o modal centralizado com backdrop.
+- **Mobile (<768px):** O modal deve se comportar como uma nova tela:
+  - `width: 100%`, `height: 100%`, `top: 0`, `rounded-none`.
+  - Botão de fechar fixo no topo.
+  - Isso evita problemas de scroll e teclado virtual cobrindo inputs.
+
+## 3. Otimização de Layout e Espaçamento
+- Identifique larguras fixas (ex: `w-96`) e converta para responsivas (ex: `w-full lg:w-96`).
+- Aumente o `padding` de botões e inputs em telas touch (`p-3` ou `p-4` em vez de `p-2`).
+
+## 4. Tratamento de Estados Vazios (Empty States)
+- Verifique se as listas (produtos, ordens, insumos) possuem um estado visual amigável quando vazias.
+- Se não tiver, adicione um componente visual com ícone e botão de ação (ex: "Nenhum produto encontrado. [Cadastrar Produto]").
+
+**Saída:** Aplique as correções diretamente no código, mantendo a consistência com as bibliotecas atuais (`lucide-react`, `react-hot-toast`, `supabase`).

@@ -1,5 +1,27 @@
 import { z } from 'zod';
 
+// Unidades de medida disponíveis
+export const unidadesMedida = ['Kg', 'g', 'ml', 'Lt', 'un', 'lata'] as const;
+
+// Unidades de estoque (UE) - como os itens são comprados e armazenados
+export const unidadesEstoque = [
+  'Lata',
+  'Caixa',
+  'Saco',
+  'Pacote',
+  'Rolo',
+  'Tubo',
+  'Galão',
+  'Tambor',
+  'Saco 25kg',
+  'Saco 50kg',
+  'ML',
+  'L',
+] as const;
+
+// Unidades de consumo (UC) - como os itens são usados nas receitas
+export const unidadesConsumo = ['g', 'Kg', 'ml', 'Lt', 'un', 'lata'] as const;
+
 export const themeSettingsSchema = z.object({
   name: z
     .string()
@@ -76,6 +98,49 @@ export const insumoSchema = z.object({
     .number()
     .min(0, 'Estoque mínimo não pode ser negativo')
     .max(999999, 'Valor muito alto para estoque mínimo'),
+  categoria_id: z.preprocess((val) => {
+    if (val === '' || val === null || val === undefined) return null;
+    if (typeof val === 'string' && /^\d+$/.test(val)) return parseInt(val, 10);
+    return val;
+  }, z.number().int().nullable().optional()),
+  atributos_dinamicos: z.record(z.unknown()).optional().default({}),
+  unidade_estoque: z
+    .enum(
+      [
+        'Lata',
+        'Caixa',
+        'Saco',
+        'Pacote',
+        'Rolo',
+        'Tubo',
+        'Galão',
+        'Tambor',
+        'Saco 25kg',
+        'Saco 50kg',
+        'ML',
+        'L',
+      ],
+      {
+        required_error: 'Selecione a unidade de estoque',
+      }
+    )
+    .optional(),
+  unidade_consumo: z
+    .enum(['g', 'Kg', 'ml', 'Lt', 'un', 'lata'], {
+      required_error: 'Selecione a unidade de consumo',
+    })
+    .optional(),
+  fator_conversao: z
+    .number()
+    .min(0.001, 'Fator deve ser maior que zero')
+    .max(10000, 'Fator muito alto')
+    .optional()
+    .default(1),
+  custo_por_ue: z
+    .number()
+    .min(0, 'Custo não pode ser negativo')
+    .max(999999, 'Custo muito alto')
+    .optional(),
 });
 
 export const fornecedorSchema = z.object({

@@ -11,7 +11,7 @@ const supabase = createClient(
 (async () => {
   try {
     console.log('🔄 Verificando se o servidor Supabase está acessível...');
-    
+
     // Testar conexão com um select simples
     const { data: healthCheck, error: healthError } = await supabase
       .from('system_settings')
@@ -23,65 +23,66 @@ const supabase = createClient(
       return;
     }
 
+    // healthCheck não é usado depois, pode ser prefixado
     console.log('✅ Conexão com Supabase OK');
-    console.log('📊 Health check result:', healthCheck ? 'Dados encontrados' : 'Nenhum dado encontrado');
+    console.log(
+      '📊 Health check result:',
+      healthCheck ? 'Dados encontrados' : 'Nenhum dado encontrado'
+    );
     console.log('\n🔑 Tentando login com cada usuário de teste...');
 
     const testUsers = [
       { email: 'sababrtv@gmail.com', password: 'admin123', role: 'admin' },
       { email: 'eduardosaba.rep@gmail.com', password: 'fabrica123', role: 'fabrica' },
-      { email: 'eduardosaba@uol.com', password: 'pdv123', role: 'pdv' }
+      { email: 'eduardosaba@uol.com', password: 'pdv123', role: 'pdv' },
     ];
 
     for (const user of testUsers) {
       try {
         console.log(`\n📧 Testando ${user.email}...`);
-        
-        const { data, error } = await supabase.auth.signInWithPassword({
+
+        const res = await supabase.auth.signInWithPassword({
           email: user.email,
-          password: user.password
+          password: user.password,
         });
 
-        if (error) {
-          console.log(`❌ Erro no login:`, error.message);
-          
+        if (res.error) {
+          console.log(`❌ Erro no login:`, res.error.message);
+
           // Verificar se o usuário existe
-          const { data: userData, error: userError } = await supabase
+          const userRes = await supabase
             .from('profiles')
             .select('*')
             .eq('email', user.email)
             .single();
 
-          if (userError) {
+          if (userRes.error) {
             console.log('❌ Usuário não encontrado no banco');
           } else {
-            console.log('✅ Usuário existe no banco com os dados:', userData);
+            console.log('✅ Usuário existe no banco com os dados:', userRes.data);
           }
-          
         } else {
           console.log('✅ Login bem-sucedido!');
-          console.log('ID:', data.user?.id);
-          console.log('Email confirmado:', data.user?.email_confirmed_at ? 'Sim' : 'Não');
-          
+          console.log('ID:', res.data.user?.id);
+          console.log('Email confirmado:', res.data.user?.email_confirmed_at ? 'Sim' : 'Não');
+
           // Verificar perfil
-          const { data: profile, error: profileError } = await supabase
+          const profileRes = await supabase
             .from('profiles')
             .select('role')
-            .eq('id', data.user?.id)
+            .eq('id', res.data.user?.id)
             .single();
-            
-          if (profileError) {
-            console.log('❌ Erro ao buscar perfil:', profileError.message);
+
+          if (profileRes.error) {
+            console.log('❌ Erro ao buscar perfil:', profileRes.error.message);
           } else {
-            console.log('Role:', profile.role);
+            console.log('Role:', profileRes.data.role);
           }
         }
-
       } catch (err) {
         console.log('❌ Erro inesperado:', err.message);
       }
     }
-
   } catch (err) {
     console.error('Erro geral:', err);
   }

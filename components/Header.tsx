@@ -1,7 +1,7 @@
 import React from 'react';
 import Image from 'next/image';
-import { useTheme } from '@/lib/theme';
-import Text from '@/components/ui/Text';
+import { useTheme } from '../lib/theme';
+import Text from '../components/ui/Text';
 
 type Props = {
   onMenuClick?: () => void;
@@ -10,17 +10,17 @@ type Props = {
 export default function Header({ onMenuClick }: Props) {
   const { theme } = useTheme();
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center border-b bg-white dark:bg-gray-800 dark:border-gray-700">
+    <header className="sticky top-0 z-30 flex h-16 w-full items-center border-b bg-white dark:border-gray-700 dark:bg-gray-800">
       <div className="flex w-full items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <button
             type="button"
-            className="inline-flex items-center p-2 text-gray-500 rounded-lg lg:hidden hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:text-gray-400 dark:hover:bg-gray-700 dark:focus:ring-gray-600"
+            className="inline-flex items-center rounded-lg p-2 text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:text-gray-400 dark:hover:bg-gray-700 dark:focus:ring-gray-600 lg:hidden"
             onClick={onMenuClick}
           >
             <span className="sr-only">Abrir menu</span>
             <svg
-              className="w-6 h-6"
+              className="h-6 w-6"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -36,46 +36,70 @@ export default function Header({ onMenuClick }: Props) {
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-3 min-w-[32px] h-[32px]">
-              {theme?.logo_url && theme.logo_url.trim() !== '' ? (
-                <div className="relative w-8 h-8">
-                  <Image
-                    src={theme.logo_url}
-                    alt={theme?.name || 'Logo'}
-                    fill
-                    sizes="32px"
-                    className="object-contain rounded"
-                    unoptimized
-                    onError={(e) => {
-                      const systemName = theme?.name || 'Sys Lari';
-                      const initials = systemName
-                        .split(' ')
-                        .map((word) => word[0])
-                        .join('')
-                        .toUpperCase()
-                        .slice(0, 2);
+            {/* Logo do Sistema (Marca A - sempre visível se existir) */}
+            {theme?.logo_url && theme.logo_url.trim() !== '' && (
+              <div className="relative">
+                <Image
+                  src={theme.logo_url}
+                  alt={theme?.name || 'Logo Sistema'}
+                  width={32}
+                  height={32}
+                  className="rounded object-contain"
+                  unoptimized
+                  loading="eager"
+                  style={{
+                    width: `calc(32px * var(--logo-scale, 1))`,
+                    height: `calc(32px * var(--logo-scale, 1))`,
+                    maxWidth: '160px',
+                    maxHeight: '160px',
+                  }}
+                  onError={(e) => {
+                    const systemName = theme?.name || 'Confectio v. 1.0.0';
+                    const initials = systemName
+                      .split(' ')
+                      .map((word) => word[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2);
 
-                      const parent = e.currentTarget.parentElement;
-                      if (parent) {
-                        parent.innerHTML = `<div class="w-8 h-8 rounded bg-primary flex items-center justify-center text-white font-medium text-sm">${initials}</div>`;
-                      }
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-white font-medium text-sm">
-                  {(theme?.name || 'SL')
-                    .split(' ')
-                    .map((word) => word[0])
-                    .join('')
-                    .toUpperCase()
-                    .slice(0, 2)}
-                </div>
-              )}
-            </div>
-            <Text variant="h4" weight="medium">
-              {theme?.name || 'Sys Lari'}
-            </Text>
+                    const parent = e.currentTarget.parentElement;
+                    if (parent) {
+                      const scale = theme?.logo_scale || 1;
+                      const size = 32 * scale;
+                      parent.innerHTML = `<div class="rounded bg-primary flex items-center justify-center text-white font-medium text-sm" style="width: ${size}px; height: ${size}px;">${initials}</div>`;
+                    }
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Fallback quando não há logo do sistema */}
+            {!theme?.logo_url || theme.logo_url.trim() === '' ? (
+              <div
+                className="flex items-center justify-center rounded bg-primary text-sm font-medium text-white"
+                style={{
+                  width: `${32 * (theme.logo_scale || 1)}px`,
+                  height: `${32 * (theme.logo_scale || 1)}px`,
+                  minWidth: `${32 * (theme.logo_scale || 1)}px`,
+                }}
+              >
+                {(theme?.name || 'SL')
+                  .split(' ')
+                  .map((word) => word[0])
+                  .join('')
+                  .toUpperCase()
+                  .slice(0, 2)}
+              </div>
+            ) : null}
+
+            {/* Nome do Sistema (só mostra se não houver logo do sistema) */}
+            {(!theme?.logo_url ||
+              theme.logo_url.trim() === '' ||
+              theme.logo_url === '/logo.png') && (
+              <Text variant="h4" weight="medium">
+                {theme?.name || 'Confectio v. 1.0.0'}
+              </Text>
+            )}
           </div>
         </div>
 

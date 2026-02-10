@@ -81,6 +81,9 @@ pnpm start
 - `build` — cria o build de produção
 - `start` — inicia a aplicação em modo de produção
 - `lint` — roda o ESLint
+- `type-check` — verifica tipos TypeScript rapidamente (sem gerar arquivos)
+- `type-check:watch` — verifica tipos em modo watch
+- `type-check:strict` — verificação rigorosa de tipos
 
 Execute testes e lint se existirem no projeto:
 
@@ -88,6 +91,28 @@ Execute testes e lint se existirem no projeto:
 pnpm test --if-present
 pnpm lint
 ```
+
+### Verificação de Tipos TypeScript
+
+Para verificar rapidamente se há erros de tipo sem fazer o build completo:
+
+```powershell
+pnpm type-check
+```
+
+Para verificação contínua durante desenvolvimento:
+
+```powershell
+pnpm type-check:watch
+```
+
+Para verificação mais rigorosa (recomendado antes de commits):
+
+```powershell
+pnpm type-check:strict
+```
+
+Esses comandos são muito mais rápidos que `pnpm build` pois não geram arquivos JavaScript, apenas verificam os tipos.
 
 ## Git, SSH e remotes
 

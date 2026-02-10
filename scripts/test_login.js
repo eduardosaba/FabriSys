@@ -16,21 +16,21 @@ const supabase = createClient(
     const testUsers = [
       { email: 'sababrtv@gmail.com', password: 'admin123', role: 'admin' },
       { email: 'eduardosaba.rep@gmail.com', password: 'fabrica123', role: 'fabrica' },
-      { email: 'eduardosaba@uol.com', password: 'pdv123', role: 'pdv' }
+      { email: 'eduardosaba@uol.com', password: 'pdv123', role: 'pdv' },
     ];
 
     for (const user of testUsers) {
       try {
         console.log(`Testando login para ${user.email}...`);
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const res = await supabase.auth.signInWithPassword({
           email: user.email,
           password: user.password,
         });
 
-        if (error) {
-          console.log(`❌ Erro no login: ${error.message}`);
+        if (res.error) {
+          console.error('❌ Erro ao logar:', res.error.message);
         } else {
-          console.log(`✅ Login bem-sucedido! User ID: ${data.user?.id}`);
+          console.log('✅ Login bem-sucedido:', res.data.user.email);
           // Fazer logout após o teste
           await supabase.auth.signOut();
         }
@@ -39,7 +39,6 @@ const supabase = createClient(
       }
       console.log('');
     }
-
   } catch (err) {
     console.error('Erro geral:', err);
   }

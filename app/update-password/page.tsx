@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
@@ -9,10 +9,12 @@ import Text from '@/components/ui/Text';
 import Button from '@/components/Button';
 import { toast } from 'react-hot-toast';
 import { useTheme } from '@/lib/theme';
+import { Eye, EyeOff } from 'lucide-react';
 
-export default function UpdatePasswordPage() {
+function UpdatePasswordForm() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -27,28 +29,30 @@ export default function UpdatePasswordPage() {
     console.log('Parâmetros da URL:', {
       accessToken: !!accessToken,
       refreshToken: !!refreshToken,
-      type
+      type,
     });
 
     if (accessToken && refreshToken) {
       // Para reset de senha, usar setSession diretamente
-      void supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      }).then(({ data, error }) => {
-        console.log('Sessão configurada:', {
-          user: !!data.user,
-          session: !!data.session,
-          error
-        });
+      void supabase.auth
+        .setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        .then(({ data, error }) => {
+          console.log('Sessão configurada:', {
+            user: !!data.user,
+            session: !!data.session,
+            error,
+          });
 
-        if (error) {
-          console.error('Erro ao configurar sessão:', error);
-          toast.error('Link de recuperação inválido ou expirado.');
-        } else if (data.session) {
-          toast.success('Sessão de recuperação configurada. Você pode alterar sua senha.');
-        }
-      });
+          if (error) {
+            console.error('Erro ao configurar sessão:', error);
+            toast.error('Link de recuperação inválido ou expirado.');
+          } else if (data.session) {
+            toast.success('Sessão de recuperação configurada. Você pode alterar sua senha.');
+          }
+        });
     } else if (type === 'recovery') {
       // Se não há tokens mas type=recovery, pode ser um fluxo diferente
       console.log('Tipo recovery detectado, verificando sessão atual...');
@@ -90,7 +94,7 @@ export default function UpdatePasswordPage() {
 
       console.log('Tentando atualizar senha...');
       const { data, error } = await supabase.auth.updateUser({
-        password: password
+        password: password,
       });
 
       console.log('Resultado da atualização:', { data, error });
@@ -104,10 +108,10 @@ export default function UpdatePasswordPage() {
       setTimeout(() => {
         router.push('/login');
       }, 1000);
-
     } catch (error: unknown) {
       console.error('Erro ao atualizar senha:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Erro ao atualizar senha. Tente novamente.';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Erro ao atualizar senha. Tente novamente.';
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -115,28 +119,28 @@ export default function UpdatePasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 dark:bg-gray-900 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 relative mb-4">
-            {theme.logo_url ? (
-              <Image
-                src={theme.logo_url}
-                alt={theme.name || 'Sistema Lari'}
-                fill
-                className="object-contain"
-                style={{
-                  transform: `scale(${theme.logo_scale || 1})`,
-                }}
-              />
+          <div className="relative mx-auto mb-4 h-16 w-16">
+            {theme.company_logo_url || theme.logo_url ? (
+              <div style={{ transform: `scale(${theme.logo_scale || 1})` }}>
+                <Image
+                  src={theme.company_logo_url || theme.logo_url}
+                  alt={theme.name || 'Confectio'}
+                  fill
+                  sizes="64px"
+                  className="object-contain"
+                />
+              </div>
             ) : (
-              <div className="h-full w-full bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">SL</span>
+              <div className="flex h-full w-full items-center justify-center rounded-lg bg-blue-600">
+                <span className="text-xl font-bold text-white">SL</span>
               </div>
             )}
           </div>
           <Text variant="h2" className="mb-2">
-            {theme.name || 'Sistema Lari'}
+            {theme.name || 'Confectio'}
           </Text>
           <Text color="muted">Defina sua nova senha</Text>
         </div>
@@ -146,39 +150,61 @@ export default function UpdatePasswordPage() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
                 Nova Senha
               </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                placeholder="••••••••"
-                minLength={6}
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  placeholder="••••••••"
+                  minLength={6}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <div>
               <label
                 htmlFor="confirmPassword"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
                 Confirmar Nova Senha
               </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-                placeholder="••••••••"
-                minLength={6}
-              />
+              <div className="relative">
+                <input
+                  id="confirmPassword"
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  placeholder="••••••••"
+                  minLength={6}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <Button type="submit" disabled={loading} className="w-full" size="lg">
@@ -198,5 +224,13 @@ export default function UpdatePasswordPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function UpdatePasswordPage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <UpdatePasswordForm />
+    </Suspense>
   );
 }

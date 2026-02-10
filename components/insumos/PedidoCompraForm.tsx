@@ -60,7 +60,7 @@ export default function PedidoCompraForm({ itens, onSuccess }: PedidoCompraFormP
           <textarea
             {...register('observacoes')}
             placeholder="Alguma observação adicional..."
-            className="w-full p-2 border rounded-md"
+            className="w-full rounded-md border p-2"
             rows={3}
           />
         </div>

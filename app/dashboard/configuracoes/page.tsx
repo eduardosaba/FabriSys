@@ -1,50 +1,84 @@
 'use client';
 
 import { useState } from 'react';
-import { Card } from '@/components/ui/Card';
 import Button from '@/components/Button';
-import ThemeConfigurator from '@/components/ThemeConfigurator';
+import PageHeader from '@/components/ui/PageHeader';
+import { Settings, Sliders, Palette, Shield, Users } from 'lucide-react';
+
+// Importação dos componentes das abas
+import CustomizacaoTab from './CustomizacaoTab';
+import SistemaTab from './SistemaTab';
+import PermissoesTab from './PermissoesTab';
+import UsuariosPage from './usuarios/page'; // Importa a página de usuários como componente
 
 export default function ConfiguracoesPage() {
-  const [activeTab, setActiveTab] = useState<'visual' | 'sistema'>('visual');
+  const [activeTab, setActiveTab] = useState<
+    'sistema' | 'customizacao' | 'permissoes' | 'usuarios'
+  >('usuarios');
 
   return (
-    <div className="container py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Configurações</h1>
-      </div>
+    <div className="container space-y-6 py-6 animate-fade-up">
+      <PageHeader
+        title="Configurações"
+        description="Gerencie as regras de negócio, acessos e a identidade visual do Confectio."
+        icon={Settings}
+      />
 
-      <div className="flex gap-2 border-b pb-2">
-        <Button
-          variant={activeTab === 'visual' ? 'primary' : 'outline'}
-          onClick={() => setActiveTab('visual')}
+      <div className="flex flex-wrap gap-4 border-b border-slate-200 pb-0">
+        <button
+          className={`flex items-center gap-2 pb-3 px-2 text-sm font-medium border-b-2 transition-all ${
+            activeTab === 'usuarios'
+              ? 'border-green-600 text-green-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('usuarios')}
         >
-          Visual
-        </Button>
-        <Button
-          variant={activeTab === 'sistema' ? 'primary' : 'outline'}
+          <Users size={18} />
+          Equipe & Usuários
+        </button>
+
+        <button
+          className={`flex items-center gap-2 pb-3 px-2 text-sm font-medium border-b-2 transition-all ${
+            activeTab === 'sistema'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
           onClick={() => setActiveTab('sistema')}
         >
-          Sistema
-        </Button>
+          <Sliders size={18} />
+          Regras do Sistema
+        </button>
+
+        <button
+          className={`flex items-center gap-2 pb-3 px-2 text-sm font-medium border-b-2 transition-all ${
+            activeTab === 'permissoes'
+              ? 'border-purple-600 text-purple-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('permissoes')}
+        >
+          <Shield size={18} />
+          Permissões de Acesso
+        </button>
+
+        <button
+          className={`flex items-center gap-2 pb-3 px-2 text-sm font-medium border-b-2 transition-all ${
+            activeTab === 'customizacao'
+              ? 'border-pink-600 text-pink-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+          onClick={() => setActiveTab('customizacao')}
+        >
+          <Palette size={18} />
+          Aparência & Tema
+        </button>
       </div>
 
-      <div className="grid gap-6">
-        {activeTab === 'visual' && <ThemeConfigurator />}
-
-        {activeTab === 'sistema' && (
-          <Card>
-            <Card.Header>
-              <Card.Title>Configurações do Sistema</Card.Title>
-            </Card.Header>
-            <Card.Content>
-              <p className="text-muted-foreground">
-                Configure as opções gerais do sistema, como backup, integração com WhatsApp,
-                e-mails, etc.
-              </p>
-            </Card.Content>
-          </Card>
-        )}
+      <div className="mt-6">
+        {activeTab === 'usuarios' && <UsuariosPage />}
+        {activeTab === 'sistema' && <SistemaTab />}
+        {activeTab === 'permissoes' && <PermissoesTab />}
+        {activeTab === 'customizacao' && <CustomizacaoTab />}
       </div>
     </div>
   );

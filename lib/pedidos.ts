@@ -1,9 +1,7 @@
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '@/lib/supabase';
 import { Insumo } from '@/lib/types/insumos';
 import { PedidoCompra } from '@/lib/types/pedidos';
 import { PedidoCompraDetalhadoArraySchema, PedidoCompraSchema } from '@/lib/validations/pedidos';
-
-const supabase = createClientComponentClient();
 
 export async function salvarPedido(
   itens: { insumo: Insumo; quantidade: number }[],

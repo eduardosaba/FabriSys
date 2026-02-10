@@ -17,10 +17,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    flowType: 'pkce', // Usar PKCE flow para melhor segurança
   },
   global: {
     headers: {
       Accept: 'application/json',
+    },
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10, // Limitar eventos para evitar sobrecarga
     },
   },
 });

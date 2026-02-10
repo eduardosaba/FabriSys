@@ -11,22 +11,77 @@ export interface Profile {
   updated_at: string;
 }
 
-interface ThemeColors {
+export interface ThemeColors {
   primary: string;
   secondary: string;
   accent: string;
   background: string;
   text: string;
+  // Cores adicionais para customização completa
+  tituloPaginas: string;
+  hover3Submenu: string;
+  textoGeralHover: string;
+  bordasHeaderPerfil: string;
+  bordasSelecaoListagens: string;
+  barraDashboard: string;
+  barraDashboardHover: string;
+  receitasGraficos: string;
+  receitasGraficosSecundaria: string;
+  despesasGraficos: string;
+  despesasGraficosSecundaria: string;
+  barraRolagem: string;
+  barraRolagemFundo: string;
+  fundoLinkEAD: string;
+  textoLinkEAD: string;
+  botaoSalvar: string;
+  botaoSalvarAtivo: string;
+  botaoSalvarDesabilitado: string;
+  botaoCancelar: string;
+  botaoCancelarAtivo: string;
+  botaoCancelarDesabilitado: string;
+  botaoPesquisar: string;
+  botaoPesquisarAtivo: string;
+  botaoPesquisarDesabilitado: string;
+  camposObrigatorios: string;
+  camposNaoObrigatorios: string;
+  barraSuperiorMenu: string;
+  textoIconeAjuda: string;
+  iconeAjuda: string;
+  // Propriedades do sidebar
+  sidebar_bg: string;
+  sidebar_hover_bg: string;
+  sidebar_text: string;
+  sidebar_active_text: string;
+  // Fundo do cabeçalho quando configurável por modo
+  header_bg: string;
+  // Fundo do footer (opcional)
+  footer_bg?: string;
+  // Configurações de logo para usuários admin
+  logo_url?: string;
+  logo_scale?: number;
+  company_logo_url?: string;
+  company_logo_scale?: number;
+  font_family?: string;
 }
 
 export interface ThemeSettings {
   name: string;
   logo_url: string;
   logo_scale: number;
+  company_logo_url?: string;
+  company_logo_scale?: number;
   font_family: string;
   border_radius: string;
   theme_mode: 'light' | 'dark' | 'system';
   density: 'comfortable' | 'compact';
+  footer_company_name?: string;
+  footer_system_version?: string;
+  sidebar_bg?: string;
+  sidebar_hover_bg?: string;
+  sidebar_text?: string;
+  sidebar_active_text?: string;
+  header_bg?: string;
+  footer_bg?: string;
   colors: {
     light: ThemeColors;
     dark: ThemeColors;

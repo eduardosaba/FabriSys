@@ -121,7 +121,7 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
                         variant="secondary"
                         onClick={() => onEdit(insumo)}
                         disabled={loading}
-                        className="py-1.5 px-2.5 text-sm"
+                        className="px-2.5 py-1.5 text-sm"
                       >
                         Editar
                       </Button>
@@ -133,7 +133,7 @@ export default function InsumosTable({ insumos, onEdit, onDelete, loading }: Pro
                           }
                         }}
                         disabled={loading}
-                        className="py-1.5 px-2.5 text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        className="px-2.5 py-1.5 text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                       >
                         Deletar
                       </Button>

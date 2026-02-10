@@ -27,6 +27,35 @@ export function formatCNPJ(value: string | null | undefined): string {
   return maskCNPJ(digits);
 }
 
+// Máscara de CPF: 000.000.000-00
+export function maskCPF(value: string): string {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+}
+
+export function formatCPF(value: string | null | undefined): string {
+  const digits = onlyDigits(value ?? '');
+  if (!digits) return '';
+  return maskCPF(digits);
+}
+
+// Máscara que aceita CPF ou CNPJ automaticamente
+export function maskCpfCnpj(value: string): string {
+  const digits = onlyDigits(value);
+  if (digits.length <= 11) return maskCPF(digits);
+  return maskCNPJ(digits);
+}
+
+export function formatCpfCnpj(value: string | null | undefined): string {
+  const digits = onlyDigits(value ?? '');
+  if (!digits) return '';
+  if (digits.length <= 11) return maskCPF(digits);
+  return maskCNPJ(digits);
+}
+
 // Formata número para moeda BRL (R$ 1.234,56) a partir de string ou número
 export function maskBRL(input: string | number | null | undefined): string {
   const digits = onlyDigits(String(input ?? ''));

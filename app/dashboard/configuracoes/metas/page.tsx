@@ -7,11 +7,20 @@ import Button from '@/components/Button';
 import Loading from '@/components/ui/Loading';
 import { Target, Save, TrendingUp } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useConfirm } from '@/hooks/useConfirm';
 
 export default function GestaoMetasPage() {
   const [locais, setLocais] = useState<any[]>([]);
   const [localSelecionado, setLocalSelecionado] = useState('');
   const [mes, setMes] = useState(new Date().toISOString().slice(0, 7));
+  const [monthlyMetaByLocal, setMonthlyMetaByLocal] = useState<Record<string, number>>({});
+  const [editingLocalId, setEditingLocalId] = useState<string | null>(null);
+  const [editingLocalValor, setEditingLocalValor] = useState<string>('');
+  const [savedStatus, setSavedStatus] = useState<
+    Record<string, 'saved' | 'saving' | 'error' | undefined>
+  >({});
+  const confirmDialog = useConfirm();
   const [metaMensal, setMetaMensal] = useState<string>('');
   const [metaMensalDisplay, setMetaMensalDisplay] = useState<string>('');
   const [metasDiarias, setMetasDiarias] = useState<any[]>([]);
@@ -61,6 +70,30 @@ export default function GestaoMetasPage() {
         if (data?.[0]) setLocalSelecionado(data[0].id);
       });
   }, []);
+
+  useEffect(() => {
+    // calcular metas mensais por local para o mês selecionado
+    const loadMonthlyMetas = async () => {
+      const [ano, mesNum] = mes.split('-');
+      const dias = new Date(parseInt(ano), parseInt(mesNum), 0).getDate();
+      const start = `${mes}-01`;
+      const end = `${mes}-${String(dias).padStart(2, '0')}`;
+
+      const { data: metas } = await supabase
+        .from('metas_vendas')
+        .select('local_id, valor_meta')
+        .gte('data_referencia', start)
+        .lte('data_referencia', end);
+
+      const grouping: Record<string, number> = {};
+      (metas || []).forEach((m: any) => {
+        grouping[m.local_id] = (grouping[m.local_id] || 0) + Number(m.valor_meta || 0);
+      });
+      setMonthlyMetaByLocal(grouping);
+    };
+
+    void loadMonthlyMetas();
+  }, [mes]);
 
   const carregarOuGerarMetas = useCallback(async () => {
     if (!localSelecionado) return;
@@ -142,11 +175,122 @@ export default function GestaoMetasPage() {
 
       if (error) throw error;
       toast.success('Metas salvas com sucesso!');
+      // atualizar soma local
+      void (async () => {
+        const [ano, mesNum] = mes.split('-');
+        const dias = new Date(parseInt(ano), parseInt(mesNum), 0).getDate();
+        const start = `${mes}-01`;
+        const end = `${mes}-${String(dias).padStart(2, '0')}`;
+        const { data: metas } = await supabase
+          .from('metas_vendas')
+          .select('local_id, valor_meta')
+          .eq('local_id', localSelecionado)
+          .gte('data_referencia', start)
+          .lte('data_referencia', end);
+        const total = (metas || []).reduce((s: number, x: any) => s + Number(x.valor_meta || 0), 0);
+        setMonthlyMetaByLocal((prev) => ({ ...prev, [localSelecionado]: total }));
+        setSavedStatus((s) => ({ ...s, [localSelecionado]: 'saved' }));
+        setTimeout(() => setSavedStatus((s) => ({ ...s, [localSelecionado]: undefined })), 3000);
+      })();
     } catch (err) {
       console.error(err);
       toast.error('Erro ao salvar');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const abrirEdicaoLocal = (localId: string) => {
+    setEditingLocalId(localId);
+    setEditingLocalValor(String(monthlyMetaByLocal[localId] || ''));
+  };
+
+  const fecharEdicaoLocal = () => {
+    setEditingLocalId(null);
+    setEditingLocalValor('');
+  };
+
+  const salvarMetaLocal = async () => {
+    if (!editingLocalId) return;
+    setSavedStatus((s) => ({ ...s, [editingLocalId]: 'saving' }));
+    try {
+      // calcular distribuição diária para o mês conforme dias ativos (weekdays)
+      const [ano, mesNum] = mes.split('-');
+      const dias = new Date(parseInt(ano), parseInt(mesNum), 0).getDate();
+      const daysList: number[] = [];
+      for (let d = 1; d <= dias; d++) {
+        const dt = new Date(parseInt(ano), parseInt(mesNum) - 1, d);
+        if (weekdays.includes(dt.getDay())) daysList.push(d);
+      }
+      const mensal = Number(editingLocalValor) || 0;
+      const diario = daysList.length > 0 ? mensal / daysList.length : 0;
+
+      const upserts = [] as any[];
+      for (let d = 1; d <= dias; d++) {
+        const dataStr = `${mes}-${String(d).padStart(2, '0')}`;
+        const valor = daysList.includes(d) ? Number(Number(diario.toFixed(2))) : 0;
+        upserts.push({ local_id: editingLocalId, data_referencia: dataStr, valor_meta: valor });
+      }
+
+      const { error } = await supabase
+        .from('metas_vendas')
+        .upsert(upserts, { onConflict: 'local_id,data_referencia' });
+      if (error) throw error;
+
+      // atualizar soma local
+      setMonthlyMetaByLocal((prev) => ({ ...prev, [editingLocalId]: mensal }));
+      setSavedStatus((s) => ({ ...s, [editingLocalId]: 'saved' }));
+      setTimeout(() => setSavedStatus((s) => ({ ...s, [editingLocalId]: undefined })), 3000);
+
+      // se o PDV editado for o selecionado, atualizar metasDiarias exibidas
+      if (editingLocalId === localSelecionado) {
+        const novaLista = metasDiarias.map((m) => {
+          const d = parseInt(m.data.split('-')[2], 10);
+          return { ...m, valor: daysList.includes(d) ? Number(Number(diario.toFixed(2))) : 0 };
+        });
+        setMetasDiarias(novaLista);
+      }
+
+      fecharEdicaoLocal();
+      toast.success('Meta mensal atualizada e metas diárias redistribuídas');
+    } catch (err) {
+      console.error(err);
+      setSavedStatus((s) => ({ ...s, [editingLocalId]: 'error' }));
+      toast.error('Erro ao salvar meta');
+    }
+  };
+
+  const excluirMetaLocal = async (localId: string) => {
+    const confirmed = await confirmDialog.confirm({
+      title: 'Excluir Metas',
+      message: 'Excluir metas deste PDV para o mês selecionado? Esta ação não pode ser desfeita.',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      const [ano, mesNum] = mes.split('-');
+      const dias = new Date(parseInt(ano), parseInt(mesNum), 0).getDate();
+      const start = `${mes}-01`;
+      const end = `${mes}-${String(dias).padStart(2, '0')}`;
+      const { error } = await supabase
+        .from('metas_vendas')
+        .delete()
+        .eq('local_id', localId)
+        .gte('data_referencia', start)
+        .lte('data_referencia', end);
+      if (error) throw error;
+      setMonthlyMetaByLocal((prev) => ({ ...prev, [localId]: 0 }));
+      if (localSelecionado === localId) {
+        // zerar metasDiarias exibidas
+        const novaLista = metasDiarias.map((m) => ({ ...m, valor: 0 }));
+        setMetasDiarias(novaLista);
+      }
+      toast.success('Metas excluídas');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao excluir metas');
     }
   };
 
@@ -258,6 +402,74 @@ export default function GestaoMetasPage() {
         </div>
       </div>
 
+      {/* Lista de PDVs com ações por PDV */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <h4 className="text-sm font-bold mb-3">Metas Mensais por PDV — {mes}</h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          {locais.map((l) => (
+            <div key={l.id} className="flex items-center justify-between p-2 border rounded">
+              <div>
+                <div className="text-sm font-bold">{l.nome}</div>
+                <div className="text-xs text-slate-500">
+                  R$ {(monthlyMetaByLocal[l.id] || 0).toFixed(2)}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => abrirEdicaoLocal(l.id)}
+                  className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => excluirMetaLocal(l.id)}
+                  className="px-3 py-1 border rounded text-sm"
+                >
+                  Excluir
+                </button>
+                <div className="text-xs ml-2">
+                  {savedStatus[l.id] === 'saving'
+                    ? 'Salvando...'
+                    : savedStatus[l.id] === 'saved'
+                      ? 'Salvo'
+                      : savedStatus[l.id] === 'error'
+                        ? 'Erro'
+                        : ''}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {editingLocalId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h4 className="text-lg font-bold mb-3">Editar Meta Mensal</h4>
+            <div className="mb-3">
+              <label className="text-sm text-slate-600">Valor da Meta (mensal)</label>
+              <input
+                type="number"
+                value={editingLocalValor}
+                onChange={(e) => setEditingLocalValor(e.target.value)}
+                className="w-full mt-2 p-2 border rounded"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={fecharEdicaoLocal} className="px-3 py-2 rounded border">
+                Cancelar
+              </button>
+              <button
+                onClick={salvarMetaLocal}
+                className="px-3 py-2 rounded bg-blue-600 text-white"
+              >
+                Salvar Meta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <Loading />
       ) : (
@@ -300,6 +512,16 @@ export default function GestaoMetasPage() {
           ))}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={confirmDialog.handleCancel}
+        onConfirm={confirmDialog.handleConfirm}
+        title={confirmDialog.options.title}
+        message={confirmDialog.options.message}
+        confirmText={confirmDialog.options.confirmText}
+        cancelText={confirmDialog.options.cancelText}
+        variant={confirmDialog.options.variant}
+      />
     </div>
   );
 }

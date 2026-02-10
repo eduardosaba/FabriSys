@@ -16,6 +16,9 @@ export default function KPIsMetas() {
   const [metas, setMetas] = useState<MetaPDV[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<'dia' | 'mes'>('dia');
+  const [editingLocal, setEditingLocal] = useState<string | null>(null);
+  const [editingValor, setEditingValor] = useState<number | ''>('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     void carregarMetas();
@@ -102,6 +105,46 @@ export default function KPIsMetas() {
     setLoading(false);
   };
 
+  const abrirEdicao = (localId: string, currentMeta: number) => {
+    setEditingLocal(localId);
+    setEditingValor(currentMeta || 0);
+  };
+
+  const fecharEdicao = () => {
+    setEditingLocal(null);
+    setEditingValor('');
+  };
+
+  const salvarMetaMensal = async () => {
+    if (!editingLocal) return;
+    setSaving(true);
+    try {
+      const hoje = new Date();
+      const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+        .toISOString()
+        .split('T')[0];
+
+      const payload = {
+        local_id: editingLocal,
+        data_referencia: primeiroDia,
+        valor_meta: Number(editingValor) || 0,
+      };
+
+      const { error } = await supabase
+        .from('metas_vendas')
+        .upsert([payload], { onConflict: 'local_id,data_referencia' });
+
+      if (error) throw error;
+      await carregarMetas();
+      fecharEdicao();
+    } catch (err) {
+      console.error('Erro ao salvar meta:', err);
+      alert('Erro ao salvar meta. Veja o console para detalhes.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
@@ -182,11 +225,49 @@ export default function KPIsMetas() {
                     </span>
                   )}
                 </div>
+                <div className="flex justify-end mt-2">
+                  <button
+                    onClick={() => abrirEdicao(meta.local_id, meta.meta)}
+                    className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md"
+                  >
+                    Editar Meta
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
+      {editingLocal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h4 className="text-lg font-bold mb-3">Editar Meta Mensal</h4>
+            <div className="mb-3">
+              <label className="text-sm text-slate-600">Valor da Meta (mensal)</label>
+              <input
+                type="number"
+                value={editingValor as any}
+                onChange={(e) =>
+                  setEditingValor(e.target.value === '' ? '' : Number(e.target.value))
+                }
+                className="w-full mt-2 p-2 border rounded"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={fecharEdicao} className="px-3 py-2 rounded border">
+                Cancelar
+              </button>
+              <button
+                onClick={salvarMetaMensal}
+                disabled={saving}
+                className="px-3 py-2 rounded bg-blue-600 text-white"
+              >
+                {saving ? 'Salvando...' : 'Salvar Meta'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

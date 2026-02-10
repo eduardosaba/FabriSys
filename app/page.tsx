@@ -309,40 +309,7 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
             <p className="text-gray-500 font-medium">Bem-vindo de volta</p>
           </div>
 
-          <div className="mb-6 rounded-lg bg-blue-50 border border-blue-100 p-4 text-xs text-blue-800">
-            <div className="flex items-center gap-2 mb-2 font-bold text-blue-900">
-              <span className="text-lg">🔑</span> Acesso Rápido
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={() => {
-                  setEmail('sababrtv@gmail.com');
-                  setPassword('admin123');
-                }}
-                className="flex flex-col items-center justify-center p-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-all shadow-sm"
-              >
-                <span className="font-bold">Admin</span>
-              </button>
-              <button
-                onClick={() => {
-                  setEmail('eduardosaba.rep@gmail.com');
-                  setPassword('fabrica123');
-                }}
-                className="flex flex-col items-center justify-center p-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-all shadow-sm"
-              >
-                <span className="font-bold">Fábrica</span>
-              </button>
-              <button
-                onClick={() => {
-                  setEmail('eduardosaba@uol.com');
-                  setPassword('pdv123');
-                }}
-                className="flex flex-col items-center justify-center p-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-all shadow-sm"
-              >
-                <span className="font-bold">PDV</span>
-              </button>
-            </div>
-          </div>
+          {/* Acesso Rápido removido a pedido — botões de teste eliminados */}
 
           <form onSubmit={handleLogin} className="space-y-5">
             <InputField

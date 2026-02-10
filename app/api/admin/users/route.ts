@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
 export async function POST(request: Request) {
   // inicializar o cliente aqui para evitar erro em tempo de build quando variáveis não estiverem definidas
@@ -18,7 +20,26 @@ export async function POST(request: Request) {
   });
   try {
     const body = await request.json();
-    const { email, password, nome, role, currentUserId } = body;
+    console.log('[api/admin/users] payload:', JSON.stringify(body));
+    const { email, password, nome, role } = body;
+    let currentUserId = body.currentUserId;
+    console.log('[api/admin/users] received currentUserId:', currentUserId);
+
+    // Fallback: tentar extrair usuário da sessão via cookies (SSR)
+    if (!currentUserId) {
+      try {
+        const supabaseServer = createRouteHandlerClient({ cookies });
+        const { data: userData, error: userErr } = await supabaseServer.auth.getUser();
+        if (!userErr && userData?.user?.id) {
+          currentUserId = userData.user.id;
+          console.log('[api/admin/users] derived currentUserId from cookies:', currentUserId);
+        } else {
+          console.warn('[api/admin/users] could not derive user from cookies', userErr);
+        }
+      } catch (e) {
+        console.error('[api/admin/users] error reading session from cookies', e);
+      }
+    }
 
     // 1. Identificar QUEM está tentando criar
     const { data: criador } = await supabaseAdmin
@@ -80,8 +101,12 @@ export async function POST(request: Request) {
 
     if (dbError) {
       // Se falhar no banco, desfazemos a criação do Auth para não deixar lixo
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-      console.error('Erro DB:', dbError);
+      try {
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+      } catch (delErr) {
+        console.error('[api/admin/users] falha ao desfazer usuário auth:', delErr);
+      }
+      console.error('[api/admin/users] Erro DB:', dbError);
       return NextResponse.json(
         { error: 'Erro ao vincular perfil no banco de dados.' },
         { status: 500 }
@@ -90,6 +115,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, userId: userId });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('[api/admin/users] exception:', error);
+    return NextResponse.json({ error: error?.message || String(error) }, { status: 500 });
   }
 }

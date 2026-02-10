@@ -14,6 +14,8 @@ import {
   Clock,
 } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useConfirm } from '@/hooks/useConfirm';
 
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/shared';
@@ -64,7 +66,8 @@ interface Pedido {
 }
 
 export default function PedidosCompraPage() {
-  const { profile } = useAuth();
+  const confirmDialog = useConfirm();
+  const { profile, loading: authLoading } = useAuth();
   const { theme } = useTheme(); // Hook do tema
 
   // Dados Mestre
@@ -98,6 +101,10 @@ export default function PedidosCompraPage() {
   // --- CARREGAMENTO INICIAL ---
 
   const fetchPedidos = useCallback(async () => {
+    if (!profile?.id) {
+      setLoading(false);
+      return;
+    }
     // Tipagem interna para o retorno do Supabase
     type RawPedido = {
       id: number;
@@ -172,9 +179,13 @@ export default function PedidosCompraPage() {
     }) as Pedido[];
 
     setPedidos(normalized);
-  }, [fornecedores]);
+  }, [fornecedores, profile?.id]);
 
   const fetchDadosIniciais = useCallback(async () => {
+    if (!profile?.id) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
 
@@ -284,11 +295,18 @@ export default function PedidosCompraPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile?.id]);
 
   useEffect(() => {
+    if (authLoading) return;
+
+    if (!profile?.id) {
+      setLoading(false);
+      return;
+    }
+
     void fetchDadosIniciais();
-  }, [fetchDadosIniciais]);
+  }, [authLoading, fetchDadosIniciais, profile?.id]);
 
   // Diagnóstico (Dev)
   // Chamamos a função de carregamento inicial apenas uma vez no mount.
@@ -487,7 +505,15 @@ export default function PedidosCompraPage() {
   };
 
   const deletarPedido = async (id: string) => {
-    if (!confirm('Confirma exclusão do pedido?')) return;
+    const confirmed = await confirmDialog.confirm({
+      title: 'Excluir Pedido',
+      message: 'Confirma a exclusão deste pedido de compra? Esta ação não pode ser desfeita.',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+
+    if (!confirmed) return;
     const { error } = await supabase.from('pedidos_compra').delete().eq('id', id);
     if (error) {
       toast.error('Erro ao excluir');
@@ -1041,6 +1067,17 @@ export default function PedidosCompraPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={confirmDialog.handleCancel}
+        onConfirm={confirmDialog.handleConfirm}
+        title={confirmDialog.options.title}
+        message={confirmDialog.options.message}
+        confirmText={confirmDialog.options.confirmText}
+        cancelText={confirmDialog.options.cancelText}
+        variant={confirmDialog.options.variant}
+      />
     </div>
   );
 }

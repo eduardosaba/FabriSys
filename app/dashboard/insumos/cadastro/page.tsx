@@ -11,7 +11,10 @@ import {
   Package,
 } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useConfirm } from '@/hooks/useConfirm';
 import { supabase } from '@/lib/supabase'; // Sua configuração existente
+import { useAuth } from '@/lib/auth';
 import { Button, StatusBadge, Modal, InputField, SelectField } from '@/components/ui/shared';
 import PageHeader from '@/components/ui/PageHeader';
 import { UNIDADES_UE, UNIDADES_UC } from '@/lib/mock-data'; // Mantemos as constantes de unidades
@@ -52,6 +55,8 @@ export default function ProdutosPage() {
     return 'Erro desconhecido';
   }
 
+  const confirmDialog = useConfirm();
+  const { profile, loading: authLoading } = useAuth();
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,10 +79,11 @@ export default function ProdutosPage() {
       if (errorInsumos) throw errorInsumos;
 
       // 2. Buscar Categorias para o Select
-      const { data: dataCategorias, error: errorCategorias } = await supabase
-        .from('categorias')
-        .select('id, nome')
-        .order('nome');
+      // Carregar categorias apenas da organização do usuário, quando disponível
+      let catQuery = supabase.from('categorias').select('id, nome').order('nome');
+      if (profile?.organization_id)
+        catQuery = catQuery.eq('organization_id', profile.organization_id);
+      const { data: dataCategorias, error: errorCategorias } = await catQuery;
 
       if (errorCategorias) throw errorCategorias;
 
@@ -101,7 +107,7 @@ export default function ProdutosPage() {
       // Tratamento de dados seguro
       const payload = {
         nome: formData.nome,
-        categoria_id: formData.categoria_id != null ? Number(formData.categoria_id) : null,
+        categoria_id: formData.categoria_id != null ? Number(formData.categoria_id) : undefined,
         // Mapeamos ambos: `unidade_medida` (coluna atual do DB) e
         // `unidade_estoque` (constraint presente que exige valor não vazio).
         // Assim cobrimos ambos os esquemas possíveis no banco e evitamos
@@ -126,9 +132,12 @@ export default function ProdutosPage() {
         if (updateError) throw updateError;
         console.debug('Updated insumo:', updated);
       } else {
+        // Ao inserir, removemos chaves undefined para evitar enviar colunas inexistentes
+        const safePayload = { ...payload } as Record<string, unknown>;
+        if (safePayload.categoria_id === undefined) delete safePayload.categoria_id;
         const { data: inserted, error: insertError } = await supabase
           .from('insumos')
-          .insert(payload)
+          .insert(safePayload)
           .select();
         if (insertError) throw insertError;
         console.debug('Inserted insumo:', inserted);
@@ -145,7 +154,15 @@ export default function ProdutosPage() {
 
   // --- EXCLUIR ---
   async function handleDelete(id: number) {
-    if (!confirm('Tem certeza que deseja excluir este insumo?')) return;
+    const confirmed = await confirmDialog.confirm({
+      title: 'Excluir Insumo',
+      message: 'Tem certeza que deseja excluir este insumo? Esta ação não pode ser desfeita.',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+
+    if (!confirmed) return;
 
     try {
       const { error } = await supabase.from('insumos').delete().eq('id', id);
@@ -525,6 +542,17 @@ export default function ProdutosPage() {
           onSave={handleSave}
         />
       </Modal>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={confirmDialog.handleCancel}
+        onConfirm={confirmDialog.handleConfirm}
+        title={confirmDialog.options.title}
+        message={confirmDialog.options.message}
+        confirmText={confirmDialog.options.confirmText}
+        cancelText={confirmDialog.options.cancelText}
+        variant={confirmDialog.options.variant}
+      />
     </div>
   );
 }

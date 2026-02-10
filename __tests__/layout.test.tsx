@@ -2,10 +2,12 @@ import { render, screen, fireEvent } from './test-utils';
 import Layout from '../components/Layout';
 import { vi } from 'vitest';
 
-// Mock do usePathname
+// Mock do usePathname e useRouter
 const mockUsePathname = vi.fn();
+const mockUseRouter = { push: vi.fn(), replace: vi.fn() } as any as any;
 vi.mock('next/navigation', () => ({
   usePathname: () => mockUsePathname(),
+  useRouter: () => mockUseRouter,
 }));
 
 describe('Layout', () => {

@@ -19,6 +19,8 @@ import {
   Filter,
 } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useConfirm } from '@/hooks/useConfirm';
 
 // --- IMPORTS (Ajuste conforme sua estrutura de pastas real) ---
 import { supabase } from '@/lib/supabase';
@@ -67,6 +69,7 @@ const CATEGORIAS_FORNECEDOR = [
 ];
 
 export default function FornecedoresPage() {
+  const confirmDialog = useConfirm();
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -189,7 +192,16 @@ export default function FornecedoresPage() {
 
   // --- EXCLUIR ---
   async function handleDelete(id: number) {
-    if (!confirm('Tem certeza que deseja excluir este fornecedor?')) return;
+    const confirmed = await confirmDialog.confirm({
+      title: 'Excluir Fornecedor',
+      message:
+        'Tem certeza que deseja excluir este fornecedor? Isso pode afetar pedidos e notas vinculadas.',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+
+    if (!confirmed) return;
 
     try {
       const { error } = await supabase.from('fornecedores').delete().eq('id', id);
@@ -537,6 +549,17 @@ export default function FornecedoresPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={confirmDialog.handleCancel}
+        onConfirm={confirmDialog.handleConfirm}
+        title={confirmDialog.options.title}
+        message={confirmDialog.options.message}
+        confirmText={confirmDialog.options.confirmText}
+        cancelText={confirmDialog.options.cancelText}
+        variant={confirmDialog.options.variant}
+      />
     </div>
   );
 }

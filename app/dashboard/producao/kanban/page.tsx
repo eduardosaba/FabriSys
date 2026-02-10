@@ -67,8 +67,10 @@ export default function KanbanPage() {
         const distribuicaoRaw = (obj['distribuicao'] as unknown[]) ?? [];
         const distribuicao = distribuicaoRaw.map((dist) => {
           const di = dist as Record<string, unknown>;
+          const localField = di['local'];
+          const localObj = Array.isArray(localField) ? localField[0] : localField;
           return {
-            local: String((di['local'] as Record<string, unknown> | undefined)?.['nome'] ?? ''),
+            local: String((localObj as Record<string, unknown> | undefined)?.['nome'] ?? ''),
             qtd: Number(di['quantidade_solicitada'] ?? 0),
           };
         });
@@ -77,7 +79,9 @@ export default function KanbanPage() {
           id: String(obj['id'] ?? ''),
           numero_op: String(obj['numero_op'] ?? ''),
           produto_nome: String(
-            (obj['produto_final'] as Record<string, unknown> | undefined)?.['nome'] ?? ''
+            (Array.isArray(obj['produto_final'])
+              ? obj['produto_final'][0]
+              : obj['produto_final'])?.['nome'] ?? ''
           ),
           quantidade_prevista: Number(obj['quantidade_prevista'] ?? 0),
           qtd_receitas: Number(obj['qtd_receitas_calculadas'] ?? 0),

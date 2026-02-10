@@ -24,7 +24,8 @@ export const produtoFinalSchema = z.object({
   ),
   codigo_interno: z.preprocess((val) => (val === '' ? null : val), z.string().nullable()),
   tipo: z.enum(['final', 'semi_acabado']).default('final'),
-  peso_unitario: z.number().optional(),
+  // aceitarmos strings numéricas vindas de formulários: coerce para número
+  peso_unitario: z.coerce.number().optional(),
   categoria_id: z.preprocess((val) => {
     // aceitar string vazia => null, string numérica => number, ou number direto
     if (val === '') return null;

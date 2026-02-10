@@ -17,14 +17,18 @@ import {
   ClipboardList,
   ChefHat,
   HelpCircle,
-  BookOpen,
+  Store,
+  Shield,
 } from 'lucide-react';
 
 import { useTheme } from '@/lib/theme';
+import { useAuth } from '@/lib/auth';
 
-// Hook para rastrear páginas favoritas (fixadas)
 const usePageTracking = () => {
-  const [pinned, setPinned] = useState<string[]>(['/dashboard/producao/kanban']);
+  const [pinned, setPinned] = useState<string[]>([
+    '/dashboard/producao/kanban',
+    '/dashboard/pdv/caixa',
+  ]);
   return {
     pinnedPages: pinned,
     togglePinPage: (href: string) =>
@@ -41,27 +45,30 @@ interface SidebarItem {
     name: string;
     href: string;
   }[];
-  section?: string;
+  adminOnly?: boolean;
 }
 
-// Definição dos itens do menu seguindo o novo fluxo da fábrica
 const sidebarItems: SidebarItem[] = [
   {
-    name: 'Dashboard',
+    name: 'Visão Geral',
     href: '/dashboard',
     icon: <LayoutDashboard className="h-5 w-5" />,
   },
   {
-    name: 'Planejamento',
-    href: '/dashboard/producao/planejamento',
+    name: 'Agenda',
+    href: '/dashboard/agenda',
     icon: <Calendar className="h-5 w-5" />,
   },
   {
-    name: 'Produção',
+    name: 'Planejamento',
+    href: '/dashboard/producao/planejamento',
+    icon: <ClipboardList className="h-5 w-5" />,
+  },
+  {
+    name: 'Fábrica',
     href: '/dashboard/producao',
     icon: <Factory className="h-5 w-5" />,
     children: [
-      { name: 'Dashboard Produção', href: '/dashboard/producao/' },
       { name: 'Chão de Fábrica (Kanban)', href: '/dashboard/producao/kanban' },
       { name: 'Ordens de Produção', href: '/dashboard/producao/ordens' },
       { name: 'Produtos Finais', href: '/dashboard/producao/produtos' },
@@ -69,11 +76,20 @@ const sidebarItems: SidebarItem[] = [
     ],
   },
   {
+    name: 'PDV & Lojas',
+    href: '/dashboard/pdv',
+    icon: <Store className="h-5 w-5" />,
+    children: [
+      { name: 'Frente de Caixa', href: '/dashboard/pdv/caixa' },
+      { name: 'Controle de Caixa', href: '/dashboard/pdv/controle-caixa' },
+      { name: 'Recebimento Carga', href: '/dashboard/pdv/recebimento' },
+    ],
+  },
+  {
     name: 'Suprimentos',
     href: '/dashboard/insumos',
     icon: <Package className="h-5 w-5" />,
     children: [
-      { name: 'Dashboard Suprimentos', href: '/dashboard/insumos/' },
       { name: 'Sugestão de Compras (MRP)', href: '/dashboard/compras/sugestao' },
       { name: 'Pedidos de Compra', href: '/dashboard/insumos/pedidos-compra' },
       { name: 'Entrada de Notas', href: '/dashboard/insumos/lotes' },
@@ -88,21 +104,33 @@ const sidebarItems: SidebarItem[] = [
     href: '/dashboard/relatorios',
     icon: <BarChart2 className="h-5 w-5" />,
     children: [
-      { name: 'Dashboard', href: '/dashboard/relatorios/' },
-      { name: 'Validade', href: '/dashboard/relatorios/validade' },
-      { name: 'Estoque', href: '/dashboard/relatorios/estoque' },
+      { name: 'Painel Gerencial', href: '/dashboard/relatorios' },
+      { name: 'Vendas Detalhadas', href: '/dashboard/relatorios/vendas' },
+      { name: 'Posição de Estoque', href: '/dashboard/relatorios/estoque' },
+      { name: 'Validade & Perdas', href: '/dashboard/relatorios/validade' },
     ],
-  },
-  // Seção de Suporte e Ajuda
-  {
-    name: 'Manual & Ajuda',
-    href: '/dashboard/ajuda',
-    icon: <HelpCircle className="h-5 w-5" />,
   },
   {
     name: 'Configurações',
     href: '/dashboard/configuracoes',
     icon: <Settings className="h-5 w-5" />,
+    children: [
+      { name: 'Sistema & Regras', href: '/dashboard/configuracoes' },
+      { name: 'Cadastro de Lojas', href: '/dashboard/configuracoes/lojas' },
+      { name: 'Promoções & Combos', href: '/dashboard/configuracoes/promocoes' },
+      { name: 'Equipe & Usuários', href: '/dashboard/configuracoes/usuarios' },
+    ],
+  },
+  {
+    name: 'Ajuda',
+    href: '/dashboard/ajuda',
+    icon: <HelpCircle className="h-5 w-5" />,
+  },
+  {
+    name: 'Admin Master',
+    href: '/dashboard/admin',
+    icon: <Shield className="h-5 w-5 text-purple-500" />,
+    adminOnly: true,
   },
 ];
 
@@ -119,6 +147,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   const { pinnedPages, togglePinPage, isPagePinned } = usePageTracking();
   const { theme, loading } = useTheme();
+  const { profile } = useAuth();
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
@@ -173,15 +202,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 />
               )}
 
-              {/* Ícone Placeholder quando colapsado ou sem logo */}
               {(isCollapsed || (!theme?.logo_url && !theme?.company_logo_url && !loading)) && (
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-pink-500 to-pink-600 text-white font-bold shadow-lg shadow-pink-500/20">
                   {isCollapsed ? 'C' : <ChefHat size={20} />}
                 </div>
               )}
 
-              {/* Nome do Sistema (Confectio) */}
-              {!isCollapsed && (
+              {!isCollapsed && !theme?.company_logo_url && !theme?.logo_url && (
                 <div className="flex items-center gap-2">
                   <span
                     className="text-xl font-bold tracking-tight"
@@ -194,7 +221,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
           </div>
 
-          {/* Botão Colapsar (Desktop) */}
           <button
             onClick={toggleSidebar}
             className="absolute -right-3 top-1/2 z-50 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm transition-colors hover:border-pink-200 hover:text-pink-600 lg:flex"
@@ -202,7 +228,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             {isCollapsed ? <ChevronRight size={14} /> : <X size={14} />}
           </button>
 
-          {/* Botão Fechar (Mobile) */}
           <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-slate-600">
             <X size={24} />
           </button>
@@ -267,16 +292,23 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
         <ul className="space-y-1">
           {sidebarItems.map((item) => {
+            // Bloqueio de segurança para itens Master
+            if (item.adminOnly && profile?.role !== 'master') return null;
+
             const active = isActive(item.href) || isSubmenuActive(item);
             const isHovered = hoveredItem === item.href;
 
             const itemStyle = active
-              ? { backgroundColor: 'var(--sidebar-hover-bg)', color: 'var(--sidebar-active-text)' }
+              ? {
+                  backgroundColor: 'var(--sidebar-active-bg, rgba(59,130,246,0.08))',
+                  color: 'var(--sidebar-active-text, #0f172a)',
+                  boxShadow: 'inset 4px 0 0 var(--sidebar-accent, #f59e0b)',
+                }
               : isHovered
                 ? {
-                    backgroundColor: 'var(--sidebar-hover-bg)',
-                    color: 'var(--sidebar-active-text)',
-                    opacity: 0.92,
+                    backgroundColor: 'var(--sidebar-hover-bg, rgba(15,23,42,0.06))',
+                    color: 'var(--sidebar-active-text, #0f172a)',
+                    opacity: 0.98,
                   }
                 : undefined;
 
@@ -372,14 +404,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                               style={
                                 childActive
                                   ? {
-                                      backgroundColor: 'var(--sidebar-hover-bg)',
-                                      color: 'var(--sidebar-active-text)',
+                                      backgroundColor:
+                                        'var(--sidebar-active-bg, rgba(59,130,246,0.08))',
+                                      color: 'var(--sidebar-active-text, #0f172a)',
+                                      boxShadow: 'inset 4px 0 0 var(--sidebar-accent, #f59e0b)',
                                     }
                                   : childIsHovered
                                     ? {
-                                        backgroundColor: 'var(--sidebar-hover-bg)',
-                                        color: 'var(--sidebar-active-text)',
-                                        opacity: 0.92,
+                                        backgroundColor:
+                                          'var(--sidebar-hover-bg, rgba(15,23,42,0.06))',
+                                        color: 'var(--sidebar-active-text, #0f172a)',
+                                        opacity: 0.98,
                                       }
                                     : undefined
                               }
@@ -422,12 +457,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       <div className={`border-t border-slate-100 p-4 ${isCollapsed ? 'flex justify-center' : ''}`}>
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-bold text-slate-500">
-            ES
+            {profile?.nome ? profile.nome.substring(0, 2).toUpperCase() : 'US'}
           </div>
           {!isCollapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-700">Eduardo Saba</p>
-              <p className="truncate text-xs text-slate-500">eduardopedro.fsa@gmail.com</p>
+              <p className="truncate text-sm font-medium text-slate-700">
+                {profile?.nome || 'Usuário'}
+              </p>
+              <p className="truncate text-xs text-slate-500">
+                {profile?.email || 'email@confectio.com'}
+              </p>
             </div>
           )}
         </div>

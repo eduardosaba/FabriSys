@@ -30,17 +30,25 @@ export function OrdemProducaoProvider({ children }: { children: React.ReactNode 
   const loadOrdens = useCallback(async () => {
     try {
       setLoading(true);
-      const { data, error } = (await supabase
+      const resp = (await supabase
         .from('ordens_producao')
         .select('*, produto_final:produtos_finais(nome)')
         .order('data_prevista', { ascending: false })) as unknown as {
-        data: (OrdemProducao & { produto_final: { nome: string } })[];
-        error: Error | null;
+        data?: unknown[];
+        error?: unknown;
       };
 
+      const data = resp.data ?? [];
+      const error = resp.error;
       if (error) throw error;
 
-      setOrdens(data);
+      // Normaliza produto_final (PostgREST pode retornar array)
+      const normalized = (data as any[]).map((d) => ({
+        ...d,
+        produto_final: Array.isArray(d.produto_final) ? d.produto_final[0] : d.produto_final,
+      }));
+
+      setOrdens(normalized as OrdemProducao[]);
     } catch {
       toast({
         title: 'Erro ao carregar ordens',

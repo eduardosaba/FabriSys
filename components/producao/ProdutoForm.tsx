@@ -57,7 +57,7 @@ const unformatCurrency = (value: string): number => {
 export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(produto?.imagem_url || null);
   const [precoDisplay, setPrecoDisplay] = useState<string>(
@@ -152,11 +152,16 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
   }, [produto, setValue]);
 
   useEffect(() => {
-    // carregar categorias para select
+    // carregar categorias para select (aguarda profile)
     let mounted = true;
     const fetchCategorias = async () => {
+      if (!profile?.id) return;
       try {
-        const { data, error } = await supabase.from('categorias').select('id, nome').order('nome');
+        const { data, error } = await supabase
+          .from('categorias')
+          .select('id, nome')
+          .eq('organization_id', profile.organization_id)
+          .order('nome');
         if (error) throw error;
         if (mounted) {
           const normalized = ((data as { id: number | string; nome: string }[] | null) || []).map(
@@ -172,11 +177,20 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
       }
     };
 
+    if (authLoading) return;
+
+    if (!profile?.id) {
+      // sem usuário autenticado — limpa categorias para não travar UI
+      mounted = false;
+      setCategorias([]);
+      return;
+    }
+
     void fetchCategorias();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authLoading, profile?.id]);
 
   const openCreateCategoria = () => {
     setNewCategoriaName('');
@@ -196,11 +210,20 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
     }
 
     try {
+      if (!profile?.organization_id) {
+        toast({
+          title: 'Organização não encontrada',
+          description: 'Não foi possível identificar a organização do usuário',
+          variant: 'error',
+        });
+        return;
+      }
       // Verificar se já existe categoria com mesmo nome (case-insensitive)
       const { data: existing, error: existingError } = await supabase
         .from('categorias')
         .select('id, nome')
         .ilike('nome', nome)
+        .eq('organization_id', profile.organization_id)
         .limit(1);
 
       if (existingError) throw existingError;
@@ -215,7 +238,11 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
           variant: 'info',
         });
         // Atualizar lista local por segurança
-        const updated = await supabase.from('categorias').select('id, nome').order('nome');
+        const updated = await supabase
+          .from('categorias')
+          .select('id, nome')
+          .eq('organization_id', profile.organization_id)
+          .order('nome');
         if (!updated.error) {
           const normalized = (
             (updated.data as { id: number | string; nome: string }[] | null) || []
@@ -225,10 +252,10 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
         return;
       }
 
-      // Inserir nova categoria
+      // Inserir nova categoria (anexa organization_id/created_by para respeitar RLS)
       const { data, error } = await supabase
         .from('categorias')
-        .insert([{ nome }])
+        .insert([{ nome, organization_id: profile.organization_id, created_by: profile.id }])
         .select()
         .limit(1);
       if (error) {
@@ -238,6 +265,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
           .from('categorias')
           .select('id, nome')
           .ilike('nome', nome)
+          .eq('organization_id', profile.organization_id)
           .limit(1);
         if (!retry.error && retry.data && retry.data.length > 0) {
           setValue('categoria_id', Number((retry.data as { id: number | string }[])[0].id));
@@ -247,7 +275,11 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
             description: 'Categoria já existe e foi selecionada',
             variant: 'info',
           });
-          const updated = await supabase.from('categorias').select('id, nome').order('nome');
+          const updated = await supabase
+            .from('categorias')
+            .select('id, nome')
+            .eq('organization_id', profile.organization_id)
+            .order('nome');
           if (!updated.error)
             setCategorias(
               ((updated.data as { id: number | string; nome: string }[] | null) || []).map((r) => ({
@@ -262,7 +294,11 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
 
       const created = ((data as { id?: number | string }[]) || [])[0];
       // atualizar lista local e selecionar a nova categoria
-      const updated = await supabase.from('categorias').select('id, nome').order('nome');
+      const updated = await supabase
+        .from('categorias')
+        .select('id, nome')
+        .eq('organization_id', profile.organization_id)
+        .order('nome');
       if (updated.error) throw updated.error;
       const list = ((updated.data as { id: number | string; nome: string }[]) || []).map((r) => ({
         ...r,
@@ -335,12 +371,18 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
   // Normaliza dados antes de enviar ao servidor (converte categoria_id para number/null)
   const normalizeForInsert = (data: ProdutoFormData) => {
     const base = cleanData(data) as unknown as Record<string, unknown>;
+    // Quando não houver categoria, removemos a chave para evitar enviar colunas
+    // inexistentes ao PostgREST (evita erro PGRST204 se a coluna não existir).
     if (base.categoria_id === '' || base.categoria_id === null || base.categoria_id === undefined) {
-      base.categoria_id = null;
+      delete base.categoria_id;
     } else {
       // pode vir como string (do select) ou number
-      base.categoria_id = Number(base.categoria_id as string | number);
-      if (Number.isNaN(base.categoria_id)) base.categoria_id = null;
+      const parsed = Number(base.categoria_id as string | number);
+      if (Number.isNaN(parsed)) {
+        delete base.categoria_id;
+      } else {
+        base.categoria_id = parsed;
+      }
     }
     return base as ProdutoFormData;
   };
@@ -391,7 +433,25 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
 
         if (error) {
           console.error('Erro no UPDATE:', error);
-          throw error;
+          // Se o erro indicar coluna inexistente (ex: categoria_id), tentar remover e reenviar
+          if (
+            (error as any)?.code === 'PGRST204' ||
+            (typeof (error as any)?.message === 'string' &&
+              String((error as any).message).includes("Could not find the 'categoria_id'"))
+          ) {
+            const safeData = { ...cleanedData } as Record<string, unknown>;
+            delete safeData.categoria_id;
+            const { error: retryErr } = await supabase
+              .from('produtos_finais')
+              .update(safeData)
+              .eq('id', produto.id);
+            if (retryErr) {
+              console.error('Erro no UPDATE (retry):', retryErr);
+              throw retryErr;
+            }
+          } else {
+            throw error;
+          }
         }
 
         console.log('UPDATE realizado com sucesso!');
@@ -403,11 +463,30 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
       } else {
         console.log('Fazendo INSERT de novo produto');
         // Inserção: data já contém valores transformados (strings vazias -> null)
-        const { error } = await supabase.from('produtos_finais').insert(cleanedData);
+        let insertError = null;
+        try {
+          const { error } = await supabase.from('produtos_finais').insert(cleanedData);
+          if (error) insertError = error;
+        } catch (err) {
+          insertError = err as Record<string, unknown>;
+        }
 
-        if (error) {
-          console.error('Erro no INSERT:', error);
-          throw error;
+        if (insertError) {
+          console.error('Erro no INSERT:', insertError);
+          // Se o erro indicar que a coluna categoria_id não existe no schema,
+          // tentar reenviar sem o campo e avisar o usuário.
+          const msg = String((insertError as any)?.message || '');
+          const code = (insertError as any)?.code;
+          if (code === 'PGRST204' || msg.includes("Could not find the 'categoria_id'")) {
+            const safeData = { ...(cleanedData as Record<string, unknown>) };
+            delete safeData.categoria_id;
+            const { error: retryError } = await supabase.from('produtos_finais').insert(safeData);
+            if (retryError) {
+              console.error('Erro no INSERT (retry):', retryError);
+              throw retryError;
+            }
+          }
+          throw insertError as unknown as Error;
         }
 
         console.log('INSERT realizado com sucesso!');
@@ -655,10 +734,11 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
                   if (file) void handleImageUpload(file);
                 }}
                 className="hidden"
-                id="imagem"
+                id="imagem-upload"
+                disabled={uploading}
               />
               <label
-                htmlFor="imagem"
+                htmlFor="imagem-upload"
                 className={`inline-flex cursor-pointer items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
                   ${uploading ? 'cursor-not-allowed opacity-50' : ''}`}
               >
@@ -688,9 +768,12 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
         onClose={() => setIsCategoriaModalOpen(false)}
         title="Nova Categoria"
       >
-        <form onSubmit={handleCreateCategoria} className="space-y-4">
+        <div className="space-y-4 p-4">
           <div>
-            <label htmlFor="nova-categoria" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="nova-categoria"
+              className="block text-sm font-medium text-gray-700 mb-2"
+            >
               Nome da Categoria
             </label>
             <input
@@ -698,22 +781,37 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
               type="text"
               value={newCategoriaName}
               onChange={(e) => setNewCategoriaName(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleCreateCategoria();
+                }
+              }}
+              className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 text-base"
               placeholder="Ex: Panificação"
-              required
+              autoFocus
             />
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-2">
             <Button
               type="button"
               variant="secondary"
-              onClick={() => setIsCategoriaModalOpen(false)}
+              onClick={() => {
+                setIsCategoriaModalOpen(false);
+                setNewCategoriaName('');
+              }}
             >
               Cancelar
             </Button>
-            <Button type="submit">Criar</Button>
+            <Button
+              type="button"
+              onClick={() => void handleCreateCategoria()}
+              disabled={!newCategoriaName.trim()}
+            >
+              Criar
+            </Button>
           </div>
-        </form>
+        </div>
       </Modal>
     </form>
   );

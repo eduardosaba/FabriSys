@@ -207,12 +207,14 @@ export default function DashboardPage() {
       ordensRows.forEach((item) => {
         const it = item as Record<string, unknown>;
         const qtd = Number(it['quantidade_prevista'] ?? 0);
+        const produtoField = it['produto'];
+        const produtoObj = Array.isArray(produtoField) ? produtoField[0] : produtoField;
         const preco = Number(
-          (it['produto'] as Record<string, unknown> | undefined)?.['preco_venda'] ?? 0
+          (produtoObj as Record<string, unknown> | undefined)?.['preco_venda'] ?? 0
         );
         const total = qtd * preco;
         const nome = String(
-          (it['produto'] as Record<string, unknown> | undefined)?.['nome'] ?? 'Produto Desconhecido'
+          (produtoObj as Record<string, unknown> | undefined)?.['nome'] ?? 'Produto Desconhecido'
         );
 
         totalFat += total;

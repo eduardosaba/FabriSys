@@ -63,6 +63,11 @@ export default function ListaProdutos({ produtos, onUpdate }: ListaProdutosProps
     }
   }
 
+  // Navega para a rota por produto que redireciona para view/edit conforme permissões
+  function handleViewFicha(produto: ProdutoFinal) {
+    window.location.href = `/dashboard/producao/produtos/${produto.id}/ficha-tecnica`;
+  }
+
   return (
     <>
       <div className="overflow-hidden rounded-lg bg-white shadow">
@@ -160,9 +165,7 @@ export default function ListaProdutos({ produtos, onUpdate }: ListaProdutosProps
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                         <div className="flex justify-end gap-2">
                           <button
-                            onClick={() =>
-                              (window.location.href = `/dashboard/producao/produtos/ficha-tecnica/${produto.id}`)
-                            }
+                            onClick={() => handleViewFicha(produto)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors duration-200 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                             aria-label={`Ver ficha técnica de ${produto.nome}`}
                             title="Ficha Técnica"

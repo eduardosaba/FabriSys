@@ -99,7 +99,7 @@ const merriweather = Merriweather({
 });
 
 export const metadata: Metadata = {
-  title: 'Sys Lari',
+  title: 'Confectio v. 1.0.0',
   description: 'Sistema de Gestão para Salgados e Confeitaria',
 };
 

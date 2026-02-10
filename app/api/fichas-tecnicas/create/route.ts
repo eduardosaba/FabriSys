@@ -24,7 +24,16 @@ async function tryInsertFicha(rows: any[]) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { produto_final_id, insumos, nome, preco_venda, rendimento, slug_base } = body;
+    const {
+      produto_final_id,
+      insumos,
+      nome,
+      preco_venda,
+      rendimento,
+      slug_base,
+      created_by,
+      organization_id,
+    } = body;
 
     if (!produto_final_id || !Array.isArray(insumos)) {
       return NextResponse.json({ error: 'payload inválido' }, { status: 400 });
@@ -34,25 +43,57 @@ export async function POST(request: Request) {
     const slug = slug_base || `ft-${produto_final_id}`;
     const maxAttempts = 5;
 
+    const attemptsInfo: Array<any> = [];
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const candidateSlug = attempt === 0 ? slug : `${slug}-${attempt}`;
 
-      const rows = insumos
-        .filter((i: any) => i.insumoId)
-        .map((insumo: any, index: number) => ({
+      // Log temporário para depuração de geração de slug único
+      console.log('[create/fichas] tentativa', attempt, 'slug_candidate=', candidateSlug);
+
+      // Construir linhas garantindo `unidade_medida`.
+      const rows: any[] = [];
+      for (let index = 0; index < insumos.length; index++) {
+        const insumo = insumos[index];
+        if (!insumo || !insumo.insumoId) continue;
+
+        let unidade = insumo.unidadeMedida ?? insumo.unidade_medida ?? null;
+
+        // Se não foi fornecida, buscar na tabela `insumos` para evitar null constraint
+        if (!unidade) {
+          try {
+            const { data: insumoRow, error: insumoErr } = await supabaseAdmin
+              .from('insumos')
+              .select('unidade_medida')
+              .eq('id', insumo.insumoId)
+              .limit(1)
+              .maybeSingle();
+            if (!insumoErr && insumoRow && (insumoRow as any).unidade_medida) {
+              unidade = (insumoRow as any).unidade_medida;
+            }
+          } catch (e) {
+            console.error('Erro ao buscar insumo para unidade_medida:', e);
+          }
+        }
+
+        // Fallback seguro caso ainda seja nulo
+        if (!unidade) unidade = 'un';
+
+        rows.push({
           produto_final_id,
           insumo_id: insumo.insumoId,
           quantidade: insumo.quantidade,
-          unidade_medida: insumo.unidadeMedida,
+          unidade_medida: unidade,
           perda_padrao: insumo.perdaPadrao,
           rendimento_unidades: rendimento,
           ordem_producao: index + 1,
           versao: 1,
           ativo: true,
-          created_by: null,
+          created_by: created_by ?? null,
+          organization_id: organization_id ?? null,
           nome: nome || null,
           slug: candidateSlug,
-        }));
+        });
+      }
 
       const { data, error } = await tryInsertFicha(rows);
       if (!error) {
@@ -68,22 +109,29 @@ export async function POST(request: Request) {
 
       // Verifica se é erro de conflito (23505) e tenta novo slug
       const msg = (error as any).message || '';
-      if (String(msg).includes('duplicate') || (error as any)?.code === '23505') {
+      const code = (error as any)?.code;
+      console.error('[create/fichas] erro insercao tentativa', attempt, 'msg=', msg, 'code=', code);
+      attemptsInfo.push({ attempt, candidateSlug, msg, code });
+      if (String(msg).includes('duplicate') || code === '23505') {
         // tentar próximo sufixo
         continue;
       }
 
       // Erro inesperado
       console.error('Erro ao inserir ficha (admin):', error);
-      return NextResponse.json({ error: String(error) }, { status: 500 });
+      const errMsg = (error && (error as any).message) || String(error);
+      const errCode = (error && (error as any).code) || undefined;
+      return NextResponse.json({ error: errMsg, code: errCode }, { status: 500 });
     }
 
     return NextResponse.json(
-      { error: 'Não foi possível gerar slug único após várias tentativas' },
+      { error: 'Não foi possível gerar slug único após várias tentativas', attempts: attemptsInfo },
       { status: 500 }
     );
   } catch (err) {
     console.error('Erro no endpoint create ficha:', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    const errMsg = (err && (err as any).message) || String(err);
+    const errCode = (err && (err as any).code) || undefined;
+    return NextResponse.json({ error: errMsg, code: errCode }, { status: 500 });
   }
 }

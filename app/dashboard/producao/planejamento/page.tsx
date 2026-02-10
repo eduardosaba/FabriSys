@@ -1,14 +1,26 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth';
 import Button from '@/components/Button';
 import PageHeader from '@/components/ui/PageHeader';
-import { Calendar, Save, Truck, ChefHat, AlertTriangle } from 'lucide-react';
-import { useToast } from '@/hooks/useToast';
 import Loading from '@/components/ui/Loading';
+import { useToast } from '@/hooks/useToast';
+import {
+  Truck,
+  Save,
+  ChefHat,
+  AlertTriangle,
+  Sparkles,
+  Package,
+  Plus,
+  Store,
+  Calendar,
+} from 'lucide-react';
 
-// Tipos para os dados
+// --- TIPOS ---
 interface Local {
   id: string;
   nome: string;
@@ -18,16 +30,20 @@ interface ProdutoPlanejamento {
   id: string;
   nome: string;
   peso_unitario: number;
-  ficha_tecnica: {
-    rendimento_total_g?: number;
-  } | null;
+  rendimento_total_g: number;
+  tem_config_completa: boolean;
 }
 
 interface ItemPlanejamento {
-  [localId: string]: number; // Quantidade por PDV
+  [localId: string]: number; // Quantidade definida para cada PDV
 }
 
 export default function PlanejamentoPage() {
+  const { profile, loading: authLoading } = useAuth();
+  const { toast } = useToast();
+
+  // ESTADOS
+  // Importante: loading começa true para evitar piscar tela vazia
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [dataProducao, setDataProducao] = useState(new Date().toISOString().split('T')[0]);
@@ -35,332 +51,433 @@ export default function PlanejamentoPage() {
   const [locais, setLocais] = useState<Local[]>([]);
   const [produtos, setProdutos] = useState<ProdutoPlanejamento[]>([]);
 
-  // Estado que guarda as quantidades digitadas: { produtoId: { localId: qtd } }
+  // Matriz de Planejamento: { "prod_id": { "local_id": 50 } }
   const [plano, setPlano] = useState<Record<string, ItemPlanejamento>>({});
 
-  const { toast } = useToast();
-
+  // --- CARREGAMENTO DE DADOS ---
   const carregarDados = useCallback(async () => {
+    if (!profile?.id) {
+      // Se não há profile, garantimos que o estado de loading não fique preso em true
+      setLoading(false);
+      return;
+    }
+
     try {
-      // 1. Carregar PDVs (Locais de destino)
-      const { data: locaisData } = await supabase
+      setLoading(true);
+
+      // 1. Buscar PDVs ativos
+      const { data: locaisData, error: errLocais } = await supabase
         .from('locais')
         .select('id, nome')
         .eq('tipo', 'pdv')
         .eq('ativo', true)
         .order('nome');
 
-      setLocais(locaisData || []);
+      if (errLocais) throw errLocais;
 
-      // 2. Carregar Produtos com suas Fichas Técnicas (apenas os que têm peso cadastrado)
-      // Precisamos do rendimento da ficha para fazer a mágica do cálculo
-      const { data: produtosData, error } = await supabase
+      // 2. Buscar Produtos e suas Fichas
+      const { data: produtosData, error: errProd } = await supabase
         .from('produtos_finais')
         .select(
           `
-          id, 
-          nome, 
-          peso_unitario,
+          id, nome, peso_unitario,
           ficha_tecnica:fichas_tecnicas(rendimento_total_g)
         `
         )
         .eq('ativo', true)
         .order('nome');
 
-      if (error) throw error;
+      if (errProd) throw errProd;
 
-      // Tratamento seguro de tipagem dos dados retornados pelo Supabase
-      const rows = (produtosData ?? []) as unknown[];
-      const produtosFormatados: ProdutoPlanejamento[] = rows.map((p) => {
-        const obj = p as Record<string, unknown>;
-        const fichaRaw = obj['ficha_tecnica'];
-
-        // Extrair apenas o campo necessário de forma segura
-        const rendimento = (() => {
-          if (Array.isArray(fichaRaw) && (fichaRaw as unknown[]).length > 0) {
-            const first = (fichaRaw as unknown[])[0] as Record<string, unknown>;
-            return typeof first['rendimento_total_g'] === 'number'
-              ? first['rendimento_total_g']
-              : undefined;
-          }
-          if (
-            fichaRaw &&
-            typeof (fichaRaw as Record<string, unknown>)['rendimento_total_g'] === 'number'
-          ) {
-            return (fichaRaw as Record<string, unknown>)['rendimento_total_g'] as number;
-          }
-          return undefined;
-        })();
+      // 3. Normalizar dados (Tratar arrays/nulos do Supabase)
+      const produtosFormatados: ProdutoPlanejamento[] = (produtosData || []).map((p: any) => {
+        // O Supabase pode retornar ficha_tecnica como array ou objeto único
+        const ficha = Array.isArray(p.ficha_tecnica) ? p.ficha_tecnica[0] : p.ficha_tecnica;
+        const rendimento = ficha?.rendimento_total_g || 0;
+        const peso = p.peso_unitario || 0;
 
         return {
-          id: String(obj['id'] ?? ''),
-          nome: String(obj['nome'] ?? ''),
-          peso_unitario: Number(obj['peso_unitario'] ?? 0),
-          ficha_tecnica: rendimento ? { rendimento_total_g: rendimento } : null,
+          id: p.id,
+          nome: p.nome,
+          peso_unitario: peso,
+          rendimento_total_g: rendimento,
+          // Só podemos calcular se tivermos peso e rendimento > 0
+          tem_config_completa: peso > 0 && rendimento > 0,
         };
       });
 
+      setLocais(locaisData || []);
       setProdutos(produtosFormatados);
-    } catch (error) {
-      console.error('Erro ao carregar planejamento:', error);
-      toast({ title: 'Erro', description: 'Falha ao carregar dados.', variant: 'error' });
+    } catch (err) {
+      console.error('Erro ao carregar dados:', err);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar o planejamento.',
+        variant: 'error',
+      });
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [profile, toast]);
 
+  // Dispara carregamento apenas quando a autenticação estiver resolvida
   useEffect(() => {
-    void carregarDados();
-  }, [carregarDados]);
+    // Se ainda está carregando autenticação, aguardamos
+    if (authLoading) return;
 
-  // Função para atualizar o input de quantidade
-  const handleQtdChange = (produtoId: string, localId: string, qtd: string) => {
-    const valor = parseInt(qtd) || 0;
+    // Autenticação terminou e não há profile: encerra o loading e não busca dados
+    if (!profile?.id) {
+      setLoading(false);
+      return;
+    }
+
+    void carregarDados();
+  }, [authLoading, profile?.id, carregarDados]);
+
+  // --- LÓGICA DE INTERAÇÃO ---
+
+  // Atualiza o valor manual
+  const handleQtdChange = (produtoId: string, localId: string, valor: string) => {
+    const qtd = parseInt(valor) || 0;
     setPlano((prev) => ({
       ...prev,
       [produtoId]: {
         ...prev[produtoId],
-        [localId]: valor,
+        [localId]: qtd,
       },
     }));
   };
 
-  // === A LÓGICA DA "ABRIGADEIRINHA" ESTÁ AQUI ===
-  const calcularProducao = (produto: ProdutoPlanejamento) => {
-    const quantidades = plano[produto.id] || {};
-    // 1. Soma total dos PDVs
-    const totalUnidades = Object.values(quantidades).reduce((acc, curr) => acc + curr, 0);
+  // Chama a "Inteligência" do banco para sugerir valor
+  const preencherSugestao = async (produtoId: string, localId: string) => {
+    // Feedback visual
+    toast({ title: 'Consultando histórico...', variant: 'default' });
+
+    try {
+      const { data, error } = await supabase.rpc('sugerir_producao', {
+        p_produto_id: produtoId,
+        p_local_id: localId,
+        p_data_referencia: dataProducao,
+      });
+
+      if (error) throw error;
+
+      const sugerido = Number(data);
+
+      if (sugerido > 0) {
+        handleQtdChange(produtoId, localId, String(sugerido));
+        toast({
+          title: 'Sugestão aplicada!',
+          description: `Média de vendas: ${sugerido} un`,
+          variant: 'success',
+        });
+      } else {
+        toast({
+          title: 'Sem dados',
+          description: 'Vendas insuficientes para sugerir.',
+          variant: 'default',
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      toast({ title: 'Erro', description: 'Falha ao buscar sugestão.', variant: 'error' });
+    }
+  };
+
+  // Calcula totais e panelas em tempo real
+  const calcularLinha = (produto: ProdutoPlanejamento) => {
+    const qtds = plano[produto.id] || {};
+    const totalUnidades = Object.values(qtds).reduce((acc, q) => acc + q, 0);
 
     if (totalUnidades === 0) return null;
 
-    // Se não tiver dados técnicos, avisa erro
-    if (!produto.peso_unitario || !produto.ficha_tecnica?.rendimento_total_g) {
-      return { erro: true, totalUnidades };
+    if (!produto.tem_config_completa) {
+      return { erro: true, msg: 'Cadastro incompleto' };
     }
 
-    // 2. Cálculo de Massa
-    const massaTotalG = totalUnidades * produto.peso_unitario;
-
-    // 3. Cálculo de Panelas (Batidas)
-    const rendimentoReceita = produto.ficha_tecnica.rendimento_total_g;
-    const qtdBatidas = Math.ceil(massaTotalG / rendimentoReceita);
+    const massaNecessariaG = totalUnidades * produto.peso_unitario;
+    const qtdPanelas = Math.ceil(massaNecessariaG / produto.rendimento_total_g);
 
     return {
       totalUnidades,
-      massaTotalKg: massaTotalG / 1000,
-      qtdBatidas,
+      massaTotalKg: massaNecessariaG / 1000,
+      qtdPanelas,
       erro: false,
     };
   };
 
-  const handleSalvarPlanejamento = async () => {
+  // Salvar e Gerar Ordens
+  const handleSalvar = async () => {
     setSalvando(true);
     try {
-      // Filtrar apenas produtos que têm alguma quantidade preenchida
-      const produtosParaProduzir = produtos.filter((p) => {
-        const calculo = calcularProducao(p);
-        return calculo && calculo.totalUnidades > 0;
+      // Filtra produtos que têm produção definida
+      const produtosAtivos = produtos.filter((p) => {
+        const calc = calcularLinha(p);
+        return !!calc && !calc.erro && (calc.totalUnidades ?? 0) > 0;
       });
 
-      if (produtosParaProduzir.length === 0) {
+      if (produtosAtivos.length === 0) {
         toast({
           title: 'Atenção',
-          description: 'Preencha alguma quantidade para gerar ordens.',
+          description: 'Preencha quantidades antes de salvar.',
           variant: 'warning',
         });
         setSalvando(false);
         return;
       }
 
-      // Loop para criar uma Ordem de Produção (OP) por Produto
-      for (const produto of produtosParaProduzir) {
-        const calculo = calcularProducao(produto);
-        if (!calculo || calculo.erro) continue;
+      let ordensGeradas = 0;
 
-        // 1. Gerar Número da OP (Simplificado para o exemplo)
-        const numeroOp = Math.floor(1000 + Math.random() * 9000).toString();
+      for (const prod of produtosAtivos) {
+        const calc = calcularLinha(prod);
+        if (!calc || calc.erro) continue;
 
-        // 2. Criar a OP Principal
-        const { data: opData, error: opError } = await supabase
+        // 1. Criar Ordem de Produção
+        const numeroOp = Math.floor(10000 + Math.random() * 90000).toString();
+
+        const { data: op, error: opErr } = await supabase
           .from('ordens_producao')
           .insert({
             numero_op: numeroOp,
-            produto_final_id: produto.id,
-            quantidade_prevista: calculo.totalUnidades,
+            produto_final_id: prod.id,
+            quantidade_prevista: calc.totalUnidades,
             data_prevista: dataProducao,
-            status: 'planejada', // Começa planejada
-            estagio_atual: 'planejamento', // Vai para o Kanban
-
-            // DADOS INTELIGENTES SALVOS NO BANCO:
-            qtd_receitas_calculadas: calculo.qtdBatidas,
-            massa_total_kg: calculo.massaTotalKg,
+            qtd_receitas_calculadas: calc.qtdPanelas,
+            massa_total_kg: calc.massaTotalKg,
+            status: 'planejada',
+            estagio_atual: 'planejamento',
           })
           .select()
           .single();
 
-        if (opError) throw opError;
+        if (opErr) throw opErr;
 
-        // 3. Salvar a Distribuição (Logística para os PDVs)
-        // Garantir que acessamos o id da OP de forma segura
-        const opId = (opData as Record<string, unknown> | null)?.id as string | number | undefined;
-        if (!opId) {
-          throw new Error('ID da ordem de produção ausente após inserção');
-        }
+        // 2. Criar Distribuição (Logística)
+        // Usamos flatMap para gerar o array de inserts
+        const opId = op?.id; // Garantir acesso ao ID
 
-        const distribuicaoInserts = locais.flatMap((local) => {
-          const qtd = plano[produto.id]?.[local.id] || 0;
-          if (qtd > 0) {
-            return [
-              supabase.from('distribuicao_pedidos').insert({
+        if (opId) {
+          const itemsDistribuicao = locais.flatMap((local) => {
+            const qtd = plano[prod.id]?.[local.id] || 0;
+            if (qtd > 0) {
+              return {
                 ordem_producao_id: opId,
                 local_destino_id: local.id,
                 quantidade_solicitada: qtd,
                 status: 'pendente',
-              }),
-            ];
-          }
-          return [] as unknown[];
-        });
+              };
+            }
+            return [];
+          });
 
-        if (distribuicaoInserts.length > 0) {
-          await Promise.all(distribuicaoInserts as Promise<unknown>[]);
+          if (itemsDistribuicao.length > 0) {
+            const { error: distErr } = await supabase
+              .from('distribuicao_pedidos')
+              .insert(itemsDistribuicao);
+            if (distErr) throw distErr;
+          }
         }
+
+        ordensGeradas++;
       }
 
       toast({
         title: 'Sucesso!',
-        description: `${produtosParaProduzir.length} Ordens de Produção geradas.`,
+        description: `${ordensGeradas} ordens enviadas para a fábrica.`,
         variant: 'success',
       });
 
-      // Limpar tela ou redirecionar
+      // Limpa a tela
       setPlano({});
-    } catch (error) {
-      console.error(error);
-      toast({ title: 'Erro', description: 'Erro ao gerar ordens.', variant: 'error' });
+    } catch (err) {
+      console.error(err);
+      toast({ title: 'Erro', description: 'Falha ao gerar ordens.', variant: 'error' });
     } finally {
       setSalvando(false);
     }
   };
 
-  if (loading) return <Loading />;
+  // --- RENDERIZAÇÃO ---
+
+  if (authLoading || (loading && !profile)) return <Loading />;
+
+  // Estado Vazio: Sem Produtos
+  if (produtos.length === 0) {
+    return (
+      <div className="p-6">
+        <PageHeader
+          title="Planejamento de Produção"
+          description="Distribua a produção entre os PDVs."
+          icon={Truck}
+        />
+        <div className="flex flex-col items-center justify-center h-96 bg-white rounded-xl border border-dashed border-slate-300">
+          <Package className="h-12 w-12 text-slate-300 mb-4" />
+          <h3 className="text-lg font-bold text-slate-700">Nenhum Produto Encontrado</h3>
+          <p className="text-slate-500 mb-6 text-sm">
+            Cadastre produtos e fichas técnicas para começar.
+          </p>
+          <Link href="/dashboard/producao/produtos">
+            <Button icon={Plus}>Cadastrar Produtos</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Estado Vazio: Sem Lojas
+  if (locais.length === 0) {
+    return (
+      <div className="p-6">
+        <PageHeader
+          title="Planejamento de Produção"
+          description="Distribua a produção entre os PDVs."
+          icon={Truck}
+        />
+        <div className="flex flex-col items-center justify-center h-96 bg-white rounded-xl border border-dashed border-slate-300">
+          <Store className="h-12 w-12 text-slate-300 mb-4" />
+          <h3 className="text-lg font-bold text-slate-700">Nenhum PDV Configurado</h3>
+          <p className="text-slate-500 mb-6 text-sm">
+            Cadastre suas lojas para distribuir a produção.
+          </p>
+          <Link href="/dashboard/configuracoes/lojas">
+            <Button icon={Plus}>Cadastrar Lojas</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-6 animate-fade-up">
       <PageHeader
         title="Planejamento Diário de Produção"
-        description="Distribua a produção entre os PDVs e gere as ordens para a cozinha."
+        description="Defina quanto será produzido e para onde vai."
         icon={Truck}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 bg-white p-1 rounded-lg border shadow-sm">
+          <Calendar size={16} className="text-slate-400 ml-2" />
           <input
             type="date"
             value={dataProducao}
             onChange={(e) => setDataProducao(e.target.value)}
-            className="rounded-md border p-2 text-sm"
+            className="text-sm font-medium text-slate-700 outline-none py-1 bg-transparent"
           />
-          <Button onClick={handleSalvarPlanejamento} disabled={salvando} loading={salvando}>
-            <Save className="mr-2 h-4 w-4" />
-            Gerar Ordens de Produção
-          </Button>
         </div>
+        <Button onClick={handleSalvar} disabled={salvando} loading={salvando} icon={Save}>
+          Gerar Ordens
+        </Button>
       </PageHeader>
 
-      <div className="overflow-x-auto rounded-lg border bg-white shadow">
-        <table className="w-full min-w-[800px] divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 sticky left-0 bg-gray-50 z-10">
-                Produto
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium uppercase text-gray-500">
-                Dados Técnicos
-              </th>
-              {/* Colunas Dinâmicas dos PDVs */}
-              {locais.map((local) => (
-                <th
-                  key={local.id}
-                  className="px-4 py-3 text-center text-xs font-medium uppercase text-blue-600 bg-blue-50"
-                >
-                  {local.nome}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-6 py-4 font-bold text-slate-700 uppercase text-xs sticky left-0 bg-slate-50 z-10 w-64">
+                  Produto
                 </th>
-              ))}
-              <th className="px-4 py-3 text-center text-xs font-bold uppercase text-gray-700 bg-yellow-50 border-l">
-                Total Produção
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-bold uppercase text-green-700 bg-green-50">
-                Ação Cozinha
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 bg-white">
-            {produtos.map((produto) => {
-              const calculo = calcularProducao(produto);
-              const temErroCadastro = !produto.peso_unitario || !produto.ficha_tecnica;
+                <th className="px-4 py-4 font-bold text-slate-500 uppercase text-xs text-center w-32">
+                  Técnica
+                </th>
 
-              return (
-                <tr key={produto.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r">
-                    {produto.nome}
-                    {temErroCadastro && (
-                      <div className="flex items-center text-xs text-red-500 mt-1">
-                        <AlertTriangle size={12} className="mr-1" />
-                        Cadastro incompleto
-                      </div>
-                    )}
-                  </td>
+                {locais.map((local) => (
+                  <th
+                    key={local.id}
+                    className="px-2 py-4 font-bold text-blue-600 uppercase text-xs text-center min-w-[100px] bg-blue-50/30"
+                  >
+                    {local.nome}
+                  </th>
+                ))}
 
-                  <td className="px-4 py-3 text-center text-xs text-gray-500">
-                    <div>Peso: {produto.peso_unitario ? `${produto.peso_unitario}g` : '-'}</div>
-                    <div>
-                      Rend:{' '}
-                      {produto.ficha_tecnica?.rendimento_total_g
-                        ? `${produto.ficha_tecnica.rendimento_total_g}g`
-                        : '-'}
-                    </div>
-                  </td>
+                <th className="px-4 py-4 font-bold text-slate-700 uppercase text-xs text-center bg-yellow-50 border-l border-yellow-100">
+                  Total
+                </th>
+                <th className="px-4 py-4 font-bold text-green-700 uppercase text-xs text-center bg-green-50">
+                  Cozinha
+                </th>
+              </tr>
+            </thead>
 
-                  {/* Inputs dos PDVs */}
-                  {locais.map((local) => (
-                    <td key={local.id} className="px-2 py-2 text-center bg-blue-50/30">
-                      <input
-                        type="number"
-                        min="0"
-                        className="w-20 rounded border border-blue-200 p-1 text-center focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                        placeholder="0"
-                        value={plano[produto.id]?.[local.id] || ''}
-                        onChange={(e) => handleQtdChange(produto.id, local.id, e.target.value)}
-                        disabled={temErroCadastro}
-                      />
+            <tbody className="divide-y divide-slate-100">
+              {produtos.map((produto) => {
+                const calculo = calcularLinha(produto);
+                const erroConfig = !produto.tem_config_completa;
+
+                return (
+                  <tr key={produto.id} className="hover:bg-slate-50 transition-colors group">
+                    {/* Coluna Nome Produto */}
+                    <td className="px-6 py-4 font-medium text-slate-800 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-transparent group-hover:border-slate-200">
+                      {produto.nome}
+                      {erroConfig && (
+                        <span className="flex items-center gap-1 text-[10px] text-red-500 mt-1">
+                          <AlertTriangle size={10} /> Dados incompletos
+                        </span>
+                      )}
                     </td>
-                  ))}
 
-                  {/* Coluna de Resultado Total */}
-                  <td className="px-4 py-3 text-center font-bold text-gray-900 bg-yellow-50/50 border-l">
-                    {calculo?.totalUnidades || 0} un
-                  </td>
-
-                  {/* Coluna da "Mágica" (Instrução para Cozinha) */}
-                  <td className="px-4 py-3 text-center bg-green-50/50">
-                    {calculo && !calculo.erro ? (
-                      <div className="flex flex-col items-center justify-center">
-                        <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-                          <ChefHat size={14} className="mr-1" />
-                          {calculo.qtdBatidas} Panelas
-                        </span>
-                        <span className="text-[10px] text-gray-500 mt-1">
-                          ({Number(calculo.massaTotalKg ?? 0).toFixed(2)} kg massa)
-                        </span>
+                    {/* Coluna Dados Técnicos */}
+                    <td className="px-4 py-4 text-center text-xs text-slate-400">
+                      <div>{produto.peso_unitario > 0 ? `${produto.peso_unitario}g/un` : '--'}</div>
+                      <div>
+                        {produto.rendimento_total_g > 0
+                          ? `${produto.rendimento_total_g}g/rec`
+                          : '--'}
                       </div>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+
+                    {/* Colunas dos PDVs (Inputs) */}
+                    {locais.map((local) => (
+                      <td key={local.id} className="px-2 py-2 text-center bg-blue-50/10 relative">
+                        <div className="relative group/input">
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            disabled={erroConfig}
+                            value={plano[produto.id]?.[local.id] || ''}
+                            onChange={(e) => handleQtdChange(produto.id, local.id, e.target.value)}
+                            className="w-20 text-center p-2 rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all disabled:bg-slate-100 disabled:cursor-not-allowed"
+                          />
+                          {/* Botão Mágico (Sugestão) */}
+                          {!erroConfig && (
+                            <button
+                              onClick={() => preencherSugestao(produto.id, local.id)}
+                              className="absolute -top-3 -right-2 bg-white border border-purple-100 text-purple-400 shadow-sm rounded-full p-1 opacity-0 group-hover/input:opacity-100 transition-all hover:scale-110 hover:text-purple-600 hover:border-purple-300 z-20"
+                              title="Sugerir quantidade baseada no histórico"
+                            >
+                              <Sparkles size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    ))}
+
+                    {/* Total Calculado */}
+                    <td className="px-4 py-4 text-center font-bold text-slate-700 bg-yellow-50/30 border-l border-yellow-100">
+                      {calculo && !calculo.erro ? calculo.totalUnidades : '-'}
+                    </td>
+
+                    {/* Resultado Cozinha (Panelas) */}
+                    <td className="px-4 py-4 text-center bg-green-50/30">
+                      {calculo && !calculo.erro ? (
+                        <div className="flex flex-col items-center">
+                          <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-bold">
+                            <ChefHat size={12} /> {calculo.qtdPanelas} Panelas
+                          </span>
+                          <span className="text-[10px] text-slate-400 mt-1">
+                            {(calculo.massaTotalKg ?? 0).toFixed(1)}kg massa
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

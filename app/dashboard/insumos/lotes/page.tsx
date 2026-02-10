@@ -51,7 +51,7 @@ interface ItemEntrada {
 }
 
 export default function ControleEstoquePage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const canManageMovimentacoes =
     !!profile && (profile.role === 'admin' || profile.role === 'master');
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([]);
@@ -111,6 +111,10 @@ export default function ControleEstoquePage() {
   };
 
   const fetchDados = useCallback(async () => {
+    if (!profile?.id) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
 
@@ -164,11 +168,18 @@ export default function ControleEstoquePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile?.id]);
 
   useEffect(() => {
+    if (authLoading) return;
+
+    if (!profile?.id) {
+      setLoading(false);
+      return;
+    }
+
     void fetchDados();
-  }, [fetchDados]);
+  }, [fetchDados, profile?.id, authLoading]);
 
   // --- LÓGICA DO CARRINHO DE ENTRADA ---
   const handleAddItem = () => {

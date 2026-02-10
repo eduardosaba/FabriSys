@@ -13,12 +13,16 @@ export default function EditarProdutoPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [produto, setProduto] = useState<ProdutoFinal | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadProduto = async () => {
+      if (!profile?.id) {
+        setLoading(false);
+        return;
+      }
       console.log('=== DEBUG LOAD PRODUTO ===');
       console.log('ID do produto:', params.id);
 
@@ -57,8 +61,15 @@ export default function EditarProdutoPage() {
       }
     };
 
+    if (authLoading) return;
+
+    if (!profile?.id) {
+      setLoading(false);
+      return;
+    }
+
     void loadProduto();
-  }, [params.id, router, toast]);
+  }, [authLoading, params.id, router, toast, profile?.id]);
 
   // Debug: mostrar role do usuário
   useEffect(() => {

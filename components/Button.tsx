@@ -9,6 +9,8 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'sm' | 'md' | 'lg';
   /** Indica se o usuário é master admin (para aplicar cores customizadas) */
   isMaster?: boolean;
+  /** Icone exibido à esquerda do conteúdo */
+  icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
 }
 
 function BaseButton({
@@ -20,6 +22,7 @@ function BaseButton({
   className,
   disabled,
   isMaster = false,
+  icon,
   ...rest
 }: ButtonProps) {
   // Para master admin, obter cores específicas de botão quando disponíveis
@@ -129,7 +132,13 @@ function BaseButton({
           <span>Carregando...</span>
         </>
       ) : (
-        (label ?? children)
+        <>
+          {icon
+            ? // Renderiza componente de ícone passado via prop
+              React.createElement(icon, { className: 'h-4 w-4' })
+            : null}
+          {label ?? children}
+        </>
       )}
     </button>
   );

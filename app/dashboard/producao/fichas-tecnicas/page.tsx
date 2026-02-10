@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
+import { toast } from 'react-hot-toast';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useConfirm } from '@/hooks/useConfirm';
 import { Plus, Eye, Edit, Loader2, FileText } from 'lucide-react';
 import TableControls from '@/components/ui/TableControls';
 import EmptyState from '@/components/ui/EmptyState';
@@ -27,6 +30,7 @@ function normalizeFichaNome(ficha: FichaTecnica) {
 }
 
 export default function FichasTecnicasPage() {
+  const confirmDialog = useConfirm();
   const router = useRouter();
   const [fichas, setFichas] = useState<FichaTecnica[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,8 +84,30 @@ export default function FichasTecnicasPage() {
       setFichas(fichasFormatadas);
     } catch (err) {
       console.error('Erro ao carregar fichas técnicas:', JSON.stringify(err, null, 2));
+      toast.error('Erro ao carregar fichas técnicas');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDeleteFicha(slug: string, produtoNome: string) {
+    const confirmed = await confirmDialog.confirm({
+      title: 'Excluir Ficha Técnica',
+      message: `Tem certeza que deseja excluir a ficha técnica de "${produtoNome}"? Esta ação não pode ser desfeita.`,
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await supabase.from('fichas_tecnicas').delete().eq('slug', slug);
+      toast.success('Ficha técnica excluída!');
+      void loadFichasTecnicas();
+    } catch (err) {
+      console.error('Erro ao excluir ficha:', err);
+      toast.error('Erro ao excluir ficha técnica');
     }
   }
 
@@ -224,17 +250,12 @@ export default function FichasTecnicasPage() {
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={async () => {
-                            if (
-                              window.confirm('Tem certeza que deseja excluir esta ficha técnica?')
-                            ) {
-                              await supabase
-                                .from('fichas_tecnicas')
-                                .delete()
-                                .eq('slug', ficha.slug);
-                              window.location.reload();
-                            }
-                          }}
+                          onClick={() =>
+                            void handleDeleteFicha(
+                              ficha.slug,
+                              ficha.produto_final?.nome || 'produto'
+                            )
+                          }
                           className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
                           aria-label={`Excluir ficha técnica de ${ficha.produto_final?.nome || 'produto'}`}
                           title="Excluir"
@@ -263,6 +284,17 @@ export default function FichasTecnicasPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={confirmDialog.handleCancel}
+        onConfirm={confirmDialog.handleConfirm}
+        title={confirmDialog.options.title}
+        message={confirmDialog.options.message}
+        confirmText={confirmDialog.options.confirmText}
+        cancelText={confirmDialog.options.cancelText}
+        variant={confirmDialog.options.variant}
+      />
     </div>
   );
 }

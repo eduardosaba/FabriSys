@@ -60,6 +60,9 @@ export default function CustomizacaoTab() {
 
   // Inicializar configurações com valores atuais do tema
   useEffect(() => {
+    if (authLoading) return;
+    if (!profile?.id) return;
+
     const themeMode = theme.theme_mode;
     const themeColors = theme.colors;
     if (themeColors && typeof themeColors === 'object' && themeMode in themeColors) {
@@ -90,7 +93,7 @@ export default function CustomizacaoTab() {
         setSettings(initialSettings);
       }
     }
-  }, [theme, availableFields]);
+  }, [authLoading, profile?.id, theme, availableFields]);
 
   // Handler para mudanças nos campos
   const handleFieldChange = (key: string, value: string | number) => {
@@ -331,8 +334,24 @@ export default function CustomizacaoTab() {
     let colorsForDark: Record<string, string> = {};
 
     if (appliedPreset) {
-      colorsForLight = { ...(appliedPreset.colors?.light || {}) };
-      colorsForDark = { ...(appliedPreset.colors?.dark || {}) };
+      // Garantir que todos os valores sejam strings para o formato de preset
+      const light = appliedPreset.colors?.light || {};
+      const dark = appliedPreset.colors?.dark || {};
+      colorsForLight = Object.entries(light).reduce(
+        (acc, [k, v]) => {
+          acc[k] = v === undefined || v === null ? '' : String(v);
+          return acc;
+        },
+        {} as Record<string, string>
+      );
+
+      colorsForDark = Object.entries(dark).reduce(
+        (acc, [k, v]) => {
+          acc[k] = v === undefined || v === null ? '' : String(v);
+          return acc;
+        },
+        {} as Record<string, string>
+      );
     } else {
       // Extrair do tema atual e do settings
       const themeColors = theme.colors || {};
@@ -501,6 +520,7 @@ export default function CustomizacaoTab() {
 
   // Carregar predefinições do usuário (do campo colors_json)
   const loadUserPresets = useCallback(async () => {
+    if (authLoading) return;
     if (!profile?.id) return;
     try {
       const resp = await supabase
@@ -593,7 +613,7 @@ export default function CustomizacaoTab() {
     } catch (err: unknown) {
       console.error('Erro ao carregar predefinições do usuário:', err);
     }
-  }, [profile?.id]);
+  }, [authLoading, profile?.id]);
 
   // Carregar ao montar / quando o perfil mudar
   useEffect(() => {

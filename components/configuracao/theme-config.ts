@@ -1,4 +1,5 @@
 // Configurações e constantes para customização de temas
+import { ThemeColors } from '@/lib/types';
 export interface ThemeField {
   key: string;
   label: string;
@@ -10,8 +11,8 @@ export interface ThemePreset {
   name: string;
   description: string;
   colors: {
-    light: Record<string, string>;
-    dark: Record<string, string>;
+    light: Partial<ThemeColors>;
+    dark: Partial<ThemeColors>;
   };
   sidebar_bg?: string;
   sidebar_hover_bg?: string;

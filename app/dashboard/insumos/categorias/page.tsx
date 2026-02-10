@@ -6,9 +6,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Tag, Plus, Search, Edit, Trash2, Loader2, FolderOpen, CheckCircle } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useConfirm } from '@/hooks/useConfirm';
 
 // --- IMPORTS ---
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth';
 import { Button, Modal } from '@/components/ui/shared';
 import PageHeader from '@/components/ui/PageHeader';
 
@@ -27,6 +30,8 @@ interface Categoria {
 }
 
 export default function CategoriasPage() {
+  const confirmDialog = useConfirm();
+  const { profile, loading: authLoading } = useAuth();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -45,13 +50,17 @@ export default function CategoriasPage() {
 
   // --- BUSCAR DADOS ---
   useEffect(() => {
+    if (authLoading) return;
     void fetchCategorias();
-  }, []);
+  }, [authLoading]);
 
   async function fetchCategorias() {
     try {
       setLoading(true);
-      const { data, error } = await supabase.from('categorias').select('*').order('nome');
+      // NOTE: prefer explicit organization filtering when available via profile
+      let query = supabase.from('categorias').select('*').order('nome');
+      if (profile?.organization_id) query = query.eq('organization_id', profile.organization_id);
+      const { data, error } = await query;
 
       if (error) throw error;
       setCategorias(data || []);
@@ -85,6 +94,7 @@ export default function CategoriasPage() {
   async function handleSave(values: CategoriaFormData) {
     try {
       let error;
+      // attach organization when inserting, if available (profile from hook above)
 
       if (editingCategoria) {
         // Update
@@ -95,9 +105,10 @@ export default function CategoriasPage() {
         error = updateError;
       } else {
         // Insert
-        const { error: insertError } = await supabase
-          .from('categorias')
-          .insert([{ nome: values.nome }]);
+        const payload: Record<string, unknown> = { nome: values.nome };
+        if (profile?.organization_id) payload.organization_id = profile.organization_id;
+        if (profile?.id) payload.created_by = profile.id;
+        const { error: insertError } = await supabase.from('categorias').insert([payload]);
         error = insertError;
       }
 
@@ -114,7 +125,15 @@ export default function CategoriasPage() {
 
   // --- EXCLUIR ---
   async function handleDelete(categoria: Categoria) {
-    if (!confirm(`Tem certeza que deseja excluir "${categoria.nome}"?`)) return;
+    const confirmed = await confirmDialog.confirm({
+      title: 'Excluir Categoria',
+      message: `Tem certeza que deseja excluir "${categoria.nome}"? Esta ação não pode ser desfeita.`,
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+
+    if (!confirmed) return;
 
     try {
       // 1. Verificar dependências
@@ -280,6 +299,17 @@ export default function CategoriasPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={confirmDialog.handleCancel}
+        onConfirm={confirmDialog.handleConfirm}
+        title={confirmDialog.options.title}
+        message={confirmDialog.options.message}
+        confirmText={confirmDialog.options.confirmText}
+        cancelText={confirmDialog.options.cancelText}
+        variant={confirmDialog.options.variant}
+      />
     </div>
   );
 }

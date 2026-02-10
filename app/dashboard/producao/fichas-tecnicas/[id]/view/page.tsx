@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useToast } from '@/hooks/useToast';
 import { supabase } from '@/lib/supabase';
 
 interface FichaRaw {
@@ -18,6 +19,7 @@ export default function ViewFichaTecnicaPage() {
   const id = params?.id as string;
   const [loading, setLoading] = useState(true);
   const [ficha, setFicha] = useState<FichaRaw | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     async function fetchFicha() {
@@ -26,7 +28,7 @@ export default function ViewFichaTecnicaPage() {
       const data = resp.data as unknown;
       const error = resp.error as unknown;
       if (error) {
-        alert('Erro ao carregar ficha técnica');
+        toast({ title: 'Erro ao carregar ficha técnica', variant: 'error' });
         router.push('/dashboard/producao/fichas-tecnicas');
         return;
       }

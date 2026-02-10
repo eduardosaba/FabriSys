@@ -54,7 +54,7 @@ export default function Header({ onMenuClick }: Props) {
                     maxHeight: '160px',
                   }}
                   onError={(e) => {
-                    const systemName = theme?.name || 'Sys Lari';
+                    const systemName = theme?.name || 'Confectio v. 1.0.0';
                     const initials = systemName
                       .split(' ')
                       .map((word) => word[0])
@@ -97,7 +97,7 @@ export default function Header({ onMenuClick }: Props) {
               theme.logo_url.trim() === '' ||
               theme.logo_url === '/logo.png') && (
               <Text variant="h4" weight="medium">
-                {theme?.name || 'Sys Lari'}
+                {theme?.name || 'Confectio v. 1.0.0'}
               </Text>
             )}
           </div>

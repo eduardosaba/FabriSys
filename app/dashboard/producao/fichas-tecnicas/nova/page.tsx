@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { FichaTecnicaEditor } from '@/components/producao/FichaTecnicaEditor';
 import type { InsumoFicha } from '@/lib/types/ficha-tecnica';
 import { supabase } from '@/lib/supabase';
+import { useToast } from '@/hooks/useToast';
 import { ArrowLeft, Package, FileText, Info } from 'lucide-react';
 
 function getErrorMessage(err: unknown) {
@@ -20,6 +22,8 @@ function getErrorMessage(err: unknown) {
 
 export default function NovaFichaTecnicaPage() {
   const router = useRouter();
+  const { profile } = useAuth();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [produtos, setProdutos] = useState<
     Array<{ id: string; nome: string; preco_venda: number }>
@@ -61,7 +65,11 @@ export default function NovaFichaTecnicaPage() {
         setProdutos(produtosSemFicha);
       } catch (error: unknown) {
         console.error('Erro ao carregar produtos:', getErrorMessage(error));
-        alert('Erro ao carregar produtos disponíveis');
+        toast({
+          title: 'Erro ao carregar produtos disponíveis',
+          description: getErrorMessage(error),
+          variant: 'error',
+        });
       } finally {
         setLoading(false);
       }
@@ -72,7 +80,7 @@ export default function NovaFichaTecnicaPage() {
 
   const handleSave = async (insumos: InsumoFicha[], precoVenda: number, rendimento: number) => {
     if (!produtoSelecionado) {
-      alert('Selecione um produto para criar a ficha técnica');
+      toast({ title: 'Selecione um produto para criar a ficha técnica', variant: 'warning' });
       return;
     }
 
@@ -161,6 +169,9 @@ export default function NovaFichaTecnicaPage() {
             preco_venda: precoVenda,
             rendimento,
             slug_base: slugFichaTecnica,
+            // garantir que o server grave auditoria/tenant para RLS
+            created_by: profile?.id || null,
+            organization_id: profile?.organization_id || null,
           }),
         });
 
@@ -189,13 +200,17 @@ export default function NovaFichaTecnicaPage() {
         throw updateError;
       }
 
-      alert('Ficha técnica criada com sucesso!');
+      toast({ title: 'Ficha técnica criada com sucesso!', variant: 'success' });
       console.log('Antes do router.push');
       router.push('/dashboard/producao/fichas-tecnicas');
       console.log('Depois do router.push');
     } catch (error: unknown) {
       console.error('❌ Erro ao criar ficha técnica:', getErrorMessage(error));
-      alert(`Erro ao criar ficha técnica: ${getErrorMessage(error)}`);
+      toast({
+        title: 'Erro ao criar ficha técnica',
+        description: getErrorMessage(error),
+        variant: 'error',
+      });
     }
   };
 

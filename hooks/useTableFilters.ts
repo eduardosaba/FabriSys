@@ -33,11 +33,6 @@ export function useTableFilters<T>(
   const {
     searchFields = ['nome', 'descricao'],
     statusField = 'ativo',
-    statusOptions = [
-      { value: 'todos', label: 'Todos os status' },
-      { value: 'ativo', label: 'Ativos' },
-      { value: 'inativo', label: 'Inativos' },
-    ],
     itemsPerPage: initialItemsPerPage = 10,
     enablePagination = true,
   } = options;

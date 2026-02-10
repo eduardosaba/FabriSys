@@ -36,7 +36,7 @@ export default function EditFichaTecnicaPage() {
       setLoading(false);
     }
     if (id) void fetchFicha();
-  }, [id, router]);
+  }, [id, router, toast]);
 
   if (loading) {
     return <div className="p-8 text-center">Carregando...</div>;

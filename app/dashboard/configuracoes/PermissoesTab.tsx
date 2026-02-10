@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
-import { Save, Shield, Check, X, Info } from 'lucide-react';
+import { Save, Check, X, Info } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import Loading from '@/components/ui/Loading';
 
@@ -35,7 +35,7 @@ export default function PermissoesTab() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    carregarPermissoes();
+    void carregarPermissoes();
   }, []);
 
   const carregarPermissoes = async () => {
@@ -44,13 +44,14 @@ export default function PermissoesTab() {
         .from('configuracoes_sistema')
         .select('valor')
         .eq('chave', 'permissoes_acesso')
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 
       if (data?.valor) {
         try {
-          setPermissoes(JSON.parse(data.valor));
+          const parsed = JSON.parse(data.valor) as Record<string, string[]>;
+          setPermissoes(parsed);
         } catch {
           setPermissoes({});
         }
@@ -93,6 +94,7 @@ export default function PermissoesTab() {
       if (error) throw error;
       toast.success('Permissões atualizadas com sucesso!');
     } catch (err) {
+      console.error(err);
       toast.error('Erro ao salvar permissões');
     } finally {
       setSaving(false);

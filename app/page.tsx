@@ -14,7 +14,7 @@ import { Eye, EyeOff, Check, AlertCircle, Loader2, X, Mail } from 'lucide-react'
 // --- MOCK SERVICES (Apenas Auth) ---
 const supabaseMock = {
   auth: {
-    signInWithPassword: async ({ email, password }: { email: string; password: string }) => {
+    signInWithPassword: async ({ password }: { email: string; password: string }) => {
       await new Promise((resolve) => setTimeout(resolve, 1200));
       // Senhas de teste
       if (password === 'admin123' || password === 'fabrica123' || password === 'pdv123') {
@@ -22,7 +22,7 @@ const supabaseMock = {
       }
       return { data: null, error: { message: 'Credenciais inválidas.' } };
     },
-    resetPasswordForEmail: async (email?: string) => {
+    resetPasswordForEmail: async (_email?: string) => {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       return { error: null };
     },
@@ -139,7 +139,7 @@ const ForgotPasswordModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
       try {
         const mod = await import('@/lib/supabase');
         supabaseClient = mod.supabase;
-      } catch (err) {
+      } catch {
         supabaseClient = null;
       }
 
@@ -148,7 +148,7 @@ const ForgotPasswordModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
       } else {
         await supabaseMock.auth.resetPasswordForEmail(email);
       }
-    } catch (err) {
+    } catch {
       // ignorar — mantemos UX simples
     }
     setLoading(false);
@@ -229,7 +229,7 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
         // import dinamicamente para evitar erro de import se as vars não existirem
         const mod = await import('@/lib/supabase');
         supabaseClient = mod.supabase;
-      } catch (err) {
+      } catch {
         supabaseClient = null;
       }
 

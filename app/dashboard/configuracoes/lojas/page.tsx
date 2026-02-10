@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import PageHeader from '@/components/ui/PageHeader';
 import Button from '@/components/Button';
-import { Store, Plus, Trash2, Edit } from 'lucide-react';
+import { Store, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -32,7 +32,7 @@ export default function LojasPage() {
   };
 
   useEffect(() => {
-    carregar();
+    void carregar();
   }, []);
 
   const handleSave = async () => {
@@ -55,7 +55,7 @@ export default function LojasPage() {
       toast.success('Loja cadastrada!');
       setIsModalOpen(false);
       setFormData({ nome: '', tipo: 'pdv' });
-      carregar();
+      void carregar();
     }
   };
 
@@ -73,7 +73,7 @@ export default function LojasPage() {
     if (error) toast.error('Erro ao excluir (pode haver vendas vinculadas)');
     else {
       toast.success('Loja excluída');
-      carregar();
+      void carregar();
     }
   };
 

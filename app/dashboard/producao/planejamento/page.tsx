@@ -95,6 +95,16 @@ export default function PlanejamentoPage() {
         const ficha = Array.isArray(p.ficha_tecnica) ? p.ficha_tecnica[0] : p.ficha_tecnica;
         const rendimento = ficha?.rendimento_total_g || 0;
         const peso = p.peso_unitario || 0;
+        const temConfig = peso > 0 && rendimento > 0;
+
+        // Log de debug para produtos com configuração incompleta (apenas uma vez)
+        if (!temConfig) {
+          console.warn(`⚠️ Produto "${p.nome}" com dados incompletos:`, {
+            peso_unitario: peso || 'não configurado',
+            rendimento_ficha: rendimento || 'não configurado',
+            tem_ficha_tecnica: !!ficha,
+          });
+        }
 
         return {
           id: p.id,
@@ -102,7 +112,7 @@ export default function PlanejamentoPage() {
           peso_unitario: peso,
           rendimento_total_g: rendimento,
           // Só podemos calcular se tivermos peso e rendimento > 0
-          tem_config_completa: peso > 0 && rendimento > 0,
+          tem_config_completa: temConfig,
         };
       });
 
@@ -118,7 +128,7 @@ export default function PlanejamentoPage() {
     } finally {
       setLoading(false);
     }
-  }, [profile, toast]);
+  }, [profile?.id, toast]);
 
   // Dispara carregamento apenas quando a autenticação estiver resolvida
   useEffect(() => {
@@ -132,7 +142,7 @@ export default function PlanejamentoPage() {
     }
 
     void carregarDados();
-  }, [authLoading, profile?.id, carregarDados]);
+  }, [authLoading, carregarDados, profile?.id]);
 
   // --- LÓGICA DE INTERAÇÃO ---
 
@@ -407,11 +417,26 @@ export default function PlanejamentoPage() {
                   <tr key={produto.id} className="hover:bg-slate-50 transition-colors group">
                     {/* Coluna Nome Produto */}
                     <td className="px-6 py-4 font-medium text-slate-800 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-transparent group-hover:border-slate-200">
-                      {produto.nome}
+                      <div>{produto.nome}</div>
                       {erroConfig && (
-                        <span className="flex items-center gap-1 text-[10px] text-red-500 mt-1">
-                          <AlertTriangle size={10} /> Dados incompletos
-                        </span>
+                        <div className="mt-1 space-y-0.5">
+                          {produto.peso_unitario <= 0 && (
+                            <span className="flex items-center gap-1 text-[10px] text-amber-600">
+                              <AlertTriangle size={10} /> Falta peso unitário
+                            </span>
+                          )}
+                          {produto.rendimento_total_g <= 0 && (
+                            <span className="flex items-center gap-1 text-[10px] text-red-600">
+                              <AlertTriangle size={10} /> Falta ficha técnica
+                            </span>
+                          )}
+                          <Link
+                            href={`/dashboard/producao/produtos/${produto.id}`}
+                            className="text-[10px] text-blue-500 hover:text-blue-700 underline inline-flex items-center gap-1"
+                          >
+                            Configurar →
+                          </Link>
+                        </div>
                       )}
                     </td>
 

@@ -24,7 +24,7 @@ import { useConfirm } from '@/hooks/useConfirm';
 
 // --- IMPORTS (Ajuste conforme sua estrutura de pastas real) ---
 import { supabase } from '@/lib/supabase';
-import { Button, Modal, InputField } from '@/components/ui/shared';
+import { Button, Modal } from '@/components/ui/shared';
 import PageHeader from '@/components/ui/PageHeader';
 import { maskCpfCnpj, onlyDigits, formatCpfCnpj } from '@/lib/utils';
 

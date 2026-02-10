@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   Calculator,
   Package,
-  CreditCard,
   Banknote,
   QrCode,
 } from 'lucide-react';
@@ -36,6 +35,7 @@ interface ProdutoContagem {
   preco_venda: number;
   estoque_sistema: number;
   estoque_contado: number | '';
+  imagem_url?: string;
 }
 
 export default function ControleCaixaPage() {
@@ -55,33 +55,34 @@ export default function ControleCaixaPage() {
     pix: '',
     cartao: '',
   });
-  const [observacao, setObservacao] = useState('');
+  const [observacao, _setObservacao] = useState('');
 
   // Inputs de Fechamento (Estoque)
   const [produtosParaContar, setProdutosParaContar] = useState<ProdutoContagem[]>([]);
 
   // Promoções (Apenas modo Inventário)
-  const [promosAplicadas, setPromosAplicadas] = useState<any[]>([]);
+  const [_promosAplicadas, setPromosAplicadas] = useState<any[]>([]);
   const [valorTotalDescontos, setValorTotalDescontos] = useState(0);
 
-  useEffect(() => {
-    async function carregarEstado() {
-      if (!profile?.id) {
-        // autenticação finalizada sem profile — não travar o loading
-        setLoading(false);
-        return;
-      }
-      try {
-        // 1. Carregar Configuração do Modo PDV
-        const { data: config } = await supabase
-          .from('configuracoes_sistema')
-          .select('valor')
-          .eq('chave', 'modo_pdv')
-          .single();
+  const carregarEstado = useCallback(async () => {
+    if (!profile?.id) {
+      // autenticação finalizada sem profile — não travar o loading
+      setLoading(false);
+      return;
+    }
+    try {
+      // 1. Carregar Configuração do Modo PDV
+      const { data: config } = await supabase
+        .from('configuracoes_sistema')
+        .select('valor')
+        .eq('chave', 'modo_pdv')
+        .single();
 
-        if (config) setModoPdv(config.valor as 'padrao' | 'inventario');
+      if (config) setModoPdv(config.valor as 'padrao' | 'inventario');
 
-        // 2. Identificar Loja
+      // 2. Identificar Loja — preferir profile.local_id
+      let meuLocalId = profile?.local_id ?? null;
+      if (!meuLocalId) {
         const { data: locais } = await supabase
           .from('locais')
           .select('id')
@@ -93,52 +94,59 @@ export default function ControleCaixaPage() {
           toast.error('Loja não configurada.');
           return;
         }
-        setLocalId(meuLocal.id);
-
-        // 3. Buscar Caixa
-        const { data: caixa } = await supabase
-          .from('caixa_sessao')
-          .select('*')
-          .eq('local_id', meuLocal.id)
-          .eq('status', 'aberto')
-          .maybeSingle();
-
-        if (caixa) {
-          // Carregar produtos
-          const { data: prods } = await supabase
-            .from('produtos_finais')
-            .select(`id, nome, preco_venda, estoque:estoque_produtos(quantidade, local_id)`)
-            .eq('ativo', true);
-
-          const listaContagem = (prods || []).map((p: any) => {
-            const est = p.estoque?.find((e: any) => e.local_id === meuLocal.id);
-            return {
-              id: p.id,
-              nome: p.nome,
-              preco_venda: p.preco_venda,
-              estoque_sistema: est ? est.quantidade : 0,
-              estoque_contado: '' as unknown as number | '',
-            };
-          });
-          setProdutosParaContar(listaContagem);
-
-          // Calcular vendas já registradas (importante para o modo Padrão)
-          const { data: vendas } = await supabase
-            .from('vendas')
-            .select('total_venda')
-            .eq('caixa_id', caixa.id);
-
-          const totalVendido = vendas?.reduce((acc, v) => acc + v.total_venda, 0) || 0;
-          setCaixaAberto({ ...caixa, total_vendas_sistema: totalVendido });
-        } else {
-          setCaixaAberto(null);
-        }
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
+        meuLocalId = meuLocal.id;
       }
+      setLocalId(meuLocalId);
+
+      // 3. Buscar Caixa
+      const { data: caixa } = await supabase
+        .from('caixa_sessao')
+        .select('*')
+        .eq('local_id', meuLocalId)
+        .eq('status', 'aberto')
+        .maybeSingle();
+
+      if (caixa) {
+        // Carregar produtos
+        const { data: prods } = await supabase
+          .from('produtos_finais')
+          .select(
+            `id, nome, preco_venda, imagem_url, estoque:estoque_produtos(quantidade, local_id)`
+          )
+          .eq('ativo', true);
+
+        const listaContagem = (prods || []).map((p: any) => {
+          const est = p.estoque?.find((e: any) => e.local_id === meuLocalId);
+          return {
+            id: p.id,
+            nome: p.nome,
+            preco_venda: p.preco_venda,
+            estoque_sistema: est ? est.quantidade : 0,
+            estoque_contado: '' as unknown as number | '',
+            imagem_url: p.imagem_url,
+          };
+        });
+        setProdutosParaContar(listaContagem);
+
+        // Calcular vendas já registradas (importante para o modo Padrão)
+        const { data: vendas } = await supabase
+          .from('vendas')
+          .select('total_venda')
+          .eq('caixa_id', caixa.id);
+
+        const totalVendido = vendas?.reduce((acc, v) => acc + v.total_venda, 0) || 0;
+        setCaixaAberto({ ...caixa, total_vendas_sistema: totalVendido });
+      } else {
+        setCaixaAberto(null);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
+  }, [profile?.id, profile?.local_id]);
+
+  useEffect(() => {
     if (authLoading) return;
 
     if (!profile?.id) {
@@ -147,23 +155,45 @@ export default function ControleCaixaPage() {
     }
 
     void carregarEstado();
-  }, [authLoading, profile?.id]);
+  }, [authLoading, profile?.id, carregarEstado]);
+
+  // Mascara simples para moeda BRL (mostra 1234 -> 12,34)
+  const formatCurrencyInput = (raw: string) => {
+    if (!raw) return '';
+    const digits = String(raw).replace(/\D/g, '');
+    if (digits.length === 0) return '';
+    const number = parseInt(digits, 10);
+    const value = number / 100;
+    return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
   const abrirCaixa = async () => {
+    // Validações iniciais
     if (!valorAbertura) return toast.error('Informe o fundo de troco');
+    if (!localId) return toast.error('Erro: Loja não identificada. Recarregue a página.');
+
     try {
       setLoading(true);
+
+      const numericValor =
+        parseFloat(String(valorAbertura).replace(/\./g, '').replace(',', '.')) || 0;
+
       const { error } = await supabase.from('caixa_sessao').insert({
         local_id: localId,
         usuario_abertura: profile?.id,
-        saldo_inicial: parseFloat(valorAbertura),
+        saldo_inicial: numericValor,
         status: 'aberto',
       });
+
       if (error) throw error;
+
       toast.success('Caixa Aberto!');
-      window.location.reload();
+      // Recarrega o estado; carregarEstado já seta loading=false no finally
+      await carregarEstado();
     } catch (err) {
-      toast.error('Erro ao abrir caixa');
+      console.error(err);
+      toast.error('Erro ao abrir caixa. Verifique suas permissões.');
+      setLoading(false); // CORREÇÃO: destrava o botão em caso de erro
     }
   };
 
@@ -263,7 +293,7 @@ export default function ControleCaixaPage() {
 
           // Baixar Estoque Real
           for (const item of itensVendidos) {
-            await supabase.rpc('decrementar_estoque_loja', {
+            await supabase.rpc('decrementar_estoque_loja_numeric', {
               p_local_id: localId,
               p_produto_id: item.produto_id,
               p_qtd: item.quantidade,
@@ -325,11 +355,12 @@ export default function ControleCaixaPage() {
               Fundo de Troco (R$)
             </label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               className="w-full p-4 border rounded-xl text-xl font-bold text-center focus:ring-2 focus:ring-green-500 outline-none bg-slate-50"
-              placeholder="0.00"
+              placeholder="0,00"
               value={valorAbertura}
-              onChange={(e) => setValorAbertura(e.target.value)}
+              onChange={(e) => setValorAbertura(formatCurrencyInput(e.target.value))}
             />
           </div>
           <Button
@@ -355,15 +386,30 @@ export default function ControleCaixaPage() {
                       key={prod.id}
                       className="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-100"
                     >
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-slate-700">{prod.nome}</p>
-                        <p className="text-xs text-slate-400">Início: {prod.estoque_sistema} un</p>
+                      <div className="flex items-center gap-3">
+                        {prod.imagem_url ? (
+                          <img
+                            src={prod.imagem_url}
+                            alt={prod.nome}
+                            className="w-12 h-12 object-cover rounded"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 bg-slate-200 rounded flex items-center justify-center text-slate-400">
+                            📦
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm font-bold text-slate-700">{prod.nome}</p>
+                          <p className="text-xs text-slate-400">
+                            Início: {prod.estoque_sistema} un
+                          </p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-500 uppercase font-bold">Sobrou:</span>
                         <input
                           type="number"
-                          className="w-20 p-2 text-center border rounded font-bold focus:border-blue-500 outline-none"
+                          className="w-16 sm:w-20 p-2 text-center border rounded font-bold focus:border-blue-500 outline-none"
                           placeholder="0"
                           value={prod.estoque_contado}
                           onChange={(e) => {

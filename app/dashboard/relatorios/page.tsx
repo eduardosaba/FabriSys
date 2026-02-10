@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
@@ -34,76 +34,74 @@ export default function RelatoriosOverviewPage() {
     produtosProduzidosMes: 0,
   });
 
-  // Data atual para filtros
-  const hoje = new Date();
-  const mesAtualNome = hoje.toLocaleString('pt-BR', { month: 'long' });
+  // Data atual para filtros (memorizado para não invalidar hooks)
+  const hoje = useMemo(() => new Date(), []);
+  const mesAtualNome = useMemo(() => hoje.toLocaleString('pt-BR', { month: 'long' }), [hoje]);
 
-  const carregarIndicadores = useCallback(
-    async () => {
-      try {
-        setLoading(true);
+  const carregarIndicadores = useCallback(async () => {
+    try {
+      setLoading(true);
 
-        // 1. Buscar dados de Insumos (Valor de Estoque e Alertas)
-        const { data: insumos, error: errInsumos } = await supabase
-          .from('insumos')
-          .select('estoque_atual, custo_por_ue, estoque_minimo_alerta');
+      // 1. Buscar dados de Insumos (Valor de Estoque e Alertas)
+      const { data: insumos, error: errInsumos } = await supabase
+        .from('insumos')
+        .select('estoque_atual, custo_por_ue, estoque_minimo_alerta');
 
-        if (errInsumos) throw errInsumos;
+      if (errInsumos) throw errInsumos;
 
-        let valorEstoque = 0;
-        let criticos = 0;
+      let valorEstoque = 0;
+      let criticos = 0;
 
-        const insumosRows = (insumos ?? []) as Array<{
-          estoque_atual?: number;
-          custo_por_ue?: number;
-          estoque_minimo_alerta?: number;
-        }>;
+      const insumosRows = (insumos ?? []) as Array<{
+        estoque_atual?: number;
+        custo_por_ue?: number;
+        estoque_minimo_alerta?: number;
+      }>;
 
-        insumosRows.forEach((item) => {
-          const qtd = item.estoque_atual || 0;
-          const custo = item.custo_por_ue || 0;
-          const min = item.estoque_minimo_alerta || 0;
+      insumosRows.forEach((item) => {
+        const qtd = item.estoque_atual || 0;
+        const custo = item.custo_por_ue || 0;
+        const min = item.estoque_minimo_alerta || 0;
 
-          valorEstoque += qtd * custo;
-          if (qtd <= min) criticos++;
-        });
+        valorEstoque += qtd * custo;
+        if (qtd <= min) criticos++;
+      });
 
-        // 2. Buscar dados de Produção do Mês Atual
-        const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString();
+      // 2. Buscar dados de Produção do Mês Atual
+      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString();
 
-        const { data: ordens, error: errOrdens } = await supabase
-          .from('ordens_producao')
-          .select('quantidade_prevista')
-          .eq('estagio_atual', 'concluido') // Apenas as finalizadas
-          .gte('updated_at', inicioMes); // Deu saída este mês
+      const { data: ordens, error: errOrdens } = await supabase
+        .from('ordens_producao')
+        .select('quantidade_prevista')
+        .eq('estagio_atual', 'concluido') // Apenas as finalizadas
+        .gte('updated_at', inicioMes); // Deu saída este mês
 
-        if (errOrdens) throw errOrdens;
+      if (errOrdens) throw errOrdens;
 
-        const ordensRows = (ordens ?? []) as Array<{ quantidade_prevista?: number }>;
+      const ordensRows = (ordens ?? []) as Array<{ quantidade_prevista?: number }>;
 
-        const totalProduzido = ordensRows.reduce(
-          (acc, curr) => acc + (curr.quantidade_prevista || 0),
-          0
-        );
+      const totalProduzido = ordensRows.reduce(
+        (acc, curr) => acc + (curr.quantidade_prevista || 0),
+        0
+      );
 
-        setStats({
-          totalValorEstoque: valorEstoque,
-          totalItensCadastrados: insumos?.length || 0,
-          itensCriticos: criticos,
-          ordensConcluidasMes: ordens?.length || 0,
-          produtosProduzidosMes: totalProduzido,
-        });
-      } catch (error) {
-        console.error('Erro ao carregar relatórios:', error);
-        toast.error('Não foi possível carregar os indicadores.');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [
-      /* stable: nenhum valor externo mutável além do supabase e toast */
-    ]
-  );
+      setStats({
+        totalValorEstoque: valorEstoque,
+        totalItensCadastrados: insumos?.length || 0,
+        itensCriticos: criticos,
+        ordensConcluidasMes: ordens?.length || 0,
+        produtosProduzidosMes: totalProduzido,
+      });
+    } catch (error) {
+      console.error('Erro ao carregar relatórios:', error);
+      toast.error('Não foi possível carregar os indicadores.');
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    /* stable: nenhum valor externo mutável além do supabase e toast */
+    hoje,
+  ]);
 
   useEffect(() => {
     void carregarIndicadores();

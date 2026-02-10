@@ -53,7 +53,7 @@ export default function CustomizacaoTab() {
   // Predefinições criadas pelo usuário (carregadas do banco)
   const [userPresets, setUserPresets] = useState<ThemePreset[]>([]);
 
-  type UserThemeRow = { id: number; colors_json?: string | null };
+  type _UserThemeRow = { id: number; colors_json?: string | null };
 
   // Determinar quais campos mostrar baseado no tipo de usuário
   const availableFields = isMasterAdmin ? MASTER_FIELDS : ADMIN_FIELDS;

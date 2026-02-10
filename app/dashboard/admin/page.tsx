@@ -95,7 +95,7 @@ export default function AdminMasterPage() {
       toast.success(`Licença de ${editingUser.nome} atualizada!`);
       setIsModalOpen(false);
       void carregarBase();
-    } catch (err) {
+    } catch {
       toast.error('Erro ao atualizar licença.');
     }
   };

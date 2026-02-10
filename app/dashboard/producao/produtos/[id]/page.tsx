@@ -23,8 +23,6 @@ export default function EditarProdutoPage() {
         setLoading(false);
         return;
       }
-      console.log('=== DEBUG LOAD PRODUTO ===');
-      console.log('ID do produto:', params.id);
 
       try {
         const { data, error } = (await supabase
@@ -33,23 +31,16 @@ export default function EditarProdutoPage() {
           .eq('id', params.id)
           .single()) as { data: ProdutoFinal | null; error: Error | null };
 
-        console.log('Resposta do Supabase:', { data: data ? 'encontrado' : null, error });
-
-        if (error) {
-          console.error('Erro ao buscar produto:', error);
-          throw error;
-        }
+        if (error) throw error;
 
         if (!data) {
-          console.log('Produto não encontrado, redirecionando...');
           router.push('/dashboard/producao/produtos');
           return;
         }
 
-        console.log('Produto encontrado:', data);
         setProduto(data);
       } catch (err) {
-        console.error('Erro geral ao carregar produto:', err);
+        console.error('Erro ao carregar produto:', err);
         toast({
           title: 'Erro ao carregar produto',
           description: 'Não foi possível carregar as informações do produto.',
@@ -68,15 +59,9 @@ export default function EditarProdutoPage() {
       return;
     }
 
-    void loadProduto();
-  }, [authLoading, params.id, router, toast, profile?.id]);
-
-  // Debug: mostrar role do usuário
-  useEffect(() => {
-    console.log('=== DEBUG ROLE USUÁRIO ===');
-    console.log('Profile:', profile);
-    console.log('Role:', profile?.role);
-  }, [profile]);
+    loadProduto().catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, params.id, profile?.id]);
 
   if (loading || !produto) return <Loading />;
 

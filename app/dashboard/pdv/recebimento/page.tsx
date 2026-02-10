@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
@@ -11,17 +11,37 @@ import Button from '@/components/Button';
 export default function RecebimentoPage() {
   const [cargas, setCargas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [localId, setLocalId] = useState<string | null>(null);
 
-  // Carrega o que a fábrica mandou (status 'enviado' ou 'pendente' dependendo do seu fluxo anterior)
-  // Para simplificar, vamos listar tudo que não foi 'recebido' ainda
-  const carregarCargas = async () => {
+  // 1. Identificar a Loja Atual (Similar ao que fizemos no Caixa)
+  const carregarLocal = useCallback(async () => {
+    try {
+      const { data: locais } = await supabase
+        .from('locais')
+        .select('id, nome')
+        .eq('tipo', 'pdv')
+        .limit(1); // TODO: Melhorar para pegar do perfil do usuário em multi-lojas
+
+      const meuLocal = locais?.[0];
+      if (meuLocal) {
+        setLocalId(meuLocal.id);
+        return meuLocal.id;
+      }
+    } catch (err) {
+      console.error('Erro ao carregar local', err);
+    }
+    return null;
+  }, []);
+
+  // 2. Carregar Cargas (Filtrando pela loja)
+  const carregarCargas = useCallback(async (idLoja: string) => {
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('distribuicao_pedidos')
         .select(
           `
-          id, quantidade_solicitada, status, created_at,
+          id, quantidade_solicitada, status, created_at, local_destino_id,
           local:locais(nome),
           ordem:ordens_producao(
             numero_op,
@@ -29,11 +49,13 @@ export default function RecebimentoPage() {
           )
         `
         )
-        .neq('status', 'recebido') // Apenas o que ainda não recebi
+        .neq('status', 'recebido')
+        .eq('local_destino_id', idLoja) // <--- CORREÇÃO DE SEGURANÇA: Filtra pela loja atual
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      // Normalizar estrutura aninhada (ordem.produto pode vir como array)
+
+      // Normalização dos dados (mantida do seu código original)
       const norm = (data || []).map((c: any) => {
         const ordem = c.ordem;
         if (ordem && ordem.produto) {
@@ -49,19 +71,29 @@ export default function RecebimentoPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    carregarCargas();
   }, []);
 
+  useEffect(() => {
+    const init = async () => {
+      const id = await carregarLocal();
+      if (id) {
+        await carregarCargas(id);
+      } else {
+        setLoading(false);
+        toast.error('Loja não identificada.');
+      }
+    };
+    void init();
+  }, [carregarLocal, carregarCargas]);
+
   const confirmarRecebimento = async (id: string) => {
+    if (!localId) return;
     try {
-      const { data, error } = await supabase.rpc('receber_carga_pdv', { p_distribuicao_id: id });
+      const { error } = await supabase.rpc('receber_carga_pdv', { p_distribuicao_id: id });
       if (error) throw error;
 
       toast.success('Estoque atualizado com sucesso!');
-      carregarCargas();
+      void carregarCargas(localId); // Recarrega lista
     } catch (err) {
       console.error(err);
       toast.error('Erro ao receber carga.');
@@ -82,7 +114,7 @@ export default function RecebimentoPage() {
         <div className="text-center p-12 bg-white rounded-xl border border-dashed border-slate-300">
           <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-4" />
           <h3 className="text-lg font-medium text-slate-900">Tudo recebido!</h3>
-          <p className="text-slate-500">Não há entregas pendentes da fábrica no momento.</p>
+          <p className="text-slate-500">Não há entregas pendentes para esta loja no momento.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

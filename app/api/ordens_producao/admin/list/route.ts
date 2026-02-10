@@ -60,7 +60,7 @@ export async function GET(_request: Request) {
       auth: { persistSession: false },
     });
 
-    type OrdemRow = {
+    type _OrdemRow = {
       id: string;
       numero_op?: string;
       produto_final_id?: string | null;

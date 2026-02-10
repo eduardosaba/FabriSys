@@ -13,6 +13,10 @@ import {
   ArrowRight,
   CheckCircle,
   AlertTriangle,
+  Bell,
+  Gift,
+  Calculator,
+  MessageSquare,
 } from 'lucide-react';
 
 export default function AjudaPage() {
@@ -23,6 +27,10 @@ export default function AjudaPage() {
     { id: 'fluxo-diario', label: '2. Fluxo Diário', icon: Calendar },
     { id: 'producao', label: '3. Na Cozinha (Kanban)', icon: ChefHat },
     { id: 'compras', label: '4. Compras & Estoque', icon: ShoppingCart },
+    { id: 'pdv', label: '5. PDV (Caixa)', icon: Calculator },
+    { id: 'meta-fidelidade', label: '6. Meta & Clube Fidelidade', icon: Gift },
+    { id: 'avisos', label: '7. Avisos Administrativos', icon: Bell },
+    { id: 'ferramentas-pdv', label: '8. Ferramentas PDV', icon: MessageSquare },
   ];
 
   return (
@@ -280,6 +288,111 @@ export default function AjudaPage() {
                       fornecedor.
                     </p>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ABA 5: PDV (Caixa) */}
+          {activeTab === 'pdv' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">PDV (Caixa)</h2>
+              <p className="text-slate-600">
+                O PDV suporta dois modos: <strong>Padrão</strong> (baixa estoque por venda) e
+                <strong> Inventário/Fechamento</strong> (consolida em fechamento). Escolha o modo no
+                canto superior do PDV.
+              </p>
+
+              <div className="bg-slate-50 p-4 rounded border border-slate-100">
+                <h3 className="font-bold text-slate-800">Como funciona a baixa de estoque</h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  As vendas no PDV acionam uma função atômica no banco que decrementa o estoque por
+                  item. Se houver erro, verifique se a loja está com a configuração correta e se as
+                  migrations do banco foram aplicadas.
+                </p>
+                <p className="text-xs text-slate-500 mt-2 italic">
+                  Dica: use o relatório de itens vendidos para reconciliar diferenças.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ABA 6: META DO DIA & CLUBE FIDELIDADE */}
+          {activeTab === 'meta-fidelidade' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
+                Meta do Dia & Clube
+              </h2>
+              <p className="text-slate-600">
+                Use <strong>Meta do Dia</strong> para definir objetivos de vendas por PDV e motivar
+                a equipe. O <strong>Clube Fidelidade</strong> acumula pontos automaticamente para
+                clientes cadastrados.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 border rounded-lg bg-pink-50">
+                  <h4 className="font-bold text-pink-700">Configurar Meta do Dia</h4>
+                  <p className="text-sm text-pink-700 mt-1">
+                    Vá em Dashboard → Metas e adicione metas diárias por PDV.
+                  </p>
+                </div>
+
+                <div className="p-4 border rounded-lg bg-green-50">
+                  <h4 className="font-bold text-green-700">Clube Fidelidade</h4>
+                  <p className="text-sm text-green-700 mt-1">
+                    Ative o programa em Clientes → Fidelidade e veja os pontos no cadastro do
+                    cliente.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ABA 7: AVISOS ADMINISTRATIVOS */}
+          {activeTab === 'avisos' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
+                Avisos Administrativos
+              </h2>
+              <p className="text-slate-600">
+                Administradores podem criar avisos que aparecem como popup para todos os usuários.
+                Os avisos podem ser marcados como lidos e serão ocultados para quem já visualizou.
+              </p>
+
+              <div className="p-4 border rounded-lg bg-yellow-50">
+                <h4 className="font-bold text-yellow-800">Onde criar</h4>
+                <p className="text-sm text-yellow-700 mt-1">
+                  Acesse Admin → Avisos. Defina título, mensagem e período de validade.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ABA 8: FERRAMENTAS PDV (Calculadora, Reposição) */}
+          {activeTab === 'ferramentas-pdv' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
+                Ferramentas do PDV
+              </h2>
+              <p className="text-slate-600">
+                Pequenas ferramentas ajudam no dia a dia do caixa e agilizam vendas.
+              </p>
+
+              <div className="space-y-3">
+                <div className="p-4 border rounded-lg bg-white">
+                  <h4 className="font-bold">Calculadora Flutuante</h4>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Use a calculadora para montar descontos rápidos e calcular troco — ela fica
+                    sobreposta ao PDV.
+                  </p>
+                </div>
+
+                <div className="p-4 border rounded-lg bg-white">
+                  <h4 className="font-bold">Solicitação de Reposição</h4>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Se um produto acabar no PDV, crie uma solicitação de reposição que vai para o
+                    painel de compras/estoque.
+                  </p>
                 </div>
               </div>
             </div>

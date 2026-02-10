@@ -72,7 +72,7 @@ export function useLicense() {
       }
     }
 
-    checkLicense();
+    void checkLicense();
     // Também podemos revalidar eventualmente (não implementado aqui)
   }, [profile]);
 

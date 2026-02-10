@@ -78,9 +78,9 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
       setLoading(true);
 
       if (ordem) {
-        const res = await supabase.from('ordens_producao').update(data).eq('id', ordem.id);
-        if (res?.error && (res.error as { message?: string }).message) {
-          throw new Error((res.error as { message?: string }).message as string);
+        const { error } = await supabase.from('ordens_producao').update(data).eq('id', ordem.id);
+        if (error) {
+          throw error;
         }
 
         toast({
@@ -89,9 +89,9 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
           variant: 'success',
         });
       } else {
-        const res = await supabase.from('ordens_producao').insert(data);
-        if (res?.error && (res.error as { message?: string }).message) {
-          throw new Error((res.error as { message?: string }).message as string);
+        const { error } = await supabase.from('ordens_producao').insert(data);
+        if (error) {
+          throw error;
         }
 
         toast({
@@ -107,12 +107,15 @@ export default function OrdemProducaoForm({ ordem, onSuccess }: OrdemProducaoFor
         router.push('/dashboard/producao/ordens');
       }
     } catch (err) {
-      if (err instanceof Error) console.error('Erro ao salvar ordem de produção:', err.message);
-      else console.error('Erro ao salvar ordem de produção:', err);
+      console.error('Erro ao criar ordem:', err);
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : (err as { message?: string })?.message || 'Erro desconhecido';
 
       toast({
         title: 'Erro ao salvar',
-        description: 'Ocorreu um erro ao salvar a ordem de produção.',
+        description: errorMessage,
         variant: 'error',
       });
     } finally {

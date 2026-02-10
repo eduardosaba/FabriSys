@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
@@ -84,7 +84,7 @@ export default function AgendaPage() {
   };
 
   // --- BUSCA DE DADOS ---
-  const carregarEventos = async () => {
+  const carregarEventos = useCallback(async () => {
     if (authLoading) return;
     if (!profile?.id) {
       setLoading(false);
@@ -151,12 +151,11 @@ export default function AgendaPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authLoading, profile?.id, dataAtual]);
 
   useEffect(() => {
     void carregarEventos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, profile, dataAtual]);
+  }, [carregarEventos]);
 
   // --- AÇÕES ---
   const salvarTarefa = async () => {
@@ -203,7 +202,7 @@ export default function AgendaPage() {
     }
   };
 
-  const excluirTarefa = async (id: string) => {
+  const excluirTarefa = (id: string) => {
     setTarefaParaExcluir(id);
     setIsConfirmDeleteOpen(true);
   };
@@ -483,7 +482,10 @@ export default function AgendaPage() {
             >
               Cancelar
             </Button>
-            <Button onClick={() => void salvarTarefa()} className="w-full md:w-auto min-h-[44px]">
+            <Button
+              onClick={() => salvarTarefa().catch(console.error)}
+              className="w-full md:w-auto min-h-[44px]"
+            >
               Salvar na Agenda
             </Button>
           </div>

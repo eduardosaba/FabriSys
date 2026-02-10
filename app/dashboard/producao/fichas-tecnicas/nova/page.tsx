@@ -76,7 +76,7 @@ export default function NovaFichaTecnicaPage() {
     }
 
     void carregarProdutos();
-  }, []);
+  }, [toast]);
 
   const handleSave = async (insumos: InsumoFicha[], precoVenda: number, rendimento: number) => {
     if (!produtoSelecionado) {

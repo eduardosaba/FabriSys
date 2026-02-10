@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -49,12 +49,7 @@ export default function CategoriasPage() {
   });
 
   // --- BUSCAR DADOS ---
-  useEffect(() => {
-    if (authLoading) return;
-    void fetchCategorias();
-  }, [authLoading]);
-
-  async function fetchCategorias() {
+  const fetchCategorias = useCallback(async () => {
     try {
       setLoading(true);
       // NOTE: prefer explicit organization filtering when available via profile
@@ -70,7 +65,14 @@ export default function CategoriasPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [profile?.organization_id]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (profile?.organization_id) {
+      void fetchCategorias();
+    }
+  }, [authLoading, fetchCategorias, profile?.organization_id]);
 
   // --- PREPARAR MODAL ---
   function handleOpenModal(categoria?: Categoria) {

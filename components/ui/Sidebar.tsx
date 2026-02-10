@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Package,
-  Truck,
   Settings,
   X,
   ChevronRight,
@@ -18,6 +17,7 @@ import {
   ChefHat,
   HelpCircle,
   Store,
+  Truck,
   Shield,
 } from 'lucide-react';
 
@@ -86,6 +86,12 @@ const sidebarItems: SidebarItem[] = [
     ],
   },
   {
+    name: 'Logística',
+    href: '/dashboard/logistica',
+    icon: <Truck className="h-5 w-5" />,
+    children: [{ name: 'Expedição', href: '/dashboard/logistica/expedicao' }],
+  },
+  {
     name: 'Suprimentos',
     href: '/dashboard/insumos',
     icon: <Package className="h-5 w-5" />,
@@ -108,6 +114,7 @@ const sidebarItems: SidebarItem[] = [
       { name: 'Vendas Detalhadas', href: '/dashboard/relatorios/vendas' },
       { name: 'Posição de Estoque', href: '/dashboard/relatorios/estoque' },
       { name: 'Validade & Perdas', href: '/dashboard/relatorios/validade' },
+      { name: 'Acompanhamento de Metas', href: '/dashboard/relatorios/metas' },
     ],
   },
   {
@@ -119,6 +126,8 @@ const sidebarItems: SidebarItem[] = [
       { name: 'Cadastro de Lojas', href: '/dashboard/configuracoes/lojas' },
       { name: 'Promoções & Combos', href: '/dashboard/configuracoes/promocoes' },
       { name: 'Equipe & Usuários', href: '/dashboard/configuracoes/usuarios' },
+      { name: 'Gestão de Metas', href: '/dashboard/configuracoes/metas' },
+      { name: 'Gestão de Fidelidade', href: '/dashboard/configuracoes/fidelidade' },
     ],
   },
   {

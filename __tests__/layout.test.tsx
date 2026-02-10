@@ -46,6 +46,9 @@ describe('Layout', () => {
     expect(screen.getByText('Ordens de Produção')).toBeInTheDocument();
     expect(screen.getByText('Fichas Técnicas')).toBeInTheDocument();
     expect(screen.getByText('Relatórios')).toBeInTheDocument();
+    // Novos itens adicionados ao submenu de Configurações
+    expect(screen.getByText('Gestão de Metas')).toBeInTheDocument();
+    expect(screen.getByText('Gestão de Fidelidade')).toBeInTheDocument();
   });
 
   it('highlights active menu item', () => {

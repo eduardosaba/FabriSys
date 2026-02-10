@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
+import KPIsMetas from '@/components/dashboard/KPIsMetas';
 
 interface ProdutoRanking {
   nome: string;
@@ -49,6 +50,11 @@ export default function DashboardPage() {
     ordensAtivas: 0,
     itensCriticos: 0,
   });
+
+  // KPI Meta
+  const [metaKPI, setMetaKPI] = useState(0);
+  const [metaScope, setMetaScope] = useState<'meta-dia' | 'meta-mes' | 'meta-periodo'>('meta-mes');
+  const [metaFaltante, setMetaFaltante] = useState(0);
 
   // --- ESTADOS DE RANKING ---
   const [rankingQtd, setRankingQtd] = useState<ProdutoRanking[]>([]);
@@ -179,6 +185,90 @@ export default function DashboardPage() {
   };
 
   // --- BUSCA DE DADOS ---
+  async function carregarMeta(scopeOverride?: 'meta-dia' | 'meta-mes' | 'meta-periodo') {
+    try {
+      const scope = scopeOverride ?? metaScope;
+      const { dataInicial, dataFinal } = filtros;
+      let metaTotal = 0;
+
+      if (scope === 'meta-dia') {
+        const { data: metas } = await supabase
+          .from('metas_vendas')
+          .select('valor_meta')
+          .eq('data_referencia', dataInicial);
+        metaTotal = (metas || []).reduce((s: number, m: any) => s + Number(m.valor_meta || 0), 0);
+      } else if (scope === 'meta-mes') {
+        const [y, m] = dataInicial.split('-');
+        const start = new Date(Number(y), Number(m) - 1, 1);
+        const end = new Date(Number(y), Number(m), 1);
+        const startStr = start.toISOString().split('T')[0];
+        const endStr = end.toISOString().split('T')[0];
+        const { data: metas } = await supabase
+          .from('metas_vendas')
+          .select('valor_meta')
+          .gte('data_referencia', startStr)
+          .lt('data_referencia', endStr);
+        metaTotal = (metas || []).reduce((s: number, m: any) => s + Number(m.valor_meta || 0), 0);
+      } else {
+        const { data: metas } = await supabase
+          .from('metas_vendas')
+          .select('valor_meta')
+          .gte('data_referencia', dataInicial)
+          .lte('data_referencia', dataFinal);
+        metaTotal = (metas || []).reduce((s: number, m: any) => s + Number(m.valor_meta || 0), 0);
+      }
+
+      setMetaKPI(metaTotal);
+
+      // Calcular vendas no mesmo intervalo para saber quanto falta
+      try {
+        let vendasTotal = 0;
+        if (scope === 'meta-dia') {
+          const { data: vendas } = await supabase
+            .from('vendas')
+            .select('total_venda')
+            .gte('created_at', `${dataInicial}T00:00:00`)
+            .lt('created_at', `${dataInicial}T23:59:59`);
+          vendasTotal = (vendas || []).reduce(
+            (s: number, v: any) => s + Number(v.total_venda || 0),
+            0
+          );
+        } else if (scope === 'meta-mes') {
+          const [y, m] = dataInicial.split('-');
+          const start = new Date(Number(y), Number(m) - 1, 1);
+          const end = new Date(Number(y), Number(m), 1);
+          const startStr = start.toISOString().split('T')[0];
+          const endStr = end.toISOString().split('T')[0];
+          const { data: vendas } = await supabase
+            .from('vendas')
+            .select('total_venda')
+            .gte('created_at', `${startStr}T00:00:00`)
+            .lt('created_at', `${endStr}T00:00:00`);
+          vendasTotal = (vendas || []).reduce(
+            (s: number, v: any) => s + Number(v.total_venda || 0),
+            0
+          );
+        } else {
+          const { data: vendas } = await supabase
+            .from('vendas')
+            .select('total_venda')
+            .gte('created_at', `${dataInicial}T00:00:00`)
+            .lte('created_at', `${dataFinal}T23:59:59`);
+          vendasTotal = (vendas || []).reduce(
+            (s: number, v: any) => s + Number(v.total_venda || 0),
+            0
+          );
+        }
+        setMetaFaltante(Math.max(metaTotal - vendasTotal, 0));
+      } catch (err) {
+        console.error('Erro ao calcular vendas para meta:', err);
+        setMetaFaltante(metaTotal);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar meta (parcial):', err);
+    }
+  }
+
   const carregarDados = useCallback(async () => {
     setLoading(true);
     try {
@@ -277,13 +367,47 @@ export default function DashboardPage() {
         ordensAtivas: countOrdens || 0,
         itensCriticos: countCriticos || 0,
       });
+
+      // 4. Calcular Meta conforme escopo selecionado
+      try {
+        let metaTotal = 0;
+        if (metaScope === 'meta-dia') {
+          const { data: metas } = await supabase
+            .from('metas_vendas')
+            .select('valor_meta')
+            .eq('data_referencia', dataInicial);
+          metaTotal = (metas || []).reduce((s: number, m: any) => s + Number(m.valor_meta || 0), 0);
+        } else if (metaScope === 'meta-mes') {
+          const [y, m] = dataInicial.split('-');
+          const start = new Date(Number(y), Number(m) - 1, 1);
+          const end = new Date(Number(y), Number(m), 1);
+          const startStr = start.toISOString().split('T')[0];
+          const endStr = end.toISOString().split('T')[0];
+          const { data: metas } = await supabase
+            .from('metas_vendas')
+            .select('valor_meta')
+            .gte('data_referencia', startStr)
+            .lt('data_referencia', endStr);
+          metaTotal = (metas || []).reduce((s: number, m: any) => s + Number(m.valor_meta || 0), 0);
+        } else {
+          const { data: metas } = await supabase
+            .from('metas_vendas')
+            .select('valor_meta')
+            .gte('data_referencia', dataInicial)
+            .lte('data_referencia', dataFinal);
+          metaTotal = (metas || []).reduce((s: number, m: any) => s + Number(m.valor_meta || 0), 0);
+        }
+        setMetaKPI(metaTotal);
+      } catch (err) {
+        console.error('Erro ao carregar metas:', err);
+      }
     } catch (error) {
       console.error('Erro ao carregar dashboard:', error);
       toast.error('Erro ao atualizar dados.');
     } finally {
       setLoading(false);
     }
-  }, [filtros]); // Dependência nas datas (objeto filtros)
+  }, [filtros, metaScope]); // Dependência nas datas (objeto filtros) e escopo de meta
 
   useEffect(() => {
     void carregarDados();
@@ -306,6 +430,8 @@ export default function DashboardPage() {
             <Filter size={18} className="text-slate-400" />
             <span className="text-sm font-bold text-slate-600">Filtrar:</span>
           </div>
+
+          {/* selector de Meta removido daqui e movido para ficar ao lado do KPI Meta */}
 
           {/* Seletor Principal */}
           <select
@@ -408,6 +534,44 @@ export default function DashboardPage() {
 
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
           <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <DollarSign size={64} className="text-indigo-600" />
+          </div>
+          <div className="relative z-10">
+            <div className="flex items-start justify-between">
+              <p className="text-sm font-medium text-slate-500 flex items-center gap-2">
+                <Award size={16} className="text-indigo-600" /> Meta (
+                {metaScope === 'meta-dia' ? 'Dia' : metaScope === 'meta-mes' ? 'Mês' : 'Período'})
+              </p>
+
+              <div className="ml-2">
+                <label className="sr-only">Meta</label>
+                <select
+                  value={metaScope}
+                  onChange={(e) => {
+                    const v = e.target.value as any;
+                    setMetaScope(v);
+                    void carregarMeta(v);
+                  }}
+                  className="bg-slate-50 border border-slate-200 text-sm font-medium text-slate-700 p-2 rounded-lg outline-none ml-2"
+                >
+                  <option value="meta-dia">Meta Dia</option>
+                  <option value="meta-mes">Meta Mês</option>
+                </select>
+              </div>
+            </div>
+
+            <h3 className="text-2xl font-bold text-slate-800 mt-2">
+              {metaKPI.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Valor alvo conforme escopo</p>
+            <p className="text-sm text-slate-600 mt-2 font-medium">
+              Falta: {metaFaltante.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+          <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <ShoppingCart size={64} className="text-orange-600" />
           </div>
           <div className="relative z-10">
@@ -462,6 +626,9 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* METAS DO DIA - PDVs */}
+      <KPIsMetas />
 
       {/* SEÇÃO DE RANKINGS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

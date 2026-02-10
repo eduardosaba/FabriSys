@@ -10,6 +10,7 @@ import LicenseGuard from '@/components/LicenseGuard';
 import Loading from '@/components/ui/Loading';
 import { useOrganization } from '@/hooks/useOrganization'; // Hook que criamos antes
 import { useAuth } from '@/lib/auth';
+import SystemAlertPopup from '@/components/SystemAlertPopup';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -92,6 +93,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Footer />
             </div>
           </div>
+
+          {/* Sistema de Avisos/Comunicados em Tempo Real */}
+          <SystemAlertPopup />
         </div>
       </LicenseGuard>
     </AuthGuard>

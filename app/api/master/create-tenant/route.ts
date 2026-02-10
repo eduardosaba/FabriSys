@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     }
 
     // 1. Criar a Organização (Empresa)
-    type OrgRow = { id: string };
+    type _OrgRow = { id: string };
     const { data: org, error: orgError } = await supabaseAdmin
       .from('organizations')
       .insert({ nome: empresaNome, plano: plano ?? 'pro' })
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     }
 
     // 3. Criar o Perfil do Colaborador vinculado à Empresa
-    type ColabRow = { id: string };
+    type _ColabRow = { id: string };
     const { error: profileError } = await supabaseAdmin.from('colaboradores').upsert({
       id: userId,
       nome: adminNome ?? '',

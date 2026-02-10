@@ -52,13 +52,13 @@ export default function RelatorioVendasPage() {
           new Set(normalizado.map((v: any) => v.local?.nome).filter(Boolean))
         );
         setLojas(nomesLojas as string[]);
-      } catch (err) {
+      } catch {
         toast.error('Erro ao carregar relatório');
       } finally {
         setLoading(false);
       }
     }
-    carregar();
+    void carregar();
   }, []);
 
   const vendasFiltradas =

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useForm } from 'react-hook-form';
 import type { Resolver } from 'react-hook-form';
@@ -67,13 +67,6 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
   const [isCategoriaModalOpen, setIsCategoriaModalOpen] = useState(false);
   const [newCategoriaName, setNewCategoriaName] = useState('');
 
-  if (process.env.NODE_ENV === 'development') {
-    console.log('=== DEBUG PRODUTO FORM RENDER ===');
-    console.log('Produto prop:', produto);
-    console.log('Image preview:', imagePreview);
-    console.log('Preço display:', precoDisplay);
-  }
-
   const {
     register,
     handleSubmit,
@@ -91,20 +84,6 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
       peso_unitario: 0,
     },
   });
-  if (process.env.NODE_ENV === 'development') {
-    console.log('=== DEBUG FORM INITIALIZATION ===');
-    console.log(
-      'Default values:',
-      produto || {
-        ativo: true,
-        imagem_url: null,
-        codigo_interno: null,
-        descricao: null,
-      }
-    );
-    console.log('Form errors:', errors);
-    console.log('Is submitting:', isSubmitting);
-  }
 
   // Atualizar precoDisplay quando produto muda
   useEffect(() => {
@@ -113,84 +92,75 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
     }
   }, [produto?.preco_venda]);
 
-  // Reset form values when produto changes (for edit mode)
+  // Reset form values when `produto` changes (edit mode)
   useEffect(() => {
-    if (produto) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('=== RESETTING FORM FOR EDIT MODE ===');
-        console.log('Produto data:', produto);
-      }
-
-      // Reset all form values with produto data (acesso dinâmico para propriedades opcionais)
-      const prodRec = produto as unknown as Record<string, unknown>;
-      setValue('nome', (prodRec['nome'] as string) ?? '');
-      setValue('preco_venda', (prodRec['preco_venda'] as number) ?? 0);
-      setValue('imagem_url', (prodRec['imagem_url'] as string) ?? null);
-      setValue('codigo_interno', (prodRec['codigo_interno'] as string) ?? null);
-      setValue('descricao', (prodRec['descricao'] as string) ?? null);
-      setValue('ativo', (prodRec['ativo'] as boolean) ?? true);
-      const tipoVal = prodRec['tipo'];
-      if (tipoVal === 'final' || tipoVal === 'semi_acabado') {
-        setValue('tipo', tipoVal);
-      } else {
-        setValue('tipo', 'final');
-      }
-
-      if ('categoria_id' in prodRec) {
-        const cat = prodRec['categoria_id'];
-        setValue('categoria_id', cat != null ? Number(cat) : null);
-      }
-      if ('peso_unitario' in prodRec) {
-        setValue('peso_unitario', Number(prodRec['peso_unitario'] ?? 0));
-      }
-
-      // Update image preview
-      setImagePreview((prodRec['imagem_url'] as string) ?? null);
-
-      if (process.env.NODE_ENV === 'development') console.log('Form values reset completed');
+    if (!produto || !produto.id) return;
+    const prodRec = produto as unknown as Record<string, unknown>;
+    setValue('nome', (prodRec['nome'] as string) ?? '');
+    setValue('preco_venda', (prodRec['preco_venda'] as number) ?? 0);
+    setValue('imagem_url', (prodRec['imagem_url'] as string) ?? null);
+    setValue('codigo_interno', (prodRec['codigo_interno'] as string) ?? null);
+    setValue('descricao', (prodRec['descricao'] as string) ?? null);
+    setValue('ativo', (prodRec['ativo'] as boolean) ?? true);
+    const tipoVal = prodRec['tipo'];
+    if (tipoVal === 'final' || tipoVal === 'semi_acabado') {
+      setValue('tipo', tipoVal as any);
+    } else {
+      setValue('tipo', 'final');
     }
-  }, [produto, setValue]);
+
+    if ('categoria_id' in prodRec) {
+      const cat = prodRec['categoria_id'];
+      setValue('categoria_id', cat != null ? Number(cat) : null);
+    }
+    if ('peso_unitario' in prodRec) {
+      setValue('peso_unitario', Number(prodRec['peso_unitario'] ?? 0));
+    }
+
+    setImagePreview((prodRec['imagem_url'] as string) ?? null);
+  }, [produto, setValue, setImagePreview]);
+
+  // Carregar categorias quando organization_id estiver disponível
+  const fetchCategorias = useCallback(async (orgId?: string | number) => {
+    if (!orgId) return [] as Array<{ id: number; nome: string }>;
+    const { data, error } = await supabase
+      .from('categorias')
+      .select('id, nome')
+      .eq('organization_id', orgId)
+      .order('nome');
+    if (error) throw error;
+    return ((data as { id: number | string; nome: string }[] | null) || []).map((r) => ({
+      ...r,
+      id: Number(r.id),
+    })) as Array<{ id: number; nome: string }>;
+  }, []);
 
   useEffect(() => {
-    // carregar categorias para select (aguarda profile)
     let mounted = true;
-    const fetchCategorias = async () => {
-      if (!profile?.id) return;
-      try {
-        const { data, error } = await supabase
-          .from('categorias')
-          .select('id, nome')
-          .eq('organization_id', profile.organization_id)
-          .order('nome');
-        if (error) throw error;
-        if (mounted) {
-          const normalized = ((data as { id: number | string; nome: string }[] | null) || []).map(
-            (r) => ({ ...r, id: Number(r.id) })
-          );
-          setCategorias(normalized);
-        }
-      } catch (err) {
-        console.error(
-          'Erro ao carregar categorias:',
-          err instanceof Error ? err.message : String(err)
-        );
-      }
-    };
 
     if (authLoading) return;
 
-    if (!profile?.id) {
-      // sem usuário autenticado — limpa categorias para não travar UI
-      mounted = false;
+    if (!profile?.organization_id) {
       setCategorias([]);
       return;
     }
 
-    void fetchCategorias();
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const list = await fetchCategorias(profile.organization_id);
+          if (mounted) setCategorias(list);
+        } catch (err) {
+          console.error('Erro ao carregar categorias:', err instanceof Error ? err.message : err);
+        }
+      })();
+    }, 10);
+
     return () => {
       mounted = false;
+      clearTimeout(timer);
     };
-  }, [authLoading, profile?.id]);
+  }, [authLoading, profile?.organization_id, fetchCategorias]);
 
   const openCreateCategoria = () => {
     setNewCategoriaName('');

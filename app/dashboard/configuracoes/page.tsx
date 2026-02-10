@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Button from '@/components/Button';
 import PageHeader from '@/components/ui/PageHeader';
 import { Settings, Sliders, Palette, Shield, Users } from 'lucide-react';
 

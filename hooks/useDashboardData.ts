@@ -10,6 +10,7 @@ export type FiltrosDashboard = {
 export type Profile = {
   id: string;
   nome?: string;
+  local_id?: string;
   role: string;
   email: string;
 };

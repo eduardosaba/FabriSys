@@ -56,7 +56,7 @@ export default function ProdutosPage() {
   }
 
   const confirmDialog = useConfirm();
-  const { profile, loading: authLoading } = useAuth();
+  const { profile } = useAuth();
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,7 +95,7 @@ export default function ProdutosPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile?.organization_id]);
 
   useEffect(() => {
     void fetchDados();

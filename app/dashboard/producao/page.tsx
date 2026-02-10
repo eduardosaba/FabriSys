@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import RegistroPerdaModal from '@/components/logistica/RegistroPerdaModal';
+import { Trash2 } from 'lucide-react';
 import { useProfile, useKPIs } from '@/hooks/useDashboardData';
 import type { Profile as ProfileType, KPIs as KPIsType } from '@/hooks/useDashboardData';
 import { DashboardProvider } from '@/contexts/DashboardContext';
@@ -9,6 +12,7 @@ import Button from '@/components/Button';
 import { Package, AlertTriangle, BarChart, List, EyeOff, Factory } from 'lucide-react';
 import { KPISection } from '@/components/ui/KPICards';
 import PageHeader from '@/components/ui/PageHeader';
+import ReposicaoListener from '@/components/fabrica/ReposicaoListener';
 
 function DashboardProducaoContent() {
   type FiltrosAtuais = {
@@ -54,6 +58,45 @@ function DashboardProducaoContent() {
     relatorios: true,
     ranking: true,
   });
+  const [isPerdaOpen, setIsPerdaOpen] = useState(false);
+  const [produtos, setProdutos] = useState<any[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadProdutos() {
+      try {
+        const { data } = await supabase
+          .from('produtos_finais')
+          .select('id, nome')
+          .eq('ativo', true)
+          .order('nome');
+        if (!mounted) return;
+        setProdutos(data || []);
+      } catch (e) {
+        console.warn('Erro ao carregar produtos para registro de perdas', e);
+      }
+    }
+    void loadProdutos();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handlePerdaSuccess = (produtoId?: string, quantidade?: number) => {
+    // Atualização local opcional: recarrega lista de produtos (nome/id) para refletir mudanças
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from('produtos_finais')
+          .select('id, nome')
+          .eq('ativo', true)
+          .order('nome');
+        setProdutos(data || []);
+      } catch (e) {
+        /* ignore */
+      }
+    })();
+  };
 
   const calcularDatasPorPeriodo = useCallback((periodo: string) => {
     const hoje = new Date();
@@ -142,158 +185,180 @@ function DashboardProducaoContent() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Dashboard de Produção"
-        description={
-          typeof profile?.nome === 'string'
-            ? `Bem-vindo, ${profile.nome}`
-            : 'Visão geral da produção e ordens'
-        }
-        icon={Factory}
-      />
-
-      <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4">
-        <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-end lg:gap-4">
-          <div className="min-w-0 flex-1">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Período
-            </label>
-            <div className="relative">
-              <select
-                value={filtrosAtuais.periodoSelecionado}
-                onChange={(e) => calcularDatasPorPeriodo(e.target.value)}
-                className="w-full appearance-none rounded-md border border-gray-300 bg-white p-2 pr-8 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
-              >
-                <option value="personalizado">Personalizado</option>
-                <option value="hoje">Hoje</option>
-                <option value="ultimos-7-dias">Últimos 7 dias</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
-                <svg
-                  className="h-4 w-4 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:flex-shrink-0">
-            <Button
-              onClick={aplicarFiltroDashboard}
-              disabled={isLoadingKpis}
-              loading={isLoadingKpis}
-              variant="primary"
-              className="w-full lg:w-auto"
+    <>
+      <div className="space-y-6">
+        <ReposicaoListener />
+        <div className="flex items-start justify-between gap-4">
+          <PageHeader
+            title="Dashboard de Produção"
+            description={
+              typeof profile?.nome === 'string'
+                ? `Bem-vindo, ${profile.nome}`
+                : 'Visão geral da produção e ordens'
+            }
+            icon={Factory}
+          />
+          <div className="mt-1">
+            <button
+              onClick={() => setIsPerdaOpen(true)}
+              className="inline-flex items-center gap-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100"
             >
-              🔍 Aplicar
-            </Button>
+              <Trash2 className="h-4 w-4" /> Registrar Perda
+            </button>
           </div>
         </div>
+
+        <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-4">
+          <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-end lg:gap-4">
+            <div className="min-w-0 flex-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Período
+              </label>
+              <div className="relative">
+                <select
+                  value={filtrosAtuais.periodoSelecionado}
+                  onChange={(e) => calcularDatasPorPeriodo(e.target.value)}
+                  className="w-full appearance-none rounded-md border border-gray-300 bg-white p-2 pr-8 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                >
+                  <option value="personalizado">Personalizado</option>
+                  <option value="hoje">Hoje</option>
+                  <option value="ultimos-7-dias">Últimos 7 dias</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
+                  <svg
+                    className="h-4 w-4 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:flex-shrink-0">
+              <Button
+                onClick={aplicarFiltroDashboard}
+                disabled={isLoadingKpis}
+                loading={isLoadingKpis}
+                variant="primary"
+                className="w-full lg:w-auto"
+              >
+                🔍 Aplicar
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {productionData && <KPISection kpis={productionData} isLoading={isLoadingKpis} />}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {visibleCards.ordens && productionData && (
+            <Card variant="default" className="relative transition-colors hover:border-primary">
+              <button
+                className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
+                onClick={() => toggleCardVisibility('ordens')}
+                title="Ocultar card"
+              >
+                <EyeOff className="h-4 w-4 text-gray-600" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/50">
+                  <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-medium">Produção Total</h4>
+                  <p className="text-sm text-gray-500">
+                    {productionData.producaoTotal?.toLocaleString() ?? '-'} unidades
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {visibleCards.alertas && productionData && (
+            <Card variant="default" className="relative transition-colors hover:border-primary">
+              <button
+                className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
+                onClick={() => toggleCardVisibility('alertas')}
+                title="Ocultar card"
+              >
+                <EyeOff className="h-4 w-4 text-gray-600" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-green-100 p-2 dark:bg-green-900/50">
+                  <AlertTriangle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-medium">Eficiência</h4>
+                  <p className="text-sm text-gray-500">
+                    {productionData.eficiencia?.toFixed(1) ?? '-'}%
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {visibleCards.relatorios && productionData && (
+            <Card variant="default" className="relative transition-colors hover:border-primary">
+              <button
+                className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
+                onClick={() => toggleCardVisibility('relatorios')}
+                title="Ocultar card"
+              >
+                <EyeOff className="h-4 w-4 text-gray-600" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/50">
+                  <BarChart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-medium">Produtividade</h4>
+                  <p className="text-sm text-gray-500">
+                    {productionData.produtividade?.toFixed(1) ?? '-'} unidades/hora
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {visibleCards.ranking && productionData && (
+            <Card variant="default" className="relative transition-colors hover:border-primary">
+              <button
+                className="absolute right-2 top-2 rounded-full bg-gray-200 p-1"
+                onClick={() => toggleCardVisibility('ranking')}
+              >
+                <EyeOff className="h-4 w-4 text-gray-600" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/50">
+                  <List className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-medium">Perdas</h4>
+                  <p className="text-sm text-gray-500">
+                    {productionData.perdas?.toFixed(1) ?? '-'}%
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
       </div>
-
-      {productionData && <KPISection kpis={productionData} isLoading={isLoadingKpis} />}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {visibleCards.ordens && productionData && (
-          <Card variant="default" className="relative transition-colors hover:border-primary">
-            <button
-              className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
-              onClick={() => toggleCardVisibility('ordens')}
-              title="Ocultar card"
-            >
-              <EyeOff className="h-4 w-4 text-gray-600" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/50">
-                <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <h4 className="text-lg font-medium">Produção Total</h4>
-                <p className="text-sm text-gray-500">
-                  {productionData.producaoTotal?.toLocaleString() ?? '-'} unidades
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {visibleCards.alertas && productionData && (
-          <Card variant="default" className="relative transition-colors hover:border-primary">
-            <button
-              className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
-              onClick={() => toggleCardVisibility('alertas')}
-              title="Ocultar card"
-            >
-              <EyeOff className="h-4 w-4 text-gray-600" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-green-100 p-2 dark:bg-green-900/50">
-                <AlertTriangle className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <h4 className="text-lg font-medium">Eficiência</h4>
-                <p className="text-sm text-gray-500">
-                  {productionData.eficiencia?.toFixed(1) ?? '-'}%
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {visibleCards.relatorios && productionData && (
-          <Card variant="default" className="relative transition-colors hover:border-primary">
-            <button
-              className="absolute right-2 top-2 rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
-              onClick={() => toggleCardVisibility('relatorios')}
-              title="Ocultar card"
-            >
-              <EyeOff className="h-4 w-4 text-gray-600" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/50">
-                <BarChart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <h4 className="text-lg font-medium">Produtividade</h4>
-                <p className="text-sm text-gray-500">
-                  {productionData.produtividade?.toFixed(1) ?? '-'} unidades/hora
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {visibleCards.ranking && productionData && (
-          <Card variant="default" className="relative transition-colors hover:border-primary">
-            <button
-              className="absolute right-2 top-2 rounded-full bg-gray-200 p-1"
-              onClick={() => toggleCardVisibility('ranking')}
-            >
-              <EyeOff className="h-4 w-4 text-gray-600" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/50">
-                <List className="h-6 w-6 text-red-600 dark:text-red-400" />
-              </div>
-              <div>
-                <h4 className="text-lg font-medium">Perdas</h4>
-                <p className="text-sm text-gray-500">{productionData.perdas?.toFixed(1) ?? '-'}%</p>
-              </div>
-            </div>
-          </Card>
-        )}
-      </div>
-    </div>
+      <RegistroPerdaModal
+        isOpen={isPerdaOpen}
+        onClose={() => setIsPerdaOpen(false)}
+        localId={profile?.local_id ?? null}
+        produtos={produtos}
+        onSuccess={handlePerdaSuccess}
+      />
+    </>
   );
 }
 

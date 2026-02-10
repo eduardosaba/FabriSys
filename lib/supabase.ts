@@ -20,8 +20,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     flowType: 'pkce', // Usar PKCE flow para melhor segurança
   },
   global: {
+    // Workaround: garantir um Accept amplo para evitar 406 em alguns ambientes
+    // (em alguns dev-servers o header Accept pode ser alterado; ajuste conforme necessário)
     headers: {
-      Accept: 'application/json',
+      // PostgREST espera JSON — incluir explicitamente para evitar 406
+      Accept: 'application/json, text/plain, */*',
     },
   },
   realtime: {

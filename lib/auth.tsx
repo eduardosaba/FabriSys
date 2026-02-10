@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  ReactNode,
+} from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { useRouter } from 'next/navigation';
@@ -20,6 +28,7 @@ export type UserRole =
 interface Profile {
   id: string;
   role: UserRole;
+  local_id?: string;
   nome?: string;
   email?: string;
   organization_id?: string; // Vital para o SaaS
@@ -45,8 +54,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  // Ref para evitar chamadas duplicadas ao fetchProfile
+  const fetchingProfile = useRef(false);
+  const lastFetchedUserId = useRef<string | null>(null);
+
   // Função isolada para buscar o perfil nas tabelas corretas
-  const fetchProfile = async (userId: string, userEmail?: string) => {
+  const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
+    // Evitar chamadas duplicadas simultaneas
+    if (fetchingProfile.current && lastFetchedUserId.current === userId) {
+      console.log(`[AuthProvider] ⏭️ Pulando fetchProfile duplicado para ${userId}`);
+      return;
+    }
+
+    fetchingProfile.current = true;
+    lastFetchedUserId.current = userId;
     const startTime = performance.now();
     console.log(`[AuthProvider] 🔍 Iniciando fetchProfile para userId=${userId}`);
 
@@ -106,9 +127,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: (prof.role as UserRole) || 'user',
           nome: prof.full_name || prof.username || userEmail?.split('@')[0],
           email: userEmail,
+          // Copiar organization_id e outros campos úteis quando disponíveis
+          organization_id: prof.organization_id ?? undefined,
+          ativo: prof.ativo ?? undefined,
+          status_conta: prof.status_conta ?? undefined,
         };
         console.log('[AuthProvider] 👤 Perfil:', profileData);
-        setProfile(profileData);
+        setProfile(profileData as Profile);
         return;
       }
 
@@ -127,11 +152,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
       // Garante que o loading termine mesmo com erro
       setProfile({ id: userId, role: 'user', email: userEmail });
+    } finally {
+      fetchingProfile.current = false;
     }
-  };
+  }, []);
 
   useEffect(() => {
-    // Timeout de segurança
+    // Timeout de segurança: evita loading infinito se houver problemas de rede
+    // Se o profile não carregar em 7s, força loading=false
+    // Mensagem de warning é normal em conexões lentas
     const _timeout = setTimeout(() => {
       setLoading((prev) => {
         if (prev) {
@@ -167,18 +196,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      console.log(`[AuthProvider] 🔔 Auth state changed: ${event}`);
+
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
 
       if (currentSession?.user) {
-        // Só busca se o perfil ainda não estiver carregado ou se o usuário mudou
-        if (!profile || profile.id !== currentSession.user.id) {
+        // Busca profile apenas se o usuário mudou
+        if (lastFetchedUserId.current !== currentSession.user.id) {
           await fetchProfile(currentSession.user.id, currentSession.user.email);
         }
       } else {
         setProfile(null);
-        // Opcional: Redirecionar para login se deslogar
-        // router.push('/');
+        lastFetchedUserId.current = null;
       }
 
       setLoading(false);
@@ -188,18 +218,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
       clearTimeout(_timeout);
     };
-  }, []);
+  }, [fetchProfile]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
     setUser(null);
     setSession(null);
+    lastFetchedUserId.current = null;
+    fetchingProfile.current = false;
     router.push('/');
   };
 
   const updateProfile = async () => {
-    if (user) await fetchProfile(user.id, user.email);
+    if (user) {
+      lastFetchedUserId.current = null; // Força refetch
+      await fetchProfile(user.id, user.email);
+    }
   };
 
   const value = {

@@ -3,18 +3,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
-import {
-  ShoppingCart,
-  Copy,
-  RefreshCw,
-  AlertCircle,
-  CheckCircle,
-  ArrowRight,
-  ClipboardList,
-} from 'lucide-react';
+import { Copy, RefreshCw, AlertCircle, CheckCircle, ArrowRight, ClipboardList } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Button from '@/components/Button'; // Usando seu componente compartilhado
-import Loading from '@/components/ui/Loading'; // Ou use o Loader2 direto se preferir
+// Loading não é usado aqui
 
 // Tipo retornado pela função SQL calcular_compras_planejamento
 interface ItemCalculado {

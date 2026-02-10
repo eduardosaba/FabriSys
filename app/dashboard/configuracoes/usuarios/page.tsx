@@ -119,7 +119,7 @@ export default function UsuariosPage() {
       setIsModalOpen(false);
       setFormData({ nome: '', email: '', password: '', role: 'caixa', ativo: true });
       setEditingId(null);
-      carregarUsuarios();
+      void carregarUsuarios();
     } catch (err: any) {
       console.error(err);
       toast.error(`Erro: ${err.message}`);

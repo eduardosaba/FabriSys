@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Button from '@/components/Button';
-import { Tag, Plus, Trash2, Save } from 'lucide-react';
+import { Tag, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useConfirm } from '@/hooks/useConfirm';
-import { Modal, InputField, SelectField } from '@/components/ui/shared';
+import { Modal, InputField } from '@/components/ui/shared';
 
 interface Promocao {
   id: string;
@@ -59,7 +59,7 @@ export default function PromocoesPage() {
   };
 
   useEffect(() => {
-    carregar();
+    void carregar();
   }, []);
 
   const handleSave = async () => {
@@ -88,7 +88,7 @@ export default function PromocoesPage() {
     else {
       toast.success('Promoção criada!');
       setIsModalOpen(false);
-      carregar();
+      void carregar();
     }
   };
 
@@ -103,7 +103,7 @@ export default function PromocoesPage() {
 
     if (!confirmed) return;
     await supabase.from('promocoes').update({ ativo: false }).eq('id', id);
-    carregar();
+    void carregar();
   };
 
   return (

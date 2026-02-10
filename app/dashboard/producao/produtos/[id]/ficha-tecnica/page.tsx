@@ -25,7 +25,7 @@ export default function ProdutoFichaRedirectPage() {
 
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       try {
         const { data, error } = await supabase
           .from('fichas_tecnicas')
@@ -51,12 +51,12 @@ export default function ProdutoFichaRedirectPage() {
           const target = canEdit
             ? `/dashboard/producao/fichas-tecnicas/${slug}/edit`
             : `/dashboard/producao/fichas-tecnicas/${slug}/view`;
-          router.replace(target);
+          void router.replace(target);
           return;
         }
 
         // Não existe ficha: abrir criação (todos)
-        router.replace(`/dashboard/producao/fichas-tecnicas/nova?produto_final_id=${id}`);
+        void router.replace(`/dashboard/producao/fichas-tecnicas/nova?produto_final_id=${id}`);
       } catch (err) {
         console.error('Erro ao redirecionar ficha técnica:', err);
         setMessage('Erro ao redirecionar.');

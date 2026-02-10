@@ -16,6 +16,7 @@
     "test:ci": "set NEXT_PUBLIC_SUPABASE_URL=https://vrvpldtfutltmxkzfzkj.supabase.co && set NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZydnBsZHRmdXRsdG14a3pmemtqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwNTQ4NzEsImV4cCI6MjA3NzYzMDg3MX0.Nj0s_1CDJZ6au5dsfZjBk_ZmiuiosrdheFtbMMUBPRY",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:integration:decrement": "node scripts/test_decrementar_estoque.mjs",
     "typecheck": "tsc --noEmit",
     "type-check": "tsc --noEmit",
     "type-check:watch": "tsc --noEmit --watch",
@@ -33,6 +34,7 @@
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.78.0",
     "@types/nodemailer": "^7.0.3",
+    "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
@@ -87,7 +89,8 @@
       "form-data": "2.5.4",
       "glob": "10.5.0",
       "js-yaml": "4.1.1",
-      "url-regex": "5.0.0"
+      "url-regex": "5.0.0",
+      "baseline-browser-mapping": "^2.8.24"
     }
   }
 }

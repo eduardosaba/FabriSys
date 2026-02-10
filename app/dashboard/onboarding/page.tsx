@@ -160,7 +160,7 @@ export default function OnboardingPage() {
       } = supabase.storage.from('company-assets').getPublicUrl(path);
       setFormData((prev) => ({ ...prev, logo_url: publicUrl }));
       toast.success('Logo enviada!', { id: toastId });
-    } catch (err) {
+    } catch {
       toast.error('Erro no upload.', { id: toastId });
     }
   };

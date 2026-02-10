@@ -54,7 +54,7 @@ export default function PromocaoLauncher({ onUpdate }: Props) {
         setPromocoes(formatadas);
       }
     }
-    load();
+    void load();
   }, []);
 
   // 2. Atualizar cálculo sempre que um contador mudar

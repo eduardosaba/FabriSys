@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+
 import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';

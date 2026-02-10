@@ -40,7 +40,7 @@ export default function SistemaTab() {
         setLoading(false);
       }
     }
-    loadConfigs();
+    void loadConfigs();
   }, []);
 
   // Salvar alterações

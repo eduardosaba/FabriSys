@@ -73,7 +73,8 @@ function DashboardProducaoContent() {
         if (!mounted) return;
         setProdutos(data || []);
       } catch (e) {
-        console.warn('Erro ao carregar produtos para registro de perdas', e);
+        if (typeof window !== 'undefined')
+          console.warn('Erro ao carregar produtos para registro de perdas', e);
       }
     }
     void loadProdutos();
@@ -147,7 +148,7 @@ function DashboardProducaoContent() {
       // Revalidação será feita automaticamente pelo SWR quando os filtros mudarem
       console.log('Filtros aplicados, dados serão revalidados automaticamente');
     } catch (e) {
-      console.warn('Erro ao aplicar filtros', e);
+      if (typeof window !== 'undefined') console.warn('Erro ao aplicar filtros', e);
     }
   }, []);
 

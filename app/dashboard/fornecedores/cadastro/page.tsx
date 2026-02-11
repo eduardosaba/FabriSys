@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,12 +9,21 @@ import Button from '@/components/Button';
 import Text from '@/components/ui/Text';
 import Card from '@/components/ui/Card';
 import Panel from '@/components/ui/Panel';
-import { maskCNPJ, onlyDigits } from '@/lib/utils';
+import { maskCpfCnpj, onlyDigits } from '@/lib/utils';
+import { useAuth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 
 const schema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
-  cnpj: z.string().refine((v) => onlyDigits(v).length === 14, 'CNPJ inválido'),
+  cnpj: z
+    .string()
+    .optional()
+    .nullish()
+    .refine((v) => {
+      if (!v) return true; // opcional
+      const len = onlyDigits(v).length;
+      return len === 11 || len === 14;
+    }, 'CNPJ/CPF inválido'),
   email: z.string().email('Email inválido').optional().nullish(),
   telefone: z
     .string()
@@ -23,13 +32,21 @@ const schema = z.object({
     .optional()
     .nullish(),
   endereco: z.string().optional().nullish(),
+  categoria_id: z.string().optional().nullish(),
 });
 
 type FormData = z.infer<typeof schema>;
 
+interface CategoriaOption {
+  id: number;
+  nome: string;
+}
+
 export default function CadastroFornecedorPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const { profile } = useAuth();
+  const [categorias, setCategorias] = useState<CategoriaOption[]>([]);
   const {
     register,
     handleSubmit,
@@ -39,7 +56,10 @@ export default function CadastroFornecedorPage() {
   async function onSubmit(values: FormData) {
     try {
       setSaving(true);
-      const payload = { ...values, cnpj: onlyDigits(values.cnpj) };
+      const payload: Record<string, unknown> = { ...values };
+      if (values.cnpj) payload.cnpj = onlyDigits(values.cnpj);
+      else delete payload.cnpj;
+      if (values.categoria_id) payload.categoria_id = Number(values.categoria_id);
       const { error } = await supabase.from('fornecedores').insert(payload);
       if (error) throw error;
       router.push('/dashboard/fornecedores');
@@ -50,6 +70,26 @@ export default function CadastroFornecedorPage() {
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        let q = supabase.from('categorias').select('id, nome').order('nome');
+        if (profile?.organization_id) q = q.eq('organization_id', profile.organization_id);
+        const { data, error } = await q;
+        if (error) throw error;
+        if (!mounted) return;
+        setCategorias((data || []) as CategoriaOption[]);
+      } catch (e) {
+        console.error('Erro ao carregar categorias', e);
+      }
+    }
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.organization_id]);
 
   return (
     <div className="space-y-6">
@@ -82,7 +122,7 @@ export default function CadastroFornecedorPage() {
             <input
               {...register('cnpj')}
               onChange={(e) => {
-                const masked = maskCNPJ(e.target.value);
+                const masked = maskCpfCnpj(e.target.value);
                 const setter = Object.getOwnPropertyDescriptor(
                   window.HTMLInputElement.prototype,
                   'value'
@@ -146,6 +186,23 @@ export default function CadastroFornecedorPage() {
                 {errors.endereco.message}
               </Text>
             )}
+          </div>
+
+          <div>
+            <Text variant="body-sm" weight="semibold">
+              Categoria
+            </Text>
+            <select
+              {...register('categoria_id')}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="">-- Sem categoria --</option>
+              {categorias.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex justify-end gap-3">

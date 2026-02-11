@@ -39,8 +39,9 @@
   /* Variáveis do 🌞 tema claro */
   --background: var(--light-background, #ffffff);
   --foreground: var(--light-text, #171717);
-  --primary: var(--light-primary, #ffffff);
-  --secondary: var(--light-secondary, #4f46e5);
+  /* Mapeamento de cores padrão: orange → primary, blue → secondary */
+  --primary: var(--light-primary, #f97316); /* Laranja padrão (primary) */
+  --secondary: var(--light-secondary, #2563eb); /* Azul padrão (secondary) */
   --accent: var(--light-accent, #f97316);
   --radius: var(--border-radius, 0.5rem);
 
@@ -68,6 +69,14 @@
   --loading-button-hover: rgb(29 78 216);
   --trend-positive: rgb(34 197 94);
   --trend-negative: rgb(239 68 68);
+  /* Botões padrão vinculados às cores primárias/segundárias */
+  --botao-salvar: var(--primary);
+  --botao-salvar-ativo: #c2410f;
+  --botao-salvar-desabilitado: #9ca3af;
+  --botao-cancelar: #ef4444;
+  --botao-cancelar-ativo: #f87171;
+  --botao-pesquisar: var(--secondary);
+  --botao-pesquisar-ativo: #1e40af;
   --sidebar-active-bg: rgb(245 243 255);
   --sidebar-active-text: rgb(79 70 229);
 }

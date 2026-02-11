@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Button from '@/components/Button';
-import { Tag, Plus, Trash2 } from 'lucide-react';
+import { Tag, Plus, Trash2, Edit } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -25,6 +25,7 @@ export default function PromocoesPage() {
   const [produtos, setProdutos] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Form
   const [form, setForm] = useState({
@@ -76,20 +77,51 @@ export default function PromocoesPage() {
     }
 
     setLoading(true);
-    const { error } = await supabase.from('promocoes').insert({
-      nome: form.nome,
-      produto_id: form.produto_id,
-      qtd_gatilho: Number(form.qtd_gatilho),
-      preco_final: Number(form.preco_final),
-    });
-    setLoading(false);
+    if (editingId) {
+      const { error } = await supabase
+        .from('promocoes')
+        .update({
+          nome: form.nome,
+          produto_id: form.produto_id,
+          qtd_gatilho: Number(form.qtd_gatilho),
+          preco_final: Number(form.preco_final),
+        })
+        .eq('id', editingId);
+      setLoading(false);
+      if (error) toast.error('Erro ao atualizar');
+      else {
+        toast.success('Promoção atualizada!');
+        setIsModalOpen(false);
+        setEditingId(null);
+        void carregar();
+      }
+    } else {
+      const { error } = await supabase.from('promocoes').insert({
+        nome: form.nome,
+        produto_id: form.produto_id,
+        qtd_gatilho: Number(form.qtd_gatilho),
+        preco_final: Number(form.preco_final),
+      });
+      setLoading(false);
 
-    if (error) toast.error('Erro ao salvar');
-    else {
-      toast.success('Promoção criada!');
-      setIsModalOpen(false);
-      void carregar();
+      if (error) toast.error('Erro ao salvar');
+      else {
+        toast.success('Promoção criada!');
+        setIsModalOpen(false);
+        void carregar();
+      }
     }
+  };
+
+  const handleEdit = (promo: Promocao) => {
+    setEditingId(promo.id);
+    setForm({
+      nome: promo.nome,
+      produto_id: promo.produto_id,
+      qtd_gatilho: promo.qtd_gatilho,
+      preco_final: promo.preco_final,
+    });
+    setIsModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -107,13 +139,21 @@ export default function PromocoesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6 animate-fade-up">
+    <div className="flex flex-col gap-4 p-3 md:gap-6 md:p-6 pb-20 md:pb-6 animate-fade-up">
       <PageHeader
         title="Regras de Promoções"
         description="Defina combos e descontos permitidos no PDV."
         icon={Tag}
       >
-        <Button icon={Plus} onClick={() => setIsModalOpen(true)}>
+        <Button
+          icon={Plus}
+          onClick={() => {
+            setEditingId(null);
+            setForm({ nome: '', produto_id: '', qtd_gatilho: 2, preco_final: 0 });
+            setIsModalOpen(true);
+          }}
+          className="w-full md:w-auto"
+        >
           Nova Promoção
         </Button>
       </PageHeader>
@@ -128,12 +168,21 @@ export default function PromocoesPage() {
               key={promo.id}
               className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative group"
             >
-              <button
-                onClick={() => handleDelete(promo.id)}
-                className="absolute top-4 right-4 text-slate-300 hover:text-red-500"
-              >
-                <Trash2 size={18} />
-              </button>
+              <div className="absolute top-3 right-3 flex gap-2">
+                <button
+                  aria-label={`Editar ${promo.nome}`}
+                  onClick={() => handleEdit(promo)}
+                  className="text-slate-400 hover:text-primary"
+                >
+                  <Edit size={18} />
+                </button>
+                <button
+                  onClick={() => handleDelete(promo.id)}
+                  className="text-slate-300 hover:text-red-500"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
 
               <div className="flex items-center gap-2 mb-2">
                 <Tag size={20} className="text-pink-500" />
@@ -158,7 +207,15 @@ export default function PromocoesPage() {
         })}
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Criar Promoção">
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingId(null);
+          setForm({ nome: '', produto_id: '', qtd_gatilho: 2, preco_final: 0 });
+        }}
+        title={editingId ? 'Editar Promoção' : 'Criar Promoção'}
+      >
         <div className="space-y-4">
           <InputField
             label="Nome da Promoção"
@@ -198,12 +255,20 @@ export default function PromocoesPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsModalOpen(false);
+                setEditingId(null);
+                setForm({ nome: '', produto_id: '', qtd_gatilho: 2, preco_final: 0 });
+              }}
+              className="w-full sm:w-auto"
+            >
               Cancelar
             </Button>
-            <Button onClick={handleSave} loading={loading}>
-              Salvar
+            <Button onClick={handleSave} loading={loading} className="w-full sm:w-auto">
+              {editingId ? 'Atualizar' : 'Salvar'}
             </Button>
           </div>
         </div>

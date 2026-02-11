@@ -67,7 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // --- MODO SISTEMA NORMAL (Com Menu e Header) ---
   return (
-    <AuthGuard requiredRoles={['admin', 'fabrica', 'master', 'pdv', 'gerente', 'estoque']}>
+    <AuthGuard requiredRoles={['admin', 'fabrica', 'master', 'pdv', 'gerente', 'compras']}>
       <LicenseGuard>
         <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
           {/* Overlay Mobile */}

@@ -10,6 +10,7 @@ import Button from '@/components/Button';
 import {
   ShoppingCart,
   Trash2,
+  AlertTriangle,
   CreditCard,
   Banknote,
   QrCode,
@@ -57,19 +58,46 @@ export default function CaixaPDVPage() {
   const [descontoFidelidade, setDescontoFidelidade] = useState(0);
   const [pontosUsados, setPontosUsados] = useState(0);
   const [vendasHoje, setVendasHoje] = useState(0);
+  const [showCartModal, setShowCartModal] = useState(false);
+  const [drawerMounted, setDrawerMounted] = useState(false);
+  const [drawerEntering, setDrawerEntering] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (showCartModal) {
+      setDrawerMounted(true);
+      // trigger enter transition on next tick
+      const t = setTimeout(() => setDrawerEntering(true), 10);
+      return () => clearTimeout(t);
+    } else {
+      // exit transition
+      setDrawerEntering(false);
+      const t = setTimeout(() => setDrawerMounted(false), 300);
+      return () => clearTimeout(t);
+    }
+  }, [showCartModal]);
+
+  function handlePaymentClick(method: 'dinheiro' | 'pix' | 'cartao_credito') {
+    setSelectedPayment(method);
+    // small delay to show effect before processing
+    setTimeout(() => void finalizarVenda(method), 150);
+    // clear visual after a short moment
+    setTimeout(() => setSelectedPayment(null), 1200);
+  }
   useEffect(() => {
     async function initPDV() {
       try {
         setLoading(true);
 
         // 0. Carregar Configuração Global (Modo de Operação)
-        const { data: config } = await supabase
+        const { data: config, error: cfgErr } = await supabase
           .from('configuracoes_sistema')
           .select('valor')
           .eq('chave', 'modo_pdv')
-          .single();
+          .maybeSingle();
 
-        if (config) setModoPdv(config.valor as 'padrao' | 'inventario');
+        if (cfgErr) console.warn('Erro ao ler modo_pdv:', cfgErr);
+        if (config && config.valor) setModoPdv(config.valor as 'padrao' | 'inventario');
 
         // 1. Descobrir qual loja é essa (Mock: pega a primeira do tipo PDV)
         // 1. Identificar a loja — preferir a loja do perfil do usuário
@@ -93,12 +121,17 @@ export default function CaixaPDVPage() {
         setLocalId(meuLocalId);
 
         // 2. Verificar se o Caixa está Aberto para esta loja
-        const { data: caixa } = await supabase
+        let caixaQuery: any = supabase
           .from('caixa_sessao')
           .select('id')
           .eq('local_id', meuLocalId)
-          .eq('status', 'aberto')
-          .maybeSingle();
+          .eq('status', 'aberto');
+
+        if ((profile as any)?.role !== 'admin' && (profile as any)?.role !== 'master') {
+          caixaQuery = caixaQuery.eq('usuario_abertura', (profile as any)?.id);
+        }
+
+        const { data: caixa } = await caixaQuery.maybeSingle();
 
         if (caixa) {
           setCaixaAberto(true);
@@ -163,6 +196,14 @@ export default function CaixaPDVPage() {
       }
       return [...prev, { produto, quantidade: 1 }];
     });
+    // Em mobile, ao adicionar, abrir o drawer por um curto período para feedback visual
+    if (typeof window !== 'undefined') {
+      const isMobile = window.matchMedia('(max-width: 767px)').matches;
+      if (isMobile && !showCartModal) {
+        setShowCartModal(true);
+        setTimeout(() => setShowCartModal(false), 1200);
+      }
+    }
   };
 
   const removerDoCarrinho = (produtoId: string) => {
@@ -215,12 +256,17 @@ export default function CaixaPDVPage() {
 
     try {
       // Buscar ID do caixa aberto novamente para garantir integridade
-      const { data: caixa } = await supabase
+      let caixaQuery: any = supabase
         .from('caixa_sessao')
         .select('id')
         .eq('local_id', localId)
-        .eq('status', 'aberto')
-        .maybeSingle();
+        .eq('status', 'aberto');
+
+      if ((profile as any)?.role !== 'admin' && (profile as any)?.role !== 'master') {
+        caixaQuery = caixaQuery.eq('usuario_abertura', (profile as any)?.id);
+      }
+
+      const { data: caixa } = await caixaQuery.maybeSingle();
 
       if (!caixa) throw new Error('Caixa fechado! Não é possível vender.');
 
@@ -233,6 +279,7 @@ export default function CaixaPDVPage() {
         .insert({
           local_id: localId,
           caixa_id: caixa.id,
+          organization_id: profile?.organization_id,
           total_venda: totalLiquido,
           metodo_pagamento: metodo,
           status: 'concluida',
@@ -278,7 +325,7 @@ export default function CaixaPDVPage() {
             });
           } catch (e) {
             // falha nos pontos não deve bloquear a finalização da venda
-            console.warn('Falha ao atualizar pontos (usar):', e);
+            if (typeof window !== 'undefined') console.warn('Falha ao atualizar pontos (usar):', e);
           }
         }
         if (pontosGanhos > 0) {
@@ -289,7 +336,8 @@ export default function CaixaPDVPage() {
             });
           } catch (e) {
             // falha nos pontos não deve bloquear a finalização da venda
-            console.warn('Falha ao atualizar pontos (ganhar):', e);
+            if (typeof window !== 'undefined')
+              console.warn('Falha ao atualizar pontos (ganhar):', e);
           }
         }
       }
@@ -348,9 +396,17 @@ export default function CaixaPDVPage() {
 
   return (
     <>
-      <div className="flex flex-col h-[calc(100vh-6rem)] bg-slate-100 animate-fade-up">
+      <div className="flex flex-col h-[calc(100vh-6rem)] bg-slate-100 animate-fade-up pb-24">
         <DraggableCalculator />
         {localId && <SolicitacaoReposicao localId={localId} />}
+        {/* Mobile floating Registrar Perda - posicionado acima da barra de pagamento fixa */}
+        <button
+          onClick={() => setIsPerdaOpen(true)}
+          title="Registrar Perda"
+          className="md:hidden fixed right-4 bottom-20 z-50 bg-red-600 text-white p-3 rounded-full shadow-lg flex items-center justify-center"
+        >
+          <AlertTriangle size={18} />
+        </button>
         {/* Aviso de Modo de Operação (Se for Inventário) */}
         {modoPdv === 'inventario' && (
           <div className="bg-orange-100 border-b border-orange-200 text-orange-800 px-4 py-2 text-sm flex items-center justify-center gap-2">
@@ -386,10 +442,10 @@ export default function CaixaPDVPage() {
                   <div
                     key={produto.id}
                     onClick={() => addAoCarrinho(produto)}
-                    className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer flex flex-col justify-between h-40 group select-none active:scale-95 duration-100"
+                    className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-orange-300 transition-all cursor-pointer flex flex-col justify-between h-40 group select-none active:scale-95 duration-100"
                   >
                     <div>
-                      <h3 className="font-bold text-slate-800 line-clamp-2 group-hover:text-blue-700">
+                      <h3 className="font-bold text-slate-800 line-clamp-2 group-hover:text-orange-700">
                         {produto.nome}
                       </h3>
                       <p
@@ -409,7 +465,7 @@ export default function CaixaPDVPage() {
                             solicitarReposicaoRapida(produto.id, 10);
                           }}
                           title="Solicitar Reposição (10 un)"
-                          className="text-xs px-2 py-1 bg-orange-50 border border-orange-200 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors flex items-center gap-1"
+                          className="text-xs px-2 py-1 bg-orange-50 border border-orange-200 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors flex items-center gap-1 touch-none"
                         >
                           <Send size={14} />
                           Repor
@@ -437,7 +493,7 @@ export default function CaixaPDVPage() {
           </div>
 
           {/* DIREITA: CARRINHO E PAGAMENTO */}
-          <div className="w-96 bg-white rounded-xl shadow-lg border border-slate-200 flex flex-col">
+          <div className="hidden md:flex w-96 bg-white rounded-xl shadow-lg border border-slate-200 flex-col sticky top-16 self-start max-h-[calc(100vh-6rem)]">
             <div className="p-4 border-b border-slate-100 bg-slate-50 rounded-t-xl flex items-center justify-between">
               <h2 className="font-bold text-lg flex items-center gap-2 text-slate-800">
                 <ShoppingCart /> Carrinho
@@ -454,7 +510,7 @@ export default function CaixaPDVPage() {
             </div>
 
             {/* Lista de Itens */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ paddingBottom: '1rem' }}>
               {carrinho.length === 0 ? (
                 <div className="text-center text-slate-400 mt-10 flex flex-col items-center">
                   <ShoppingCart size={48} className="opacity-20 mb-2" />
@@ -523,7 +579,7 @@ export default function CaixaPDVPage() {
                       R$ {totalVenda.toFixed(2)}
                     </span>
                   )}
-                  <span className="text-3xl font-bold text-blue-700">
+                  <span className="text-3xl font-bold text-orange-700">
                     R$ {totalLiquido.toFixed(2)}
                   </span>
                 </div>
@@ -531,27 +587,27 @@ export default function CaixaPDVPage() {
 
               <div className="grid grid-cols-3 gap-2">
                 <button
-                  onClick={() => finalizarVenda('dinheiro')}
+                  onClick={() => handlePaymentClick('dinheiro')}
                   disabled={carrinho.length === 0}
-                  className="flex flex-col items-center justify-center p-3 rounded-lg border bg-white hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                  className={`flex flex-col items-center justify-center p-3 rounded-lg border ${selectedPayment === 'dinheiro' ? 'bg-orange-800 text-white scale-95 shadow-lg' : 'bg-white hover:bg-orange-50 hover:border-orange-200 hover:text-orange-700'} transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95`}
                 >
-                  <Banknote size={24} className="mb-1" />
+                  <Banknote size={20} className="mb-1" />
                   <span className="text-xs font-bold">Dinheiro</span>
                 </button>
                 <button
-                  onClick={() => finalizarVenda('pix')}
+                  onClick={() => handlePaymentClick('pix')}
                   disabled={carrinho.length === 0}
-                  className="flex flex-col items-center justify-center p-3 rounded-lg border bg-white hover:bg-teal-50 hover:border-teal-200 hover:text-teal-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                  className={`flex flex-col items-center justify-center p-3 rounded-lg border ${selectedPayment === 'pix' ? 'bg-teal-700 text-white scale-95 shadow-lg' : 'bg-white hover:bg-teal-50 hover:border-teal-200 hover:text-teal-700'} transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95`}
                 >
-                  <QrCode size={24} className="mb-1" />
+                  <QrCode size={20} className="mb-1" />
                   <span className="text-xs font-bold">Pix</span>
                 </button>
                 <button
-                  onClick={() => finalizarVenda('cartao_credito')}
+                  onClick={() => handlePaymentClick('cartao_credito')}
                   disabled={carrinho.length === 0}
-                  className="flex flex-col items-center justify-center p-3 rounded-lg border bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                  className={`flex flex-col items-center justify-center p-3 rounded-lg border ${selectedPayment === 'cartao_credito' ? 'bg-blue-700 text-white scale-95 shadow-lg' : 'bg-white hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700'} transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95`}
                 >
-                  <CreditCard size={24} className="mb-1" />
+                  <CreditCard size={20} className="mb-1" />
                   <span className="text-xs font-bold">Cartão</span>
                 </button>
               </div>
@@ -559,6 +615,159 @@ export default function CaixaPDVPage() {
           </div>
         </div>
       </div>
+      {/* Mobile Fixed Payment Bar */}
+      <div className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-white border-t border-slate-200 p-2 flex items-center gap-2">
+        <div className="flex-1 pr-2">
+          <div className="text-xs text-slate-500">Total</div>
+          <div className="text-lg font-bold text-orange-700">R$ {totalLiquido.toFixed(2)}</div>
+        </div>
+        <button
+          onClick={() => setShowCartModal(true)}
+          aria-label="Ver carrinho"
+          className="w-11 h-11 flex items-center justify-center bg-white border rounded-lg text-slate-700"
+        >
+          <ShoppingCart size={18} />
+        </button>
+        <button
+          onClick={() => handlePaymentClick('dinheiro')}
+          disabled={carrinho.length === 0}
+          className={`px-3 py-2 rounded-lg text-white flex items-center gap-2 ${selectedPayment === 'dinheiro' ? 'bg-orange-800 scale-95 shadow-lg' : 'bg-orange-600 hover:bg-orange-700'}`}
+        >
+          <Banknote size={16} /> Dinheiro
+        </button>
+        <button
+          onClick={() => handlePaymentClick('pix')}
+          disabled={carrinho.length === 0}
+          className={`px-3 py-2 rounded-lg flex items-center gap-2 ${selectedPayment === 'pix' ? 'bg-teal-700 text-white scale-95 shadow-lg' : 'bg-white border text-teal-700 hover:bg-teal-50'}`}
+        >
+          <QrCode size={16} /> Pix
+        </button>
+        <button
+          onClick={() => handlePaymentClick('cartao_credito')}
+          disabled={carrinho.length === 0}
+          className={`px-3 py-2 rounded-lg flex items-center gap-2 ${selectedPayment === 'cartao_credito' ? 'bg-blue-700 text-white scale-95 shadow-lg' : 'bg-white border text-blue-700 hover:bg-blue-50'}`}
+        >
+          <CreditCard size={16} /> Cartão
+        </button>
+      </div>
+
+      {/* Drawer (animated) for mobile and small screens */}
+      {drawerMounted && (
+        <div
+          className={`fixed inset-0 z-60 flex ${drawerEntering ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        >
+          {/* overlay */}
+          <div
+            onClick={() => setShowCartModal(false)}
+            className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${drawerEntering ? 'opacity-100' : 'opacity-0'}`}
+          />
+
+          <aside
+            className={`relative ml-auto bg-white shadow-2xl w-full md:w-96 h-full transform transition-transform duration-300 ${drawerEntering ? 'translate-x-0' : 'translate-x-full'}`}
+          >
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-bold">Carrinho</h3>
+              <button onClick={() => setShowCartModal(false)} className="text-slate-600">
+                Fechar
+              </button>
+            </div>
+
+            <div className="p-4 overflow-auto h-full">
+              <div className="space-y-3">
+                {carrinho.length === 0 ? (
+                  <div className="text-center text-slate-400 mt-6">
+                    <ShoppingCart size={48} className="opacity-20 mx-auto mb-2" />
+                    <p>Carrinho vazio</p>
+                  </div>
+                ) : (
+                  carrinho.map((item) => (
+                    <div
+                      key={item.produto.id}
+                      className="flex justify-between items-center border-b border-slate-100 pb-3"
+                    >
+                      <div>
+                        <p className="font-medium text-sm text-slate-800">{item.produto.nome}</p>
+                        <p className="text-xs text-slate-500">
+                          R$ {item.produto.preco_venda.toFixed(2)} un
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center border rounded-lg">
+                          <button
+                            onClick={() => alterarQtd(item.produto.id, -1)}
+                            className="p-1 hover:bg-slate-100 text-slate-500"
+                          >
+                            <Minus size={14} />
+                          </button>
+                          <span className="px-2 text-sm font-bold w-8 text-center">
+                            {item.quantidade}
+                          </span>
+                          <button
+                            onClick={() => alterarQtd(item.produto.id, 1)}
+                            className="p-1 hover:bg-slate-100 text-slate-500"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => removerDoCarrinho(item.produto.id)}
+                          className="text-red-400 hover:text-red-600"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="mt-4 border-t pt-4 sticky bottom-0 bg-white">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-sm text-slate-500">Total</span>
+                  <span className="text-lg font-bold text-orange-700">
+                    R$ {totalLiquido.toFixed(2)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => {
+                      setShowCartModal(false);
+                      handlePaymentClick('dinheiro');
+                    }}
+                    disabled={carrinho.length === 0}
+                    className={`p-3 rounded-lg ${selectedPayment === 'dinheiro' ? 'bg-orange-800 text-white scale-95 shadow-lg' : 'bg-orange-600 text-white'} `}
+                  >
+                    <Banknote size={16} className="inline-block mr-1" />
+                    Dinheiro
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCartModal(false);
+                      handlePaymentClick('pix');
+                    }}
+                    disabled={carrinho.length === 0}
+                    className={`p-3 rounded-lg ${selectedPayment === 'pix' ? 'bg-teal-700 text-white scale-95 shadow-lg' : 'bg-white border text-teal-700'}`}
+                  >
+                    <QrCode size={16} className="inline-block mr-1" />
+                    Pix
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCartModal(false);
+                      handlePaymentClick('cartao_credito');
+                    }}
+                    disabled={carrinho.length === 0}
+                    className={`p-3 rounded-lg ${selectedPayment === 'cartao_credito' ? 'bg-blue-700 text-white scale-95 shadow-lg' : 'bg-white border text-blue-700'}`}
+                  >
+                    <CreditCard size={16} className="inline-block mr-1" />
+                    Cartão
+                  </button>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
       <RegistroPerdaModal
         isOpen={isPerdaOpen}
         onClose={() => setIsPerdaOpen(false)}

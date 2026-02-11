@@ -288,7 +288,7 @@ export default function ControleEstoquePage() {
             console.log('Inserted id(s):', ids);
           }
         } catch (e) {
-          console.warn('Erro ao serializar insertData', e);
+          if (typeof window !== 'undefined') console.warn('Erro ao serializar insertData', e);
         }
         toast.remove(`save-item-${idx}`);
         if (errInsert) {
@@ -305,7 +305,8 @@ export default function ControleEstoquePage() {
           .single();
 
         if (errSelect) {
-          console.warn('Aviso: erro ao selecionar insumoAtual', errSelect);
+          if (typeof window !== 'undefined')
+            console.warn('Aviso: erro ao selecionar insumoAtual', errSelect);
         }
 
         const currentEstoque =

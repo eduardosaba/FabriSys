@@ -35,10 +35,11 @@ export default function ExpedicaoPage() {
           const { data: fab } = await q.maybeSingle();
           if (fab) setFabrica({ id: fab.id, nome: fab.nome });
         } catch (errFab) {
-          console.warn(
-            'Não foi possível carregar fábrica por organização, tentando sem filtro',
-            errFab
-          );
+          if (typeof window !== 'undefined')
+            console.warn(
+              'Não foi possível carregar fábrica por organização, tentando sem filtro',
+              errFab
+            );
           try {
             const { data: fab } = await supabase
               .from('locais')
@@ -104,10 +105,8 @@ export default function ExpedicaoPage() {
       }
     }
 
-    // Pequeno delay para garantir auth
-    setTimeout(() => {
-      void carregarDados();
-    }, 500);
+    // Chama carregarDados assim que `profile` estiver disponível (sem timeout)
+    void carregarDados();
   }, [profile]);
 
   const handleEnviar = async () => {
@@ -161,7 +160,7 @@ export default function ExpedicaoPage() {
             <Warehouse size={32} />
             <span>Estoque Fábrica</span>
           </div>
-          <ArrowRight size={32} className="text-blue-500 animate-pulse" />
+          <ArrowRight size={32} className="text-orange-500 animate-pulse" />
           <div className="flex items-center gap-3 text-slate-500 font-bold">
             <Truck size={32} />
             <span>Loja (PDV)</span>
@@ -175,7 +174,7 @@ export default function ExpedicaoPage() {
               Produto Disponível
             </label>
             <select
-              className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 focus:ring-orange-100 focus:border-orange-500 outline-none"
               value={produtoSelecionado}
               onChange={(e) => setProdutoSelecionado(e.target.value)}
             >
@@ -194,7 +193,7 @@ export default function ExpedicaoPage() {
               Ordem Finalizada (opcional)
             </label>
             <select
-              className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 focus:ring-orange-100 focus:border-orange-500 outline-none"
               value={ordemSelecionada ?? ''}
               onChange={(e) => {
                 const val = e.target.value || null;
@@ -219,7 +218,7 @@ export default function ExpedicaoPage() {
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">Loja de Destino</label>
             <select
-              className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 focus:ring-orange-100 focus:border-orange-500 outline-none"
               value={lojaDestino}
               onChange={(e) => setLojaDestino(e.target.value)}
             >
@@ -239,7 +238,7 @@ export default function ExpedicaoPage() {
             </label>
             <input
               type="number"
-              className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full p-3 border rounded-lg bg-slate-50 focus:ring-2 focus:ring-orange-100 focus:border-orange-500 outline-none"
               placeholder="0.00"
               value={quantidade}
               onChange={(e) => setQuantidade(e.target.value)}
@@ -251,7 +250,7 @@ export default function ExpedicaoPage() {
           <Button
             onClick={handleEnviar}
             loading={enviando}
-            className="px-8 py-4 text-lg bg-blue-600 hover:bg-blue-700 shadow-blue-200 shadow-lg"
+            className="px-8 py-4 text-lg bg-orange-600 hover:bg-orange-700 shadow-orange-200 shadow-lg"
             icon={Package}
           >
             Confirmar Envio

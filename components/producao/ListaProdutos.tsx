@@ -95,7 +95,93 @@ export default function ListaProdutos({ produtos, onUpdate }: ListaProdutosProps
           />
         ) : (
           <>
-            <div className="overflow-x-auto">
+            {/* Mobile: mostrar como cards */}
+            <div className="block sm:hidden">
+              <ul className="space-y-4 p-4">
+                {filters.paginatedItems.map((produto) => (
+                  <li
+                    key={produto.id}
+                    className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex items-start gap-4"
+                  >
+                    <div className="flex-shrink-0 h-16 w-16 rounded-md overflow-hidden bg-gray-100">
+                      {produto.imagem_url ? (
+                        <Image
+                          src={produto.imagem_url}
+                          alt={produto.nome}
+                          width={64}
+                          height={64}
+                          className="object-cover h-16 w-16 rounded-md"
+                        />
+                      ) : (
+                        <div className="h-16 w-16 bg-gray-200 rounded-md" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-base font-medium text-gray-900 truncate">
+                          {produto.nome}
+                        </div>
+                        <div className="text-sm font-semibold text-gray-900">
+                          {formatCurrency(produto.preco_venda)}
+                        </div>
+                      </div>
+                      {produto.descricao && (
+                        <div className="text-sm text-gray-500 truncate">{produto.descricao}</div>
+                      )}
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="text-sm text-gray-500">
+                          Código: {produto.codigo_interno || '-'}
+                        </div>
+                        <div>
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold leading-5
+                              ${produto.ativo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+                          >
+                            {produto.ativo ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          onClick={() => handleViewFicha(produto)}
+                          className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <FileText className="h-4 w-4" />
+                          Ficha
+                        </button>
+                        <button
+                          onClick={() =>
+                            (window.location.href = `/dashboard/producao/produtos/${produto.id}`)
+                          }
+                          className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-yellow-600 hover:bg-yellow-50 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                        >
+                          <Edit className="h-4 w-4" />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedProduct(produto);
+                            setDeleteModal(true);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+                          disabled={deletingProductId === produto.id}
+                        >
+                          {deletingProductId === produto.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                          <span className="sr-only">Excluir</span>
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Desktop / Tablet: tabela (oculta no mobile) */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>

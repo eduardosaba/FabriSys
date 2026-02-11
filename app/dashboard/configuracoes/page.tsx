@@ -16,16 +16,16 @@ export default function ConfiguracoesPage() {
   >('usuarios');
 
   return (
-    <div className="container space-y-6 py-6 animate-fade-up">
+    <div className="container space-y-4 md:space-y-6 py-4 md:py-6 animate-fade-up max-h-[calc(100vh-6rem)] overflow-auto px-3 md:px-0">
       <PageHeader
         title="Configurações"
         description="Gerencie as regras de negócio, acessos e a identidade visual do Confectio."
         icon={Settings}
       />
 
-      <div className="flex flex-wrap gap-4 border-b border-slate-200 pb-0">
+      <div className="flex flex-wrap gap-2 md:gap-4 border-b border-slate-200 pb-0 overflow-x-auto">
         <button
-          className={`flex items-center gap-2 pb-3 px-2 text-sm font-medium border-b-2 transition-all ${
+          className={`flex items-center gap-2 pb-3 px-2 text-xs md:text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
             activeTab === 'usuarios'
               ? 'border-green-600 text-green-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -33,11 +33,12 @@ export default function ConfiguracoesPage() {
           onClick={() => setActiveTab('usuarios')}
         >
           <Users size={18} />
-          Equipe & Usuários
+          <span className="hidden sm:inline">Equipe & Usuários</span>
+          <span className="sm:hidden">Equipe</span>
         </button>
 
         <button
-          className={`flex items-center gap-2 pb-3 px-2 text-sm font-medium border-b-2 transition-all ${
+          className={`flex items-center gap-2 pb-3 px-2 text-xs md:text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
             activeTab === 'sistema'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -45,11 +46,12 @@ export default function ConfiguracoesPage() {
           onClick={() => setActiveTab('sistema')}
         >
           <Sliders size={18} />
-          Regras do Sistema
+          <span className="hidden sm:inline">Regras do Sistema</span>
+          <span className="sm:hidden">Sistema</span>
         </button>
 
         <button
-          className={`flex items-center gap-2 pb-3 px-2 text-sm font-medium border-b-2 transition-all ${
+          className={`flex items-center gap-2 pb-3 px-2 text-xs md:text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
             activeTab === 'permissoes'
               ? 'border-purple-600 text-purple-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -57,11 +59,11 @@ export default function ConfiguracoesPage() {
           onClick={() => setActiveTab('permissoes')}
         >
           <Shield size={18} />
-          Permissões de Acesso
+          Permissões
         </button>
 
         <button
-          className={`flex items-center gap-2 pb-3 px-2 text-sm font-medium border-b-2 transition-all ${
+          className={`flex items-center gap-2 pb-3 px-2 text-xs md:text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
             activeTab === 'customizacao'
               ? 'border-pink-600 text-pink-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -69,7 +71,8 @@ export default function ConfiguracoesPage() {
           onClick={() => setActiveTab('customizacao')}
         >
           <Palette size={18} />
-          Aparência & Tema
+          <span className="hidden sm:inline">Aparência & Tema</span>
+          <span className="sm:hidden">Tema</span>
         </button>
       </div>
 

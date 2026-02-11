@@ -64,6 +64,12 @@ export default function ControleCaixaPage() {
   const [_promosAplicadas, setPromosAplicadas] = useState<any[]>([]);
   const [valorTotalDescontos, setValorTotalDescontos] = useState(0);
 
+  // CORREÇÃO: estabiliza callback para evitar loop infinito causado por função inline
+  const handlePromocaoUpdate = useCallback((total: number, lista: any[]) => {
+    setValorTotalDescontos((prev) => (prev !== total ? total : prev));
+    setPromosAplicadas(lista);
+  }, []);
+
   const carregarEstado = useCallback(async () => {
     if (!profile?.id) {
       // autenticação finalizada sem profile — não travar o loading
@@ -72,13 +78,14 @@ export default function ControleCaixaPage() {
     }
     try {
       // 1. Carregar Configuração do Modo PDV
-      const { data: config } = await supabase
+      const { data: config, error: cfgErr } = await supabase
         .from('configuracoes_sistema')
         .select('valor')
         .eq('chave', 'modo_pdv')
-        .single();
+        .maybeSingle();
 
-      if (config) setModoPdv(config.valor as 'padrao' | 'inventario');
+      if (cfgErr) console.warn('Erro ao ler modo_pdv:', cfgErr);
+      if (config && config.valor) setModoPdv(config.valor as 'padrao' | 'inventario');
 
       // 2. Identificar Loja — preferir profile.local_id
       let meuLocalId = profile?.local_id ?? null;
@@ -98,13 +105,18 @@ export default function ControleCaixaPage() {
       }
       setLocalId(meuLocalId);
 
-      // 3. Buscar Caixa
-      const { data: caixa } = await supabase
+      // 3. Buscar Caixa (filtrar por usuário a menos que seja admin/master)
+      let caixaQuery: any = supabase
         .from('caixa_sessao')
         .select('*')
         .eq('local_id', meuLocalId)
-        .eq('status', 'aberto')
-        .maybeSingle();
+        .eq('status', 'aberto');
+
+      if (profile?.role !== 'admin' && profile?.role !== 'master') {
+        caixaQuery = caixaQuery.eq('usuario_abertura', profile.id);
+      }
+
+      const { data: caixa } = await caixaQuery.maybeSingle();
 
       if (caixa) {
         // Carregar produtos
@@ -181,6 +193,7 @@ export default function ControleCaixaPage() {
       const { error } = await supabase.from('caixa_sessao').insert({
         local_id: localId,
         usuario_abertura: profile?.id,
+        organization_id: profile?.organization_id,
         saldo_inicial: numericValor,
         status: 'aberto',
       });
@@ -273,6 +286,7 @@ export default function ControleCaixaPage() {
             .insert({
               local_id: localId,
               caixa_id: caixaAberto?.id,
+              organization_id: profile?.organization_id,
               total_venda: resumo.vendaBruta - valorTotalDescontos, // Valor líquido
               metodo_pagamento: 'consolidado_diario',
               status: 'concluida',
@@ -497,14 +511,7 @@ export default function ControleCaixaPage() {
                 </div>
 
                 {/* Componente de Promoção (Só aparece no modo Inventário) */}
-                {modoPdv === 'inventario' && (
-                  <PromocaoLauncher
-                    onUpdate={(total, lista) => {
-                      setValorTotalDescontos(total);
-                      setPromosAplicadas(lista);
-                    }}
-                  />
-                )}
+                {modoPdv === 'inventario' && <PromocaoLauncher onUpdate={handlePromocaoUpdate} />}
               </div>
 
               <div className="mt-6 space-y-2 border-t pt-4">

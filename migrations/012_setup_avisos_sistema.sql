@@ -17,11 +17,13 @@ CREATE TABLE IF NOT EXISTS avisos_sistema (
 ALTER TABLE avisos_sistema ENABLE ROW LEVEL SECURITY;
 
 -- Política: Todos usuários autenticados podem ler avisos
+DROP POLICY IF EXISTS "Users can read avisos" ON avisos_sistema;
 CREATE POLICY "Users can read avisos"
   ON avisos_sistema FOR SELECT
   USING (auth.role() = 'authenticated');
 
 -- Política: Apenas admins podem criar avisos
+DROP POLICY IF EXISTS "Admins can create avisos" ON avisos_sistema;
 CREATE POLICY "Admins can create avisos"
   ON avisos_sistema FOR INSERT
   WITH CHECK (
@@ -32,6 +34,7 @@ CREATE POLICY "Admins can create avisos"
   );
 
 -- Política: Apenas admins podem atualizar avisos
+DROP POLICY IF EXISTS "Admins can update avisos" ON avisos_sistema;
 CREATE POLICY "Admins can update avisos"
   ON avisos_sistema FOR UPDATE
   USING (
@@ -42,6 +45,7 @@ CREATE POLICY "Admins can update avisos"
   );
 
 -- Política: Apenas admins podem deletar avisos
+DROP POLICY IF EXISTS "Admins can delete avisos" ON avisos_sistema;
 CREATE POLICY "Admins can delete avisos"
   ON avisos_sistema FOR DELETE
   USING (
@@ -57,7 +61,17 @@ CREATE INDEX IF NOT EXISTS idx_avisos_sistema_tipo_alvo ON avisos_sistema(tipo_a
 CREATE INDEX IF NOT EXISTS idx_avisos_sistema_created_at ON avisos_sistema(created_at DESC);
 
 -- Habilitar Realtime para que o popup apareça instantaneamente
-ALTER PUBLICATION supabase_realtime ADD TABLE avisos_sistema;
+DO $$
+BEGIN
+  -- Apenas adiciona a tabela à publicação se ainda não estiver presente
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'avisos_sistema'
+  ) THEN
+    EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE avisos_sistema';
+  END IF;
+END
+$$;
 
 -- Comentários para documentação
 COMMENT ON TABLE avisos_sistema IS 'Armazena comunicados enviados pelo admin para exibição em popup';

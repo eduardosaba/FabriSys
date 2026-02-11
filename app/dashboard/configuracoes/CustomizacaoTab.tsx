@@ -394,15 +394,15 @@ export default function CustomizacaoTab() {
           .select('id, colors_json')
           .eq('user_id', profile.id)
           .eq('theme_mode', mode)
-          .single();
-        const data = resp.data as unknown;
-        const error = resp.error as unknown;
+          .maybeSingle();
 
-        if (error && (error as { code?: string }).code !== 'PGRST116') {
-          console.error('Erro ao buscar registro user_theme_colors:', error);
+        if (resp.error) {
+          console.error('Erro ao buscar registro user_theme_colors:', resp.error);
           toast.error('Erro ao salvar predefinição');
           continue;
         }
+
+        const data = resp.data as unknown;
 
         if (data && typeof data === 'object' && 'id' in data) {
           const row = data as Record<string, unknown>;
@@ -621,7 +621,7 @@ export default function CustomizacaoTab() {
   }, [loadUserPresets]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20 md:pb-0">
       {/* Seção Admin da Marca - Customização Pessoal */}
       {(profile?.role === 'admin' || profile?.role === 'master') && (
         <Card className="border-primary/20 bg-primary/5 p-6">
@@ -734,30 +734,38 @@ export default function CustomizacaoTab() {
 
       {/* Botão de salvar */}
       {(profile?.role === 'admin' || profile?.role === 'master') && (
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center gap-3">
-            <Button className="px-6 py-2" onClick={handleSave} disabled={loading || authLoading}>
-              {loading || authLoading
-                ? 'Salvando...'
-                : appliedPreset
-                  ? `Salvar Predefinição "${appliedPreset.name}"`
-                  : 'Salvar Customização'}
-            </Button>
+        <div className="pt-4 w-full">
+          <div className="md:flex md:justify-end">
+            <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm p-3 border-t border-slate-200 shadow-lg z-40 md:static md:bg-transparent md:backdrop-blur-0 md:p-0 md:border-t-0 md:shadow-none">
+              <div className="flex items-center justify-center md:justify-end gap-3">
+                <Button
+                  className="px-6 py-2"
+                  onClick={handleSave}
+                  disabled={loading || authLoading}
+                >
+                  {loading || authLoading
+                    ? 'Salvando...'
+                    : appliedPreset
+                      ? `Salvar Predefinição "${appliedPreset.name}"`
+                      : 'Salvar Customização'}
+                </Button>
 
-            <Button
-              variant="outline"
-              className="px-4 py-2"
-              onClick={() => setShowSavePresetModal(true)}
-            >
-              Salvar como predefinição
-            </Button>
+                <Button
+                  variant="outline"
+                  className="px-4 py-2"
+                  onClick={() => setShowSavePresetModal(true)}
+                >
+                  Salvar como predefinição
+                </Button>
+              </div>
+
+              {appliedPreset && (
+                <p className="mt-2 text-sm text-gray-600 text-center md:text-right">
+                  Esta ação salvará as cores da predefinição para ambos os modos (light e dark)
+                </p>
+              )}
+            </div>
           </div>
-
-          {appliedPreset && (
-            <p className="mt-2 text-sm text-gray-600 text-center">
-              Esta ação salvará as cores da predefinição para ambos os modos (light e dark)
-            </p>
-          )}
         </div>
       )}
 

@@ -24,6 +24,7 @@ function getPrimaryWithOpacity(_theme: Partial<ThemeSettings> | undefined, opaci
 import { useTheme } from '@/lib/theme';
 import { useAuth } from '@/lib/auth';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { supabase } from '@/lib/supabase';
 import {
   Search,
   Sun,
@@ -75,6 +76,7 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
 
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationsList, setNotificationsList] = useState<any[]>([]);
 
   // Refs para os menus
   const quickMenuRef = useRef<HTMLDivElement>(null);
@@ -212,6 +214,128 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
     return false;
   });
 
+  // --- Notifications: fetch recent vendas and caixa events and subscribe realtime ---
+  const mapVendaToNotif = (v: any) => ({
+    id: `v-${v.id}`,
+    title: 'Venda realizada',
+    message: `${v.local?.nome || 'PDV'} realizou venda de R$ ${Number(v.total_venda || 0).toFixed(2)}`,
+    time: v.created_at || new Date().toISOString(),
+    type: 'venda',
+  });
+
+  const mapCaixaToNotif = (c: any) => {
+    if (c.data_fechamento) {
+      return {
+        id: `c-close-${c.id}`,
+        title: 'Caixa fechado',
+        message: `${c.local?.nome || 'PDV'} fechou o caixa. Vendas: R$ ${Number(c.total_vendas_sistema || 0).toFixed(2)}`,
+        time: c.data_fechamento,
+        type: 'caixa_fechado',
+      };
+    }
+    return {
+      id: `c-open-${c.id}`,
+      title: 'Caixa aberto',
+      message: `${c.local?.nome || 'PDV'} abriu o caixa. Saldo inicial: R$ ${Number(c.saldo_inicial || 0).toFixed(2)}`,
+      time: c.data_abertura,
+      type: 'caixa_aberto',
+    };
+  };
+
+  const fetchRecentNotifications = async () => {
+    try {
+      const since = new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(); // últimas 6h
+
+      const { data: vendas, error: errV } = await supabase
+        .from('vendas')
+        .select('id,total_venda,created_at,local:locais(nome)')
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      const { data: caixasAbertas, error: errCaixaA } = await supabase
+        .from('caixa_sessao')
+        .select(
+          'id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome)'
+        )
+        .gte('data_abertura', since)
+        .order('data_abertura', { ascending: false })
+        .limit(10);
+
+      const { data: caixasFechadas, error: errCaixaF } = await supabase
+        .from('caixa_sessao')
+        .select(
+          'id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome)'
+        )
+        .gte('data_fechamento', since)
+        .order('data_fechamento', { ascending: false })
+        .limit(10);
+
+      const vendasNotifs = (vendas || []).map(mapVendaToNotif);
+      const caixaNotifs = [...(caixasAbertas || []), ...(caixasFechadas || [])].map(
+        mapCaixaToNotif
+      );
+
+      const merged = [...vendasNotifs, ...caixaNotifs].sort(
+        (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
+      );
+      setNotificationsList(merged.slice(0, 20));
+    } catch (e) {
+      // ignore
+      console.error('Erro fetch notifications', e);
+    }
+  };
+
+  useEffect(() => {
+    if (showNotifications) void fetchRecentNotifications();
+  }, [showNotifications]);
+
+  useEffect(() => {
+    // Subscribes to realtime events for vendas and caixa_sessao
+    const vendasChannel = supabase
+      .channel('public:vendas')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vendas' }, (payload) => {
+        const v = payload.new;
+        const notif = mapVendaToNotif(v);
+        setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
+      })
+      .subscribe();
+
+    const caixaChannel = supabase
+      .channel('public:caixa_sessao')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'caixa_sessao' },
+        (payload) => {
+          const c = payload.new;
+          const notif = mapCaixaToNotif(c);
+          setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'caixa_sessao' },
+        (payload) => {
+          const c = payload.new;
+          // se houve fechamento, notificar fechamento
+          if (c.data_fechamento) {
+            const notif = mapCaixaToNotif(c);
+            setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(vendasChannel);
+        supabase.removeChannel(caixaChannel);
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, []);
+
   return (
     <header
       className="flex h-16 items-center justify-between border-b px-6"
@@ -242,23 +366,27 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
       <div className="flex flex-1 items-center gap-4">
         <Link href="/dashboard" className="flex items-center gap-2">
           {/* Logo do Sistema (Marca A - sempre visível se existir) */}
-          {theme.logo_url && (
-            <img
-              src={theme.logo_url}
-              alt={theme.name || 'Sistema'}
-              // Mantemos um tamanho base para layout e aplicamos escala via variável CSS
-              width={32}
-              height={32}
-              className="rounded-md object-contain"
-              style={{
-                // A largura é recalculada com a variável --logo-scale, o que afeta o layout
-                width: `calc(32px * var(--logo-scale, ${theme?.logo_scale ?? 1}))`,
-                height: 'auto',
-                imageRendering: 'auto',
-              }}
-              loading="eager"
-            />
-          )}
+          {(() => {
+            const logo = theme?.logo_url?.toString?.().trim();
+            if (logo) {
+              return (
+                <img
+                  src={logo}
+                  alt={theme.name || 'Sistema'}
+                  width={32}
+                  height={32}
+                  className="rounded-md object-contain"
+                  style={{
+                    width: `calc(32px * var(--logo-scale, ${theme?.logo_scale ?? 1}))`,
+                    height: 'auto',
+                    imageRendering: 'auto',
+                  }}
+                  loading="eager"
+                />
+              );
+            }
+            return null;
+          })()}
 
           {/* Nome do Sistema (só mostra se não houver logo do sistema) */}
           {(!theme.logo_url || theme.logo_url === '/logo.png') && (
@@ -585,13 +713,23 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                 <h3 className="text-sm font-medium">Notificações</h3>
               </div>
               <div className="max-h-96 overflow-y-auto">
-                {/* Exemplo de notificação */}
-                <div className="border-b border-gray-200 p-4 dark:border-gray-700">
-                  <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                    Estoque baixo: Produto X
-                  </p>
-                  <p className="mt-1 text-xs text-gray-500">Há 5 minutos</p>
-                </div>
+                {notificationsList.length === 0 && (
+                  <div className="border-b border-gray-200 p-4 dark:border-gray-700">
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      Sem novas notificações
+                    </p>
+                  </div>
+                )}
+
+                {notificationsList.map((n) => (
+                  <div key={n.id} className="border-b border-gray-200 p-4 dark:border-gray-700">
+                    <p className="text-sm text-gray-700 dark:text-gray-200">{n.title}</p>
+                    <p className="text-xs text-gray-500 mt-1">{n.message}</p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      {new Date(n.time).toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           )}

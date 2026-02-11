@@ -190,7 +190,6 @@ export default function GestaoMetasPage() {
         const total = (metas || []).reduce((s: number, x: any) => s + Number(x.valor_meta || 0), 0);
         setMonthlyMetaByLocal((prev) => ({ ...prev, [localSelecionado]: total }));
         setSavedStatus((s) => ({ ...s, [localSelecionado]: 'saved' }));
-        setTimeout(() => setSavedStatus((s) => ({ ...s, [localSelecionado]: undefined })), 3000);
       })();
     } catch (err) {
       console.error(err);
@@ -240,7 +239,6 @@ export default function GestaoMetasPage() {
       // atualizar soma local
       setMonthlyMetaByLocal((prev) => ({ ...prev, [editingLocalId]: mensal }));
       setSavedStatus((s) => ({ ...s, [editingLocalId]: 'saved' }));
-      setTimeout(() => setSavedStatus((s) => ({ ...s, [editingLocalId]: undefined })), 3000);
 
       // se o PDV editado for o selecionado, atualizar metasDiarias exibidas
       if (editingLocalId === localSelecionado) {

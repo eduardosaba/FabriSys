@@ -9,6 +9,17 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
 import { ArrowLeft, Package, FileText, Info } from 'lucide-react';
 
+// Helper para gerar slugs (fora do componente para evitar re-criação)
+function slugify(str: string) {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-');
+}
+
 function getErrorMessage(err: unknown) {
   if (!err) return 'Erro desconhecido';
   if (typeof err === 'string') return err;
@@ -29,22 +40,31 @@ export default function NovaFichaTecnicaPage() {
     Array<{ id: string; nome: string; preco_venda: number }>
   >([]);
   const [produtoSelecionado, setProdutoSelecionado] = useState<string>('');
+  const [produtoTipo, setProdutoTipo] = useState<'final' | 'semi_acabado'>('final');
 
   // Carregar produtos sem ficha técnica
   useEffect(() => {
+    let mounted = true;
+
     async function carregarProdutos() {
-      setLoading(true);
       try {
-        // Buscar todos os produtos finais
-        const { data: todosProdutos, error: produtosError } = await supabase
+        setLoading(true);
+
+        // Buscar todos os produtos finais ativos
+        const query = supabase
           .from('produtos_finais')
           .select('id, nome, preco_venda')
           .eq('ativo', true)
           .order('nome');
 
+        // Filtrar pelo tipo selecionado (final / semi_acabado)
+        if (produtoTipo) query.eq('tipo', produtoTipo);
+
+        const { data: todosProdutos, error: produtosError } = await query;
+
         if (produtosError) throw produtosError;
 
-        // Buscar produtos que já têm ficha técnica ativa
+        // Buscar quais produtos já têm ficha técnica ativa
         const { data: fichasExistentes, error: fichasError } = await supabase
           .from('fichas_tecnicas')
           .select('produto_final_id')
@@ -52,33 +72,42 @@ export default function NovaFichaTecnicaPage() {
 
         if (fichasError) throw fichasError;
 
-        // Filtrar produtos que ainda não têm ficha técnica
         const idsComFicha = new Set(
-          (fichasExistentes ?? []).map((f) =>
-            String((f as { produto_final_id?: string }).produto_final_id || '')
-          )
-        );
-        const produtosSemFicha = (todosProdutos ?? []).filter(
-          (p: { id: string }) => !idsComFicha.has(String(p.id))
+          (fichasExistentes ?? []).map((f) => String((f as any).produto_final_id || ''))
         );
 
-        setProdutos(produtosSemFicha);
+        const produtosSemFicha = (todosProdutos ?? []).filter(
+          (p: any) => !idsComFicha.has(String(p.id))
+        );
+
+        if (mounted) setProdutos(produtosSemFicha);
       } catch (error: unknown) {
         console.error('Erro ao carregar produtos:', getErrorMessage(error));
-        toast({
-          title: 'Erro ao carregar produtos disponíveis',
-          description: getErrorMessage(error),
-          variant: 'error',
-        });
+        if (mounted)
+          toast({
+            title: 'Erro ao carregar produtos disponíveis',
+            description: 'Não foi possível listar os produtos disponíveis.',
+            variant: 'error',
+          });
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     }
 
     void carregarProdutos();
-  }, [toast]);
 
-  const handleSave = async (insumos: InsumoFicha[], precoVenda: number, rendimento: number) => {
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleSave = async (
+    insumos: InsumoFicha[],
+    precoVenda: number,
+    rendimento: number,
+    rendimentoTotalG?: number,
+    observacao?: string
+  ) => {
     if (!produtoSelecionado) {
       toast({ title: 'Selecione um produto para criar a ficha técnica', variant: 'warning' });
       return;
@@ -100,37 +129,28 @@ export default function NovaFichaTecnicaPage() {
 
       // Gerar nome da ficha técnica: FT + nome do produto
       const nomeFichaTecnica = produtoAtual ? `FT ${produtoAtual.nome}` : '';
-      // Gerar slug do nome
-      function slugify(str: string) {
-        return str
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '') // remove acentos
-          .replace(/[^a-z0-9]+/g, '-') // troca por hífen
-          .replace(/^-+|-+$/g, '') // remove hífens do início/fim
-          .replace(/-+/g, '-'); // hífens únicos
-      }
       const slugFichaTecnicaBase = nomeFichaTecnica ? slugify(nomeFichaTecnica) : '';
 
-      // Garantir slug único (para evitar 23505 duplicate key)
+      // Garantir slug único (usa maybeSingle para evitar erro 406 e limita tentativas)
       async function ensureUniqueSlug(base: string) {
         if (!base) return base;
         let candidate = base;
-        let i = 1;
-        while (true) {
-          const { data: existing, error: existErr } = await supabase
+        for (let i = 0; i < 10; i++) {
+          const { data, error } = await supabase
             .from('fichas_tecnicas')
             .select('id')
             .eq('slug', candidate)
-            .limit(1);
-          if (existErr) {
-            console.error('Erro ao verificar slug existente:', existErr);
-            return candidate;
+            .maybeSingle();
+
+          if (error) {
+            console.error('Erro ao verificar slug:', error);
+            break;
           }
-          if (!existing || existing.length === 0) return candidate;
-          candidate = `${base}-${i}`;
-          i += 1;
+
+          if (!data) return candidate;
+          candidate = `${base}-${i + 1}`;
         }
+        return `${base}-${Date.now()}`;
       }
 
       const slugFichaTecnica = await ensureUniqueSlug(slugFichaTecnicaBase);
@@ -154,31 +174,53 @@ export default function NovaFichaTecnicaPage() {
         }));
 
       console.log('🔍 Dados a serem inseridos:', novaFichaTecnica);
-      console.log('📦 Total de insumos:', novaFichaTecnica.length);
-      console.log('📋 Detalhes dos insumos:', JSON.stringify(novaFichaTecnica, null, 2));
+      console.log('📦 Total de insumos (local):', novaFichaTecnica.length);
+      console.log('📋 Detalhes dos insumos (local):', JSON.stringify(novaFichaTecnica, null, 2));
 
-      console.log('Enviando dados para API server-side de criação de ficha');
+      // Sanitize insumos payload to server: ensure expected keys exist and remove invalid entries
+      const payloadInsumos = insumos
+        .map((i) => ({
+          insumoId: (i as any)?.insumoId ?? (i as any)?.insumo_id ?? null,
+          quantidade: (i as any)?.quantidade ?? (i as any)?.quantidade ?? 0,
+          unidadeMedida: (i as any)?.unidadeMedida ?? (i as any)?.unidade_medida ?? null,
+          perdaPadrao: (i as any)?.perdaPadrao ?? (i as any)?.perda_padrao ?? null,
+        }))
+        .filter((i) => i.insumoId);
+
+      if (payloadInsumos.length === 0) {
+        throw new Error('Nenhum insumo válido foi fornecido para a ficha técnica');
+      }
+
+      console.log('Enviando dados para API server-side de criação de ficha (sanitizado)');
       try {
         const res = await fetch('/api/fichas-tecnicas/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             produto_final_id: produtoSelecionado,
-            insumos: insumos, // enviar os insumos do editor (form)
+            insumos: payloadInsumos,
             nome: nomeFichaTecnica,
             preco_venda: precoVenda,
             rendimento,
             slug_base: slugFichaTecnica,
+            observacao: observacao || null,
             // garantir que o server grave auditoria/tenant para RLS
             created_by: profile?.id || null,
             organization_id: profile?.organization_id || null,
           }),
         });
 
-        const payload = (await res.json()) as { data?: unknown; error?: string | null };
+        let payload: any = null;
+        try {
+          payload = await res.json();
+        } catch (e) {
+          const text = await res.text().catch(() => null);
+          payload = { error: text || 'Resposta inválida do servidor' };
+        }
+
         if (!res.ok) {
-          console.error('Erro do servidor ao criar ficha:', payload);
-          throw new Error(payload?.error || 'Erro ao criar ficha (server)');
+          console.error('Erro do servidor ao criar ficha:', res.status, payload);
+          throw new Error(payload?.error || `Erro ao criar ficha (status ${res.status})`);
         }
 
         console.log('✅ Fichas criadas (server):', payload.data);
@@ -305,7 +347,26 @@ export default function NovaFichaTecnicaPage() {
 
           <div className="max-w-2xl">
             <label className="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Produto Final *
+              Tipo de Produto
+            </label>
+            <div className="mb-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setProdutoTipo('final')}
+                className={`rounded-xl px-4 py-2 font-medium ${produtoTipo === 'final' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+              >
+                Produto Final (Acabado)
+              </button>
+              <button
+                type="button"
+                onClick={() => setProdutoTipo('semi_acabado')}
+                className={`rounded-xl px-4 py-2 font-medium ${produtoTipo === 'semi_acabado' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+              >
+                Produto Massa / Preparação
+              </button>
+            </div>
+            <label className="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Produto *
             </label>
             <select
               value={produtoSelecionado}

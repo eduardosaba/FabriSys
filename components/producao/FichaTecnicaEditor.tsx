@@ -16,7 +16,8 @@ interface FichaTecnicaEditorProps {
     insumos: InsumoFicha[],
     precoVenda: number,
     rendimento: number,
-    rendimentoTotalG: number
+    rendimentoTotalG: number,
+    observacao?: string
   ) => Promise<void>;
   ficha?: Partial<FichaTecnica>;
   modoEdicao?: boolean;
@@ -58,6 +59,9 @@ export function FichaTecnicaEditor({
   });
 
   const [insumosDisponiveis, setInsumosDisponiveis] = useState<InsumoEstoque[]>([]);
+  const [produtosDisponiveis, setProdutosDisponiveis] = useState<
+    Array<{ id: string; nome: string }>
+  >([]);
   const [buscaInsumo, setBuscaInsumo] = useState('');
   const [mostrarBusca, setMostrarBusca] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,6 +71,8 @@ export function FichaTecnicaEditor({
   const [rendimentoUnidades, setRendimentoUnidades] = useState<number>(1);
   // NOVO: Estado para Rendimento em Gramas (Ex: 450g de massa)
   const [rendimentoTotalG, setRendimentoTotalG] = useState<number>(0);
+  // Novo campo de instruções/observações da ficha técnica
+  const [observacao, setObservacao] = useState<string>('');
 
   // Formatar valor para Real
   const formatarReal = (valor: number): string => {
@@ -96,19 +102,31 @@ export function FichaTecnicaEditor({
   };
 
   useEffect(() => {
-    async function carregarInsumos() {
-      const { data, error } = await supabase
-        .from('insumos')
-        .select(
-          'id, nome, unidade_medida, custo_unitario, unidade_estoque, custo_por_ue, unidade_consumo, fator_conversao'
-        )
-        .order('nome');
+    async function carregarListas() {
+      const [
+        { data: insumosData, error: insumosError },
+        { data: produtosData, error: produtosError },
+      ] = await Promise.all([
+        supabase
+          .from('insumos')
+          .select(
+            'id, nome, unidade_medida, custo_unitario, unidade_estoque, custo_por_ue, unidade_consumo, fator_conversao'
+          )
+          .order('nome'),
+        // Para a lista de preparações, buscar apenas produtos marcados como 'semi_acabado'
+        supabase
+          .from('produtos_finais')
+          .select('id, nome')
+          .eq('ativo', true)
+          .eq('tipo', 'semi_acabado')
+          .order('nome'),
+      ] as any);
 
-      if (!error && data) {
-        setInsumosDisponiveis(data);
-      }
+      if (!insumosError && insumosData) setInsumosDisponiveis(insumosData);
+      if (!produtosError && produtosData) setProdutosDisponiveis(produtosData);
     }
-    void carregarInsumos();
+
+    void carregarListas();
   }, []);
 
   const insumosFiltrados = insumosDisponiveis.filter((insumo) =>
@@ -137,8 +155,8 @@ export function FichaTecnicaEditor({
   const handleSave = async () => {
     setLoading(true);
     try {
-      // ATUALIZADO: Passando o rendimentoTotalG para a função pai
-      await onSave(insumos, precoVenda, rendimentoUnidades, rendimentoTotalG);
+      // Passando o rendimentoTotalG e observação para a função pai
+      await onSave(insumos, precoVenda, rendimentoUnidades, rendimentoTotalG, observacao);
     } finally {
       setLoading(false);
     }
@@ -202,7 +220,7 @@ export function FichaTecnicaEditor({
             <label className="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
               <div className="flex items-center gap-2">
                 <Package size={18} />
-                Peso da Massa Cozida
+                Peso da Massa pronta
               </div>
             </label>
             <div className="relative">
@@ -224,7 +242,6 @@ export function FichaTecnicaEditor({
           </div>
         </div>
       </div>
-
       {/* Lista de Insumos */}
       <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-xl dark:border-gray-700 dark:bg-gray-800">
         <div className="mb-6 flex items-center justify-between">
@@ -270,17 +287,59 @@ export function FichaTecnicaEditor({
                     Insumo
                   </label>
                   <div className="relative">
-                    <input
-                      type="text"
-                      value={insumo.nomeInsumo}
-                      onFocus={() => setMostrarBusca(insumo.idLocal)}
-                      onChange={(e) => {
-                        setBuscaInsumo(e.target.value);
-                        setMostrarBusca(insumo.idLocal);
-                      }}
-                      placeholder="Buscar insumo..."
-                      className="w-full rounded-xl border-2 border-gray-300 px-4 py-3 pr-10 transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                    />
+                    {/* Tipo de insumo: insumo simples ou preparação (produto final) */}
+                    <div className="flex items-center gap-3">
+                      <input
+                        id={`composed-${insumo.idLocal}`}
+                        type="checkbox"
+                        checked={Boolean(insumo.isComposto)}
+                        onChange={(e) =>
+                          updateInsumo(insumo.idLocal, 'isComposto', e.target.checked)
+                        }
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                      />
+                      <label
+                        htmlFor={`composed-${insumo.idLocal}`}
+                        className="text-sm text-gray-600"
+                      >
+                        Preparação (usar produto final)
+                      </label>
+                    </div>
+
+                    {!insumo.isComposto ? (
+                      <input
+                        type="text"
+                        value={insumo.nomeInsumo}
+                        onFocus={() => setMostrarBusca(insumo.idLocal)}
+                        onChange={(e) => {
+                          setBuscaInsumo(e.target.value);
+                          setMostrarBusca(insumo.idLocal);
+                        }}
+                        placeholder="Buscar insumo..."
+                        className="w-full rounded-xl border-2 border-gray-300 px-4 py-3 pr-10 transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                      />
+                    ) : (
+                      <select
+                        value={insumo.compostoProdutoId || ''}
+                        onChange={(e) => {
+                          const prodId = e.target.value || null;
+                          const prod = produtosDisponiveis.find((p) => p.id === (prodId as string));
+                          updateInsumoFull(insumo.idLocal, {
+                            compostoProdutoId: prodId,
+                            nomeInsumo: prod ? prod.nome : '',
+                            insumoId: null,
+                          });
+                        }}
+                        className="w-full rounded-xl border-2 border-gray-300 px-4 py-3 pr-10 transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                      >
+                        <option value="">-- Selecionar preparação --</option>
+                        {produtosDisponiveis.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nome}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <Search
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
                       size={20}
@@ -384,6 +443,19 @@ export function FichaTecnicaEditor({
             ))
           )}
         </div>
+      </div>
+
+      {/* Campo de Observações / Instruções */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <label className="mb-3 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+          Instruções / Observações (opcional)
+        </label>
+        <textarea
+          value={observacao}
+          onChange={(e) => setObservacao(e.target.value)}
+          placeholder="Ex: Assar em forno pré-aquecido a 180°C por 20 minutos..."
+          className="w-full min-h-[100px] rounded-xl border-2 border-gray-200 px-4 py-3 text-sm transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+        />
       </div>
 
       {/* Resumo de Custos */}

@@ -85,6 +85,14 @@ export async function POST(request: Request) {
     });
 
     if (profileError) {
+      // Se for duplicidade no email, devolve mensagem clara e faz cleanup
+      const isDuplicateEmail =
+        String(profileError.message || '').includes('colaboradores_email_key') ||
+        String(profileError.code || '') === '23505' ||
+        String(profileError.message || '')
+          .toLowerCase()
+          .includes('duplicate');
+
       // Cleanup: remover usuario auth e org para não deixar dados inconsistentes
       try {
         await supabaseAdmin.auth.admin.deleteUser(userId);
@@ -96,6 +104,17 @@ export async function POST(request: Request) {
       } catch (delOrgErr) {
         console.error('Erro ao remover org após falha no profile:', delOrgErr);
       }
+
+      if (isDuplicateEmail) {
+        return NextResponse.json(
+          {
+            error:
+              'Já existe um colaborador com este e-mail. Remova ou atualize o colaborador existente antes de criar um novo tenant com o mesmo e-mail.',
+          },
+          { status: 409 }
+        );
+      }
+
       throw new Error(`Erro ao criar perfil: ${profileError.message}`);
     }
 

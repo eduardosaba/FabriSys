@@ -291,10 +291,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           )
           .eq('user_id', userId)
           .eq('theme_mode', resolvedTheme)
-          .single();
+          .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') {
-          // PGRST116 = not found
+        if (error) {
           console.error('Erro ao buscar cores do usuário:', error);
           return null;
         }

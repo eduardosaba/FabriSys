@@ -215,7 +215,6 @@ export default function CategoriasPage() {
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 text-slate-500 uppercase text-xs font-semibold">
                 <tr>
-                  <th className="px-6 py-3 w-16">ID</th>
                   <th className="px-6 py-3">Nome da Categoria</th>
                   <th className="px-6 py-3 text-center w-32">Status</th>
                   <th className="px-6 py-3 text-right">Ações</th>
@@ -224,7 +223,6 @@ export default function CategoriasPage() {
               <tbody className="divide-y divide-slate-100">
                 {filteredCategorias.map((cat) => (
                   <tr key={cat.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-6 py-4 text-slate-400 font-mono text-xs">#{cat.id}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">

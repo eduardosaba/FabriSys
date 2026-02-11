@@ -1,171 +1,210 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
-import { FileText, Printer, Filter, CreditCard } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
+import { BarChart3, Filter, DollarSign, CreditCard } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 interface Venda {
   id: string;
   created_at: string;
-  total_venda: number;
+  valor_total: number;
   metodo_pagamento: string;
-  local: { nome: string };
-  usuario?: { email: string }; // Se tiver join com auth
+  local?: { nome: string };
 }
 
 export default function RelatorioVendasPage() {
+  const { profile } = useAuth();
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filtroLoja, setFiltroLoja] = useState('todas');
-  const [lojas, setLojas] = useState<string[]>([]);
+
+  // Filtros
+  const [dataInicio, setDataInicio] = useState(
+    new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]
+  );
+  const [dataFim, setDataFim] = useState(new Date().toISOString().split('T')[0]);
+  const [localId, setLocalId] = useState<string>('');
+  const [locais, setLocais] = useState<{ id: string; nome: string }[]>([]);
 
   useEffect(() => {
-    async function carregar() {
-      try {
-        setLoading(true);
-        const { data, error } = await supabase
-          .from('vendas')
-          .select(
-            `
-            id, created_at, total_venda, metodo_pagamento,
-            local:locais(nome)
-          `
-          )
-          .order('created_at', { ascending: false })
-          .limit(100); // Limite inicial para performance
-
-        if (error) throw error;
-
-        // Normaliza o relacionamento `local:locais(nome)` que vem como array
-        const normalizado = (data || []).map((d: any) => ({
-          ...d,
-          local: Array.isArray(d.local) ? (d.local[0] ?? null) : (d.local ?? null),
-        }));
-
-        setVendas(normalizado);
-
-        // Extrair lojas únicas
-        const nomesLojas = Array.from(
-          new Set(normalizado.map((v: any) => v.local?.nome).filter(Boolean))
-        );
-        setLojas(nomesLojas as string[]);
-      } catch {
-        toast.error('Erro ao carregar relatório');
-      } finally {
-        setLoading(false);
-      }
+    async function fetchLocais() {
+      const { data } = await supabase.from('locais').select('id, nome').eq('tipo', 'pdv');
+      setLocais((data as any) || []);
     }
-    void carregar();
+    void fetchLocais();
   }, []);
 
-  const vendasFiltradas =
-    filtroLoja === 'todas' ? vendas : vendas.filter((v) => v.local?.nome === filtroLoja);
+  const carregarVendas = useCallback(async () => {
+    try {
+      setLoading(true);
 
-  const totalGeral = vendasFiltradas.reduce((acc, v) => acc + v.total_venda, 0);
+      const { data, error } = await supabase
+        .from('vendas')
+        .select(
+          `
+            id,
+            created_at,
+            valor_total,
+            metodo_pagamento,
+            local:locais(nome)
+          `
+        )
+        .gte('created_at', `${dataInicio}T00:00:00`)
+        .lte('created_at', `${dataFim}T23:59:59`)
+        .order('created_at', { ascending: false });
 
-  // Agrupamento por Pagamento
-  const porPagamento = vendasFiltradas.reduce(
-    (acc, v) => {
-      acc[v.metodo_pagamento] = (acc[v.metodo_pagamento] || 0) + v.total_venda;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
+      if (error) throw error;
+      setVendas((data as any) || []);
+    } catch (err: any) {
+      console.error('Erro ao carregar vendas:', err);
+      toast.error('Erro ao carregar relatório.');
+    } finally {
+      setLoading(false);
+    }
+  }, [dataInicio, dataFim]);
+
+  useEffect(() => {
+    void carregarVendas();
+  }, [carregarVendas]);
+
+  const totalPeriodo = vendas.reduce((acc, v) => acc + (v.valor_total || 0), 0);
+  const totalPix = vendas
+    .filter((v) => v.metodo_pagamento === 'pix')
+    .reduce((acc, v) => acc + (v.valor_total || 0), 0);
+  const totalDinheiro = vendas
+    .filter((v) => v.metodo_pagamento === 'dinheiro')
+    .reduce((acc, v) => acc + (v.valor_total || 0), 0);
+  const totalCartao = vendas
+    .filter((v) => v.metodo_pagamento === 'cartao')
+    .reduce((acc, v) => acc + (v.valor_total || 0), 0);
 
   if (loading) return <Loading />;
 
   return (
-    <div className="flex flex-col gap-6 p-6 animate-fade-up print:p-0">
-      <div className="print:hidden">
-        <PageHeader
-          title="Relatório Detalhado de Vendas"
-          description="Histórico de transações dos PDVs."
-          icon={FileText}
-        >
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg text-slate-700 hover:bg-slate-50"
-          >
-            <Printer size={18} /> Imprimir
-          </button>
-        </PageHeader>
+    <div className="flex flex-col gap-6 p-6 animate-fade-up">
+      <PageHeader
+        title="Relatório de Vendas"
+        description="Acompanhe o desempenho financeiro dos PDVs."
+        icon={BarChart3}
+      />
 
-        <div className="flex gap-4 items-center bg-white p-4 rounded-xl border mb-4">
-          <Filter size={18} className="text-slate-400" />
+      {/* Filtros */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-end gap-4">
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase block mb-1">
+            Data Início
+          </label>
+          <input
+            type="date"
+            className="border p-2 rounded-lg text-sm"
+            value={dataInicio}
+            onChange={(e) => setDataInicio(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Data Fim</label>
+          <input
+            type="date"
+            className="border p-2 rounded-lg text-sm"
+            value={dataFim}
+            onChange={(e) => setDataFim(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase block mb-1">
+            Loja / PDV
+          </label>
           <select
-            value={filtroLoja}
-            onChange={(e) => setFiltroLoja(e.target.value)}
-            className="bg-transparent outline-none w-full font-medium text-slate-700"
+            className="border p-2 rounded-lg text-sm min-w-[200px]"
+            value={localId}
+            onChange={(e) => setLocalId(e.target.value)}
           >
-            <option value="todas">Todas as Lojas</option>
-            {lojas.map((l) => (
-              <option key={l} value={l}>
-                {l}
+            <option value="">Todas as Lojas</option>
+            {locais.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.nome}
               </option>
             ))}
           </select>
         </div>
+        <button
+          onClick={carregarVendas}
+          className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold"
+        >
+          <Filter size={16} /> Filtrar
+        </button>
       </div>
 
-      {/* Cabeçalho Impressão */}
-      <div className="hidden print:block mb-6 border-b pb-4">
-        <h1 className="text-2xl font-bold text-black">Relatório de Vendas</h1>
-        <p className="text-sm text-gray-500">Extraído em {new Date().toLocaleString()}</p>
-      </div>
-
-      {/* Resumo Financeiro */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-slate-900 text-white p-4 rounded-xl print:bg-gray-200 print:text-black">
-          <p className="text-xs opacity-70 uppercase">Total Período</p>
-          <p className="text-2xl font-bold">
-            {totalGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </p>
+      {/* KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-slate-500 text-xs font-bold uppercase mb-1">Total Geral</p>
+          <p className="text-2xl font-bold text-slate-800">R$ {totalPeriodo.toFixed(2)}</p>
         </div>
-        {Object.entries(porPagamento).map(([metodo, valor]) => (
-          <div key={metodo} className="bg-white border p-4 rounded-xl">
-            <p className="text-xs text-slate-500 uppercase flex items-center gap-1">
-              <CreditCard size={12} /> {metodo.replace('_', ' ')}
-            </p>
-            <p className="text-lg font-bold text-slate-800">
-              {valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </p>
-          </div>
-        ))}
+        <div className="bg-green-50 p-4 rounded-xl border border-green-100 shadow-sm">
+          <p className="text-green-600 text-xs font-bold uppercase mb-1 flex items-center gap-1">
+            <DollarSign size={14} /> Pix
+          </p>
+          <p className="text-2xl font-bold text-green-700">R$ {totalPix.toFixed(2)}</p>
+        </div>
+        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm">
+          <p className="text-blue-600 text-xs font-bold uppercase mb-1 flex items-center gap-1">
+            <CreditCard size={14} /> Cartão
+          </p>
+          <p className="text-2xl font-bold text-blue-700">R$ {totalCartao.toFixed(2)}</p>
+        </div>
+        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 shadow-sm">
+          <p className="text-orange-600 text-xs font-bold uppercase mb-1 flex items-center gap-1">
+            <DollarSign size={14} /> Dinheiro
+          </p>
+          <p className="text-2xl font-bold text-orange-700">R$ {totalDinheiro.toFixed(2)}</p>
+        </div>
       </div>
 
-      {/* Tabela */}
-      <div className="bg-white rounded-xl border overflow-hidden print:border-0">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-slate-50 text-slate-600 border-b print:bg-gray-100 print:text-black">
-            <tr>
-              <th className="px-6 py-3">Data/Hora</th>
-              <th className="px-6 py-3">Loja</th>
-              <th className="px-6 py-3">Pagamento</th>
-              <th className="px-6 py-3 text-right">Valor</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {vendasFiltradas.map((v) => (
-              <tr key={v.id} className="hover:bg-slate-50">
-                <td className="px-6 py-3 text-slate-600">
-                  {new Date(v.created_at).toLocaleString('pt-BR')}
-                </td>
-                <td className="px-6 py-3 font-medium text-slate-800">{v.local?.nome}</td>
-                <td className="px-6 py-3 capitalize">
-                  <span className="px-2 py-1 rounded bg-slate-100 text-xs border text-slate-600">
-                    {v.metodo_pagamento.replace('_', ' ')}
-                  </span>
-                </td>
-                <td className="px-6 py-3 text-right font-bold text-green-700">
-                  {v.total_venda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </td>
+      {/* Tabela Detalhada */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
+              <tr>
+                <th className="px-4 py-3">Data / Hora</th>
+                <th className="px-4 py-3">Loja</th>
+                <th className="px-4 py-3">Pagamento</th>
+                <th className="px-4 py-3 text-right">Valor</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {vendas.map((venda) => (
+                <tr key={venda.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 text-slate-600">
+                    {new Date(venda.created_at).toLocaleString('pt-BR')}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-slate-800">
+                    {venda.local?.nome || '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold uppercase">
+                      {venda.metodo_pagamento}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">
+                    R$ {(venda.valor_total || 0).toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+              {vendas.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-8 text-center text-slate-400">
+                    Nenhuma venda encontrada neste período.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

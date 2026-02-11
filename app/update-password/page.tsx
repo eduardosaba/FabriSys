@@ -104,10 +104,8 @@ function UpdatePasswordForm() {
       toast.success('Senha atualizada com sucesso!');
       console.log('Redirecionando para login...');
 
-      // Pequeno delay para mostrar o toast
-      setTimeout(() => {
-        router.push('/login');
-      }, 1000);
+      // Redirecionar imediatamente (removido timeout)
+      router.push('/login');
     } catch (error: unknown) {
       console.error('Erro ao atualizar senha:', error);
       const errorMessage =

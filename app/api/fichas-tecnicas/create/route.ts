@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       slug_base,
       created_by,
       organization_id,
+      observacao,
     } = body;
 
     if (!produto_final_id || !Array.isArray(insumos)) {
@@ -57,12 +58,18 @@ export async function POST(request: Request) {
       const rows: any[] = [];
       for (let index = 0; index < insumos.length; index++) {
         const insumo = insumos[index];
-        if (!insumo || !insumo.insumoId) continue;
+        if (!insumo) continue;
+
+        // detectar insumo simples (insumoId) ou composto (compostoProdutoId)
+        const isComposto = Boolean(
+          insumo.compostoProdutoId || insumo.composto_produto_id || insumo.isComposto
+        );
+        const compostoProdutoId = insumo.compostoProdutoId ?? insumo.composto_produto_id ?? null;
 
         let unidade = insumo.unidadeMedida ?? insumo.unidade_medida ?? null;
 
-        // Se não foi fornecida, buscar na tabela `insumos` para evitar null constraint
-        if (!unidade) {
+        // Se não foi fornecida, e for insumo simples, buscar na tabela `insumos` para evitar null constraint
+        if (!unidade && !isComposto && insumo.insumoId) {
           try {
             const { data: insumoRow, error: insumoErr } = await supabaseAdmin
               .from('insumos')
@@ -81,9 +88,8 @@ export async function POST(request: Request) {
         // Fallback seguro caso ainda seja nulo
         if (!unidade) unidade = 'un';
 
-        rows.push({
+        const row: any = {
           produto_final_id,
-          insumo_id: insumo.insumoId,
           quantidade: insumo.quantidade,
           unidade_medida: unidade,
           perda_padrao: insumo.perdaPadrao,
@@ -95,7 +101,21 @@ export async function POST(request: Request) {
           organization_id: organization_id ?? null,
           nome: nome || null,
           slug: candidateSlug,
-        });
+          observacao: observacao ?? null,
+        };
+
+        if (isComposto && compostoProdutoId) {
+          row.insumo_id = null;
+          row.insumo_composto_produto_id = compostoProdutoId;
+        } else if (insumo.insumoId) {
+          row.insumo_id = insumo.insumoId;
+        } else {
+          // nenhum identificador válido; pular
+          console.warn('[create/fichas] insumo ignorado por falta de identificador', insumo);
+          continue;
+        }
+
+        rows.push(row);
       }
 
       const { data, error } = await tryInsertFicha(rows);

@@ -110,7 +110,8 @@ export default function InsumosDashboard() {
           .eq('tipo', 'entrada')
           .gte('created_at', inicioMes.toISOString());
         if (errHist) {
-          console.warn('Erro ao contar historico_estoque:', errHist);
+          if (typeof window !== 'undefined')
+            console.warn('Erro ao contar historico_estoque:', errHist);
         }
 
         // 2b. Calcular Valor em Risco (Itens vencendo em 30 dias)
@@ -125,7 +126,8 @@ export default function InsumosDashboard() {
           .lte('validade', dataLimite.toISOString())
           .gte('validade', new Date().toISOString()); // Apenas futuros, não passados
         if (errVenc) {
-          console.warn('Erro ao buscar itens vencendo:', errVenc);
+          if (typeof window !== 'undefined')
+            console.warn('Erro ao buscar itens vencendo:', errVenc);
         }
 
         let valorRisco = 0;

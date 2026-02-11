@@ -207,7 +207,8 @@ export default function PedidosCompraPage() {
         .order('nome');
 
       if (fornecedoresError) {
-        console.warn('fetchDadosIniciais: erro ao carregar fornecedores', fornecedoresError);
+        if (typeof window !== 'undefined')
+          console.warn('fetchDadosIniciais: erro ao carregar fornecedores', fornecedoresError);
         toast.error('Não foi possível carregar fornecedores. Rode o diagnóstico.');
       }
 
@@ -550,10 +551,12 @@ export default function PedidosCompraPage() {
   // --- LÓGICA DE IMPRESSÃO ---
   const handleImprimir = (pedido: Pedido) => {
     setPedidoParaImpressao(pedido);
-    // Pequeno delay para garantir que o DOM do overlay renderizou antes de chamar o print
-    setTimeout(() => {
+    // Garantir impressão no próximo frame sem usar setTimeout
+    if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+      window.requestAnimationFrame(() => window.print());
+    } else {
       window.print();
-    }, 100);
+    }
   };
 
   // Diagnóstico

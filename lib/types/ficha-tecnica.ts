@@ -26,6 +26,9 @@ export interface InsumoFicha {
   unidadeEstoque?: string; // UE - Unidade de Estoque
   custoPorUE?: number; // Custo por Unidade de Estoque
   fatorConversao?: number; // Fator de Conversão (FC)
+  // Suporte a insumos compostos (preparações / produtos finais usados como insumo)
+  isComposto?: boolean;
+  compostoProdutoId?: string | null;
 }
 
 export interface FichaTecnicaData {

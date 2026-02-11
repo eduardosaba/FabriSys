@@ -13,17 +13,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { useRouter } from 'next/navigation';
 
-export type UserRole =
-  | 'admin'
-  | 'fabrica'
-  | 'pdv'
-  | 'master'
-  | 'gerente'
-  | 'estoque'
-  | 'caixa'
-  | 'cozinha'
-  | 'operador'
-  | 'user'; // Adicionado fallback
+export type UserRole = 'master' | 'admin' | 'gerente' | 'compras' | 'fabrica' | 'pdv' | 'user'; // Adicionado fallback
 
 interface Profile {
   id: string;

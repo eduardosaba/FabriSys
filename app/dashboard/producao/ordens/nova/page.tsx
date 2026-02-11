@@ -6,6 +6,8 @@ import Button from '@/components/Button';
 import { ArrowLeft, Save, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/ui/PageHeader';
+import { useAuth } from '@/lib/auth';
+import { useRouter } from 'next/navigation';
 
 interface ProdutoFinal {
   id: string;
@@ -14,6 +16,8 @@ interface ProdutoFinal {
 }
 
 export default function NovaOrdemPage() {
+  const router = useRouter();
+  const { profile } = useAuth();
   const [produtos, setProdutos] = useState<ProdutoFinal[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -29,6 +33,7 @@ export default function NovaOrdemPage() {
       const { data, error } = await supabase
         .from('produtos_finais')
         .select('id, nome, preco_venda')
+        .eq('ativo', true)
         .order('nome');
 
       if (error) throw error;
@@ -61,13 +66,23 @@ export default function NovaOrdemPage() {
       return;
     }
 
+    if (!profile?.organization_id) {
+      toast({
+        title: 'Erro de permissão',
+        description: 'Sua conta não está vinculada a uma organização.',
+        variant: 'error',
+      });
+      return;
+    }
+
     setSaving(true);
 
     try {
-      // Gerar número da OP
+      // Gerar número da OP filtrando pela organização
       const { data: lastOrder } = await supabase
         .from('ordens_producao')
         .select('numero_op')
+        .eq('organization_id', profile.organization_id)
         .order('numero_op', { ascending: false })
         .limit(1);
 
@@ -80,8 +95,12 @@ export default function NovaOrdemPage() {
         produto_final_id: formData.produto_final_id,
         quantidade_prevista: parseFloat(formData.quantidade_prevista),
         data_prevista: formData.data_prevista,
-        custo_previsto: 0, // Por enquanto, sem cálculo de custo
-        status: 'pendente',
+        custo_previsto: 0,
+        status: 'planejada',
+
+        // CAMPOS OBRIGATÓRIOS PARA RLS:
+        organization_id: profile.organization_id,
+        created_by: profile.id,
       });
 
       if (error) throw error;
@@ -92,13 +111,12 @@ export default function NovaOrdemPage() {
         variant: 'success',
       });
 
-      // Redirecionar para a lista
-      window.location.href = '/dashboard/producao/ordens';
-    } catch (err) {
+      router.push('/dashboard/producao/ordens');
+    } catch (err: any) {
       console.error('Erro ao criar ordem:', err);
       toast({
         title: 'Erro ao criar ordem',
-        description: 'Não foi possível criar a ordem de produção.',
+        description: err.message || 'Não foi possível criar a ordem de produção.',
         variant: 'error',
       });
     } finally {
@@ -117,10 +135,7 @@ export default function NovaOrdemPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center gap-4">
-        <Button
-          variant="secondary"
-          onClick={() => (window.location.href = '/dashboard/producao/ordens')}
-        >
+        <Button variant="secondary" onClick={() => router.push('/dashboard/producao/ordens')}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar
         </Button>
@@ -203,7 +218,7 @@ export default function NovaOrdemPage() {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => (window.location.href = '/dashboard/producao/ordens')}
+            onClick={() => router.push('/dashboard/producao/ordens')}
           >
             Cancelar
           </Button>

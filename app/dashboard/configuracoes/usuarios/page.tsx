@@ -23,9 +23,9 @@ interface Colaborador {
 const PERFIS = [
   { value: 'admin', label: 'Administrador (Acesso Total)' },
   { value: 'gerente', label: 'Gerente (Sem config avançada)' },
-  { value: 'caixa', label: 'Operador de Caixa (PDV)' },
-  { value: 'cozinha', label: 'Produção (Kanban)' },
-  { value: 'estoque', label: 'Estoquista' },
+  { value: 'compras', label: 'Compras' },
+  { value: 'fabrica', label: 'Fábrica' },
+  { value: 'pdv', label: 'PDV (Caixa)' },
 ];
 
 export default function UsuariosPage() {
@@ -41,7 +41,7 @@ export default function UsuariosPage() {
     nome: '',
     email: '',
     password: '',
-    role: 'caixa',
+    role: 'pdv',
     ativo: true,
   });
 
@@ -50,7 +50,19 @@ export default function UsuariosPage() {
   const carregarUsuarios = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.from('colaboradores').select('*').order('nome');
+      let query: any = supabase.from('colaboradores').select('*').order('nome');
+
+      // Se não for master, limitar aos usuários da mesma organização
+      if (profile?.role !== 'master') {
+        if (!profile?.organization_id) {
+          setUsuarios([]);
+          setLoading(false);
+          return;
+        }
+        query = query.eq('organization_id', profile.organization_id);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setUsuarios(data || []);
@@ -117,7 +129,7 @@ export default function UsuariosPage() {
       }
 
       setIsModalOpen(false);
-      setFormData({ nome: '', email: '', password: '', role: 'caixa', ativo: true });
+      setFormData({ nome: '', email: '', password: '', role: 'pdv', ativo: true });
       setEditingId(null);
       void carregarUsuarios();
     } catch (err: any) {
@@ -170,7 +182,7 @@ export default function UsuariosPage() {
   if (loading) return <Loading />;
 
   return (
-    <div className="flex flex-col gap-6 p-6 animate-fade-up">
+    <div className="flex flex-col gap-4 md:gap-6 p-3 md:p-6 pb-20 md:pb-6 animate-fade-up">
       <PageHeader
         title="Gestão de Equipe"
         description="Crie contas para seus funcionários e defina permissões."
@@ -180,82 +192,153 @@ export default function UsuariosPage() {
           icon={Plus}
           onClick={() => {
             setEditingId(null);
-            setFormData({ nome: '', email: '', password: '', role: 'caixa', ativo: true });
+            setFormData({ nome: '', email: '', password: '', role: 'pdv', ativo: true });
             setIsModalOpen(true);
           }}
+          className="w-full md:w-auto"
         >
           Novo Usuário
         </Button>
       </PageHeader>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase text-xs">
-            <tr>
-              <th className="px-6 py-3">Nome</th>
-              <th className="px-6 py-3">Email (Login)</th>
-              <th className="px-6 py-3">Perfil / Cargo</th>
-              <th className="px-6 py-3 text-center">Status</th>
-              <th className="px-6 py-3 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {usuarios.map((user) => (
-              <tr key={user.id} className="hover:bg-slate-50">
-                <td className="px-6 py-3 font-medium text-slate-800">{user.nome}</td>
-                <td className="px-6 py-3 text-slate-500">{user.email}</td>
-                <td className="px-6 py-3">
-                  <span
-                    className={`px-2 py-1 rounded text-xs font-bold border uppercase
-                    ${
-                      user.role === 'admin'
-                        ? 'bg-purple-50 text-purple-700 border-purple-200'
-                        : user.role === 'master'
-                          ? 'bg-slate-800 text-white border-slate-900'
-                          : 'bg-blue-50 text-blue-700 border-blue-200'
-                    }`}
-                  >
-                    {user.role}
-                  </span>
-                </td>
-                <td className="px-6 py-3 text-center">
-                  {user.ativo ? (
-                    <span className="text-green-600 flex items-center justify-center gap-1 text-xs font-bold">
-                      <UserCheck size={14} /> Ativo
-                    </span>
-                  ) : (
-                    <span className="text-red-400 flex items-center justify-center gap-1 text-xs font-bold">
-                      <UserX size={14} /> Bloqueado
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-3 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => handleEdit(user)}
-                      className="p-2 hover:bg-blue-50 text-blue-600 rounded"
-                    >
-                      <Edit size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(user.id)}
-                      className="p-2 hover:bg-red-50 text-red-600 rounded"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {usuarios.length === 0 && (
+      {/* Versão Desktop - Tabela */}
+      <div className="hidden md:block bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase text-xs">
               <tr>
-                <td colSpan={5} className="p-8 text-center text-slate-400">
-                  Nenhum colaborador cadastrado.
-                </td>
+                <th className="px-6 py-3">Nome</th>
+                <th className="px-6 py-3">Email (Login)</th>
+                <th className="px-6 py-3">Perfil / Cargo</th>
+                <th className="px-6 py-3 text-center">Status</th>
+                <th className="px-6 py-3 text-right">Ações</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {usuarios.map((user) => (
+                <tr key={user.id} className="hover:bg-slate-50">
+                  <td className="px-6 py-3 font-medium text-slate-800 break-words">{user.nome}</td>
+                  <td className="px-6 py-3 text-slate-500 break-words">{user.email}</td>
+                  <td className="px-6 py-3">
+                    <span
+                      className={
+                        'px-2 py-1 rounded text-xs font-bold border uppercase ' +
+                        (user.role === 'admin'
+                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                          : user.role === 'master'
+                            ? 'bg-slate-800 text-white border-slate-900'
+                            : 'bg-primary text-primary border-primary')
+                      }
+                    >
+                      {user.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-center">
+                    {user.ativo ? (
+                      <span className="text-green-600 flex items-center justify-center gap-1 text-xs font-bold">
+                        <UserCheck size={14} /> Ativo
+                      </span>
+                    ) : (
+                      <span className="text-red-400 flex items-center justify-center gap-1 text-xs font-bold">
+                        <UserX size={14} /> Bloqueado
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        aria-label={`Editar ${user.nome}`}
+                        onClick={() => handleEdit(user)}
+                        className="p-2 hover:bg-primary text-primary rounded"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        aria-label={`Remover ${user.nome}`}
+                        onClick={() => handleDelete(user.id)}
+                        className="p-2 hover:bg-red-50 text-red-600 rounded"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {usuarios.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-slate-400">
+                    Nenhum colaborador cadastrado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Versão Mobile - Cards */}
+      <div className="md:hidden space-y-3">
+        {usuarios.map((user) => (
+          <div key={user.id} className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex-1">
+                <h3 className="font-bold text-slate-800 text-sm">{user.nome}</h3>
+                <p className="text-xs text-slate-500 mt-1 break-all">{user.email}</p>
+              </div>
+              <div className="flex gap-1 ml-2">
+                <button
+                  aria-label={`Editar ${user.nome}`}
+                  onClick={() => handleEdit(user)}
+                  className="p-2 hover:bg-primary text-primary rounded"
+                >
+                  <Edit size={16} />
+                </button>
+                <button
+                  aria-label={`Remover ${user.nome}`}
+                  onClick={() => handleDelete(user.id)}
+                  className="p-2 hover:bg-red-50 text-red-600 rounded"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                <span
+                  className={
+                    'px-2 py-1 rounded text-xs font-bold border uppercase ' +
+                    (user.role === 'admin'
+                      ? 'bg-purple-50 text-purple-700 border-purple-200'
+                      : user.role === 'master'
+                        ? 'bg-slate-800 text-white border-slate-900'
+                        : 'bg-blue-50 text-blue-700 border-blue-200')
+                  }
+                >
+                  {user.role}
+                </span>
+              </div>
+
+              <div>
+                {user.ativo ? (
+                  <span className="text-green-600 flex items-center gap-1 text-xs font-bold">
+                    <UserCheck size={14} /> Ativo
+                  </span>
+                ) : (
+                  <span className="text-red-400 flex items-center gap-1 text-xs font-bold">
+                    <UserX size={14} /> Bloqueado
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {usuarios.length === 0 && (
+          <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-400">
+            Nenhum colaborador cadastrado.
+          </div>
+        )}
       </div>
 
       <Modal
@@ -300,7 +383,7 @@ export default function UsuariosPage() {
               Perfil de Acesso
             </label>
             <select
-              className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-primary"
               value={formData.role}
               onChange={(e) => setFormData({ ...formData, role: e.target.value })}
             >
@@ -318,18 +401,24 @@ export default function UsuariosPage() {
               id="ativo"
               checked={formData.ativo}
               onChange={(e) => setFormData({ ...formData, ativo: e.target.checked })}
-              className="w-4 h-4 text-blue-600 rounded"
+              className="w-4 h-4 text-primary rounded"
             />
             <label htmlFor="ativo" className="text-sm text-slate-700">
               Usuário Ativo (Acesso liberado)
             </label>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t mt-4">
-            <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t mt-4">
+            <Button
+              variant="secondary"
+              onClick={() => setIsModalOpen(false)}
+              className="w-full sm:w-auto"
+            >
               Cancelar
             </Button>
-            <Button onClick={handleSave}>{editingId ? 'Salvar Alterações' : 'Criar Conta'}</Button>
+            <Button onClick={handleSave} className="w-full sm:w-auto">
+              {editingId ? 'Salvar Alterações' : 'Criar Conta'}
+            </Button>
           </div>
         </div>
       </Modal>

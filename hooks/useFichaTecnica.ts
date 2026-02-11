@@ -17,6 +17,8 @@ export function useFichaTecnica(initialData?: FichaTecnicaData) {
       unidadeMedida: '',
       perdaPadrao: 0,
       custoUnitario: 0,
+      isComposto: false,
+      compostoProdutoId: null,
     };
     setInsumos((prev) => [...prev, newInsumo]);
   }, []);

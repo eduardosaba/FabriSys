@@ -9,6 +9,8 @@ export default function DraggableCalculator() {
   const [position, setPosition] = useState({ x: 20, y: 100 });
   const [display, setDisplay] = useState('');
   const [result, setResult] = useState('');
+  const [bottomOffset, setBottomOffset] = useState(16);
+  const [rightOffset, setRightOffset] = useState(16);
 
   const draggingRef = useRef(false);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -29,6 +31,24 @@ export default function DraggableCalculator() {
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Ajusta offset inferior para evitar sobreposição com barras fixas em mobile
+  useEffect(() => {
+    const updateOffset = () => {
+      try {
+        const isMobile = window.innerWidth <= 767;
+        // alinhar com o botão de perda (que usa bottom-20 => 80px)
+        setBottomOffset(isMobile ? 80 : 16);
+        // empurra a calculadora para a esquerda no mobile para formar duo de botões
+        setRightOffset(isMobile ? 72 : 16);
+      } catch {
+        // noop
+      }
+    };
+    updateOffset();
+    window.addEventListener('resize', updateOffset);
+    return () => window.removeEventListener('resize', updateOffset);
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -101,8 +121,9 @@ export default function DraggableCalculator() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 bg-slate-800 text-white p-3 rounded-full shadow-lg hover:bg-slate-700 hover:scale-110 transition-all z-50 flex items-center gap-2 group"
+        className="fixed bg-slate-800 text-white p-3 rounded-full shadow-lg hover:bg-slate-700 hover:scale-110 transition-all z-50 flex items-center gap-2 group"
         title="Abrir Calculadora"
+        style={{ bottom: bottomOffset, right: rightOffset }}
       >
         <Calculator size={24} />
         <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-sm font-bold">

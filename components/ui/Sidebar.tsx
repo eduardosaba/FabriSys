@@ -115,6 +115,7 @@ const sidebarItems: SidebarItem[] = [
       { name: 'Posição de Estoque', href: '/dashboard/relatorios/estoque' },
       { name: 'Validade & Perdas', href: '/dashboard/relatorios/validade' },
       { name: 'Acompanhamento de Metas', href: '/dashboard/relatorios/metas' },
+      { name: 'Histórico de Caixas', href: '/dashboard/relatorios/fechamentos' },
     ],
   },
   {
@@ -140,6 +141,10 @@ const sidebarItems: SidebarItem[] = [
     href: '/dashboard/admin',
     icon: <Shield className="h-5 w-5 text-purple-500" />,
     adminOnly: true,
+    children: [
+      { name: 'Novo Cliente', href: '/dashboard/admin/novo-cliente' },
+      { name: 'Equipe & Usuários', href: '/dashboard/configuracoes/usuarios' },
+    ],
   },
 ];
 
@@ -157,6 +162,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { pinnedPages, togglePinPage, isPagePinned } = usePageTracking();
   const { theme, loading } = useTheme();
   const { profile } = useAuth();
+
+  const logoSrc = ((): string | null => {
+    const company = theme?.company_logo_url?.toString?.().trim();
+    const logo = theme?.logo_url?.toString?.().trim();
+    if (company) return company;
+    if (logo) return logo;
+    return '/logo.png';
+  })();
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
@@ -195,9 +208,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className={`flex flex-1 ${isCollapsed ? 'justify-center' : 'justify-start'}`}>
             <div className="flex items-center gap-3">
               {/* Logo da empresa */}
-              {!isCollapsed && (
+              {!isCollapsed && logoSrc && (
                 <img
-                  src={theme?.company_logo_url ?? theme?.logo_url ?? '/logo.png'}
+                  src={logoSrc}
                   alt="Logo"
                   className="h-8 w-auto object-contain"
                   style={{

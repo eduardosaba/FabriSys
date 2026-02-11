@@ -48,6 +48,13 @@ export default function FidelidadeConfigPage() {
     ];
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = (sessionData as any)?.session;
+      if (!session?.user) {
+        toast.error('Você precisa entrar para salvar as configurações');
+        return;
+      }
+
       const { error } = await supabase.from('configuracoes_sistema').upsert(
         updates.map((u) => ({ ...u, updated_at: new Date().toISOString() })),
         { onConflict: 'chave' }
@@ -66,7 +73,7 @@ export default function FidelidadeConfigPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6 animate-fade-up">
+    <div className="flex flex-col gap-4 p-3 md:gap-6 md:p-6 pb-20 md:pb-6 animate-fade-up">
       <PageHeader
         title="Clube de Fidelidade"
         description="Configure as regras de cashback e gerencie pontuação dos clientes."
@@ -95,7 +102,7 @@ export default function FidelidadeConfigPage() {
           </div>
         </div>
 
-        <div className="flex items-end gap-4">
+        <div className="md:flex md:items-end md:gap-4">
           <div className="flex-1 max-w-md">
             <label className="text-sm text-slate-600 block mb-2">
               Valor do Ponto em Reais (Cashback)
@@ -115,9 +122,17 @@ export default function FidelidadeConfigPage() {
               </span>
             </div>
           </div>
-          <Button onClick={salvarConfig} icon={Save} className="bg-purple-600 hover:bg-purple-700">
-            Salvar Configurações
-          </Button>
+          <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm p-3 border-t border-slate-200 shadow-lg z-40 md:static md:bg-transparent md:backdrop-blur-0 md:p-0 md:border-t-0 md:shadow-none flex md:justify-end">
+            <Button
+              type="button"
+              variant="primary"
+              onClick={salvarConfig}
+              icon={Save}
+              className="w-full md:w-auto"
+            >
+              Salvar Configurações
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -144,41 +159,69 @@ export default function FidelidadeConfigPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-slate-500 font-medium border-b">
-              <tr>
-                <th className="p-4">Cliente</th>
-                <th className="p-4">Telefone / CPF</th>
-                <th className="p-4 text-right">Saldo de Pontos</th>
-                <th className="p-4 text-right">Equivalente em R$</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {clientes.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50">
-                  <td className="p-4 font-bold text-slate-700 flex items-center gap-2">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600">
-                      <User size={16} />
-                    </div>
-                    {c.nome}
-                  </td>
-                  <td className="p-4 text-slate-500">{c.telefone || c.cpf || '-'}</td>
-                  <td className="p-4 text-right font-mono text-lg">{c.saldo_pontos}</td>
-                  <td className="p-4 text-right font-bold text-green-600">
-                    R$ {(c.saldo_pontos * parseFloat(fatorPontos)).toFixed(2)}
-                  </td>
-                </tr>
-              ))}
-              {clientes.length === 0 && !loading && (
+        <div>
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-slate-500 font-medium border-b">
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-slate-400">
-                    Nenhum cliente encontrado. Faça uma busca.
-                  </td>
+                  <th className="p-4">Cliente</th>
+                  <th className="p-4">Telefone / CPF</th>
+                  <th className="p-4 text-right">Saldo de Pontos</th>
+                  <th className="p-4 text-right">Equivalente em R$</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y">
+                {clientes.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50">
+                    <td className="p-4 font-bold text-slate-700 flex items-center gap-2">
+                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600">
+                        <User size={16} />
+                      </div>
+                      {c.nome}
+                    </td>
+                    <td className="p-4 text-slate-500">{c.telefone || c.cpf || '-'}</td>
+                    <td className="p-4 text-right font-mono text-lg">{c.saldo_pontos}</td>
+                    <td className="p-4 text-right font-bold text-green-600">
+                      R$ {(c.saldo_pontos * parseFloat(fatorPontos)).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+                {clientes.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={4} className="p-8 text-center text-slate-400">
+                      Nenhum cliente encontrado. Faça uma busca.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden space-y-3">
+            {clientes.map((c) => (
+              <div
+                key={c.id}
+                className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-bold text-slate-700">{c.nome}</div>
+                  <div className="text-xs text-slate-500">{c.telefone || c.cpf || '-'}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono text-lg">{c.saldo_pontos}</div>
+                  <div className="text-sm font-bold text-green-600">
+                    R$ {(c.saldo_pontos * parseFloat(fatorPontos)).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {clientes.length === 0 && !loading && (
+              <div className="bg-white rounded-lg border border-slate-200 p-8 text-center text-slate-400">
+                Nenhum cliente encontrado. Faça uma busca.
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

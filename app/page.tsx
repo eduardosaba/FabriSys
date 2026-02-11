@@ -15,15 +15,14 @@ import { Eye, EyeOff, Check, AlertCircle, Loader2, X, Mail } from 'lucide-react'
 const supabaseMock = {
   auth: {
     signInWithPassword: async ({ password }: { email: string; password: string }) => {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      // Senhas de teste
+      // Removido delay mock
       if (password === 'admin123' || password === 'fabrica123' || password === 'pdv123') {
         return { data: { user: { id: 'mock-user-id' } }, error: null };
       }
       return { data: null, error: { message: 'Credenciais inválidas.' } };
     },
     resetPasswordForEmail: async (_email?: string) => {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Removido delay mock
       return { error: null };
     },
   },
@@ -244,7 +243,8 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
       if (error) throw error;
       if (data?.user) {
         setToastMsg({ msg: 'Login realizado!', type: 'success' });
-        setTimeout(() => onLoginSuccess('admin'), 800);
+        // Chamar onLoginSuccess imediatamente (removido timeout)
+        onLoginSuccess('admin');
       }
     } catch (error: unknown) {
       setToastMsg({ msg: getErrorMessage(error) || 'Erro no login', type: 'error' });
@@ -264,7 +264,9 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
       <div className="relative z-10 hidden flex-1 flex-col items-center justify-center p-12 text-white md:flex md:items-start md:pl-20 animate-slide-left">
         <div className="mb-8 drop-shadow-2xl">
           {/* Wrapper simplificado: sem fundo e sem borda */}
-          <img src={theme.logo_url} alt="Logo" className="h-38 md:h-38 object-contain" />
+          {theme?.logo_url ? (
+            <img src={theme.logo_url} alt="Logo" className="h-38 md:h-38 object-contain" />
+          ) : null}
         </div>
         <h2 className="mb-6 text-5xl font-bold leading-tight drop-shadow-lg">
           O segredo da <br /> <span className="text-orange-400">Gestão Gourmet.</span>
@@ -301,11 +303,13 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
         <div className="w-full max-w-[400px] rounded-2xl border border-white/20 bg-white/95 p-8 shadow-2xl backdrop-blur-xl animate-fade-up">
           <div className="mb-8 text-center">
             {/* Logo do cliente: responsivo — mobile h-12, md+ ~1.3x (~83.2px) */}
-            <img
-              src={theme.company_logo_url}
-              alt="Logo Cliente"
-              className="mx-auto h-12 md:h-[83.2px] object-contain mb-4"
-            />
+            {theme?.company_logo_url ? (
+              <img
+                src={theme.company_logo_url}
+                alt="Logo Cliente"
+                className="mx-auto h-12 md:h-[83.2px] object-contain mb-4"
+              />
+            ) : null}
             <p className="text-gray-500 font-medium">Bem-vindo de volta</p>
           </div>
 
@@ -367,23 +371,31 @@ function SplashScreen({ onComplete }: { onComplete: () => void }) {
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'test') {
-      // Em ambiente de teste, completar rapidamente para tornar testes determinísticos
-      const t = setTimeout(() => onComplete(), 0);
-      return () => clearTimeout(t);
+      // Em ambiente de teste, completar no próximo ciclo de evento
+      setTimeout(() => onComplete(), 0);
+      return;
     }
 
-    const interval = setInterval(() => {
-      setProgress((old) => {
-        if (old >= 100) {
-          clearInterval(interval);
-          setTimeout(onComplete, 500);
-          return 100;
-        }
-        return old + Math.random() * 10;
-      });
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    intervalId = setInterval(() => {
+      setProgress((old) => Math.min(100, old + Math.random() * 10));
     }, 100);
-    return () => clearInterval(interval);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [onComplete]);
+
+  useEffect(() => {
+    if (progress >= 100) {
+      // chamar onComplete de forma assíncrona para evitar setState durante render
+      if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+        window.requestAnimationFrame(() => onComplete());
+      } else {
+        setTimeout(() => onComplete(), 0);
+      }
+    }
+  }, [progress, onComplete]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900">
@@ -412,6 +424,23 @@ export default function App() {
     // O projeto original usa Supabase; para desenvolvimento local esta
     // amostra usa `supabaseMock` definido acima. Mantemos o useEffect vazio
     // para preservar o comportamento de Client Component.
+  }, []);
+
+  useEffect(() => {
+    // Dev helper: expor supabase no `window` para testes rápidos no Console
+    if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
+      void import('@/lib/supabase')
+        .then((m) => {
+          try {
+            (window as any).supabase = m.supabase;
+
+            console.log('[dev] window.supabase disponível para debugging');
+          } catch (_) {
+            // ignore
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   return (

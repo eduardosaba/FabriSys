@@ -19,7 +19,7 @@ const Footer: React.FC<FooterProps> = ({
 }) => {
   return (
     <footer
-      className="border-t px-6 py-4 fixed bottom-0 left-0 z-40 w-full flex justify-center"
+      className={`hidden md:flex border-t px-3 py-2 md:px-6 md:py-4 md:fixed md:bottom-0 md:left-0 md:z-40 w-full justify-center`}
       style={{
         background: 'var(--footer-bg, var(--secondary))',
         borderColor: 'var(--primary)',
@@ -28,18 +28,15 @@ const Footer: React.FC<FooterProps> = ({
       <div className="w-full">
         <div className="flex max-w-7xl w-full items-center justify-between">
           {/* Marca e Direitos Autorais */}
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium text-gray-800 dark:text-gray-200 hover:bg-[var(--primary)] hover:text-white rounded px-2 py-1 transition-colors cursor-pointer">
-                {companyName}
-              </span>
-              <span className="mx-2">•</span>
-              <span>© {currentYear} Todos os direitos reservados</span>
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">
+              {companyName}
             </div>
+            <div className="text-xs text-gray-500 hidden sm:block">• © {currentYear}</div>
           </div>
 
           {/* Informações do Sistema */}
-          <div className="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
+          <div className="hidden md:flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
             {/* Versão do Sistema */}
             <div className="flex items-center gap-2">
               <span className="font-medium">Sistema:</span>
@@ -58,7 +55,7 @@ const Footer: React.FC<FooterProps> = ({
             {process.env.NODE_ENV === 'development' && profile && (
               <div className="flex items-center gap-2">
                 <span className="font-medium">Usuário:</span>
-                <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                <span className="rounded bg-primary px-2 py-1 text-xs text-white">
                   {profile.role}
                 </span>
               </div>
@@ -68,7 +65,7 @@ const Footer: React.FC<FooterProps> = ({
 
         {/* Linha adicional com informações técnicas (visível apenas para master) */}
         {profile?.role === 'master' && (
-          <div className="mt-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+          <div className="mt-2 border-t border-gray-100 pt-2 dark:border-gray-800 hidden md:block">
             <div className="mx-auto flex max-w-7xl items-center justify-between text-xs text-gray-500 dark:text-gray-500">
               <div>
                 <span>Desenvolvido com Next.js • Supabase • Tailwind CSS</span>

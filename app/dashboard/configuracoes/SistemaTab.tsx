@@ -47,16 +47,25 @@ export default function SistemaTab() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Usamos UPSERT para criar a configuração caso ela não exista ainda no banco
-      const updates = Object.entries(configs).map(([chave, valor]) =>
-        supabase.from('configuracoes_sistema').upsert({
-          chave,
-          valor,
-          updated_at: new Date().toISOString(),
-        })
-      );
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = (sessionData as any)?.session;
+      if (!session?.user) {
+        toast.error('Você precisa estar logado para salvar as configurações');
+        setSaving(false);
+        return;
+      }
+      // Usamos um único UPSERT com onConflict para evitar múltiplos POST/403 e garantir atomicidade
+      const updates = Object.entries(configs).map(([chave, valor]) => ({
+        chave,
+        valor,
+        updated_at: new Date().toISOString(),
+      }));
 
-      await Promise.all(updates);
+      const { error } = await supabase
+        .from('configuracoes_sistema')
+        .upsert(updates, { onConflict: 'chave' });
+
+      if (error) throw error;
       toast.success('Regras do sistema atualizadas!');
     } catch (err) {
       console.error(err);
@@ -73,7 +82,7 @@ export default function SistemaTab() {
   if (loading) return <div className="p-8 text-center text-slate-500">Carregando regras...</div>;
 
   return (
-    <div className="space-y-6 animate-fade-up">
+    <div className="space-y-6 animate-fade-up pb-20 md:pb-0">
       {/* --- SEÇÃO 1: MODO DE OPERAÇÃO DO PDV (NOVA) --- */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -238,15 +247,21 @@ export default function SistemaTab() {
         </div>
       </div>
 
-      <div className="flex justify-end pt-4 border-t border-slate-200">
-        <Button
-          onClick={handleSave}
-          loading={saving}
-          icon={Save}
-          className="px-8 py-3 text-lg shadow-lg shadow-blue-200"
-        >
-          Salvar Regras
-        </Button>
+      <div className="pt-4 border-t border-slate-200">
+        <div className="md:flex md:justify-end">
+          <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm p-3 border-t border-slate-200 shadow-lg z-40 md:static md:bg-transparent md:backdrop-blur-0 md:p-0 md:border-t-0 md:shadow-none">
+            <div className="flex justify-center md:justify-end">
+              <Button
+                onClick={handleSave}
+                loading={saving}
+                icon={Save}
+                className="px-8 py-3 text-lg shadow-lg shadow-blue-200"
+              >
+                Salvar Regras
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

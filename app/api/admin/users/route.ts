@@ -52,6 +52,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Usuário solicitante não encontrado.' }, { status: 403 });
     }
 
+    // Verificar se a organização referenciada existe
+    if (criador.organization_id) {
+      const { data: orgExists, error: orgErr } = await supabaseAdmin
+        .from('organizations')
+        .select('id')
+        .eq('id', criador.organization_id)
+        .maybeSingle();
+
+      if (orgErr) {
+        console.error('[api/admin/users] erro ao verificar organization:', orgErr);
+        return NextResponse.json({ error: 'Erro ao verificar organização.' }, { status: 500 });
+      }
+
+      if (!orgExists) {
+        return NextResponse.json(
+          {
+            error:
+              'Organização vinculada ao usuário criador não existe no banco. Crie a organização via /dashboard/admin/novo-cliente ou use o endpoint /api/master/create-tenant antes de adicionar colaboradores.',
+          },
+          { status: 400 }
+        );
+      }
+    } else {
+      return NextResponse.json(
+        { error: 'Usuário criador não está vinculado a nenhuma organização.' },
+        { status: 400 }
+      );
+    }
+
     // Trava de Segurança: Apenas Master cria Master
     if (role === 'master' && criador.role !== 'master') {
       return NextResponse.json(

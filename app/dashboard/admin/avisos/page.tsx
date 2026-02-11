@@ -20,9 +20,9 @@ interface AvisoSistema {
 const TIPOS_USUARIO = [
   { value: 'todos', label: 'Todos os Usuários' },
   { value: 'admin', label: 'Administradores' },
-  { value: 'caixa', label: 'Operadores de Caixa (PDV)' },
-  { value: 'estoque', label: 'Estoquistas' },
-  { value: 'producao', label: 'Produção/Cozinha' },
+  { value: 'pdv', label: 'Operadores de Caixa (PDV)' },
+  { value: 'compras', label: 'Estoquistas / Compras' },
+  { value: 'fabrica', label: 'Fábrica / Produção' },
 ];
 
 export default function GestaoAvisosPage() {

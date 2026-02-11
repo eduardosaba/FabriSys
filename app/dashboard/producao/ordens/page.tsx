@@ -187,98 +187,168 @@ export default function OrdensProducaoPage() {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    OP
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Produto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Quantidade
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Data Prevista
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Custo Previsto
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Ações
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {filteredItems.map((ordem) => (
-                  <tr key={ordem.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                      {ordem.numero_op}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                      {ordem.produto_final.nome}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {ordem.quantidade_prevista}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
+          <>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      OP
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Produto
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Quantidade
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Data Prevista
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Custo Previsto
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {filteredItems.map((ordem) => (
+                    <tr key={ordem.id} className="hover:bg-gray-50">
+                      <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                        {ordem.numero_op}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                        {ordem.produto_final.nome}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                        {ordem.quantidade_prevista}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(ordem.status)}`}
+                        >
+                          {ordem.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                        {new Date(ordem.data_prevista).toLocaleDateString('pt-BR')}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                        {formatCurrency(ordem.custo_previsto)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() =>
+                              (window.location.href = `/dashboard/producao/ordens/${ordem.id}`)
+                            }
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors duration-200 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                            aria-label={`Visualizar ordem ${ordem.numero_op}`}
+                            title="Visualizar"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() =>
+                              (window.location.href = `/dashboard/producao/ordens/${ordem.id}/editar`)
+                            }
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                            aria-label={`Editar ordem ${ordem.numero_op}`}
+                            title="Editar"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedOrdem(ordem);
+                              setDeleteModal(true);
+                            }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                            aria-label={`Excluir ordem ${ordem.numero_op}`}
+                            title="Excluir"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile: cards */}
+            <div className="md:hidden space-y-3">
+              {filteredItems.map((ordem) => (
+                <div
+                  key={ordem.id}
+                  className="bg-white rounded-lg border p-4 shadow-sm flex justify-between items-start"
+                >
+                  <div className="flex-1">
+                    <div className="text-sm font-bold text-gray-900">
+                      {ordem.numero_op}{' '}
+                      <span className="font-normal">- {ordem.produto_final.nome}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Quantidade: {ordem.quantidade_prevista}
+                    </div>
+                    <div className="mt-2">
                       <span
                         className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(ordem.status)}`}
                       >
                         {ordem.status.replace('_', ' ')}
                       </span>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {new Date(ordem.data_prevista).toLocaleDateString('pt-BR')}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                    </div>
+                    <div className="text-xs text-gray-500 mt-2">
+                      Prevista: {new Date(ordem.data_prevista).toLocaleDateString('pt-BR')}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2 ml-4">
+                    <div className="text-sm font-medium">
                       {formatCurrency(ordem.custo_previsto)}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() =>
-                            (window.location.href = `/dashboard/producao/ordens/${ordem.id}`)
-                          }
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors duration-200 hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                          aria-label={`Visualizar ordem ${ordem.numero_op}`}
-                          title="Visualizar"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() =>
-                            (window.location.href = `/dashboard/producao/ordens/${ordem.id}/editar`)
-                          }
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
-                          aria-label={`Editar ordem ${ordem.numero_op}`}
-                          title="Editar"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedOrdem(ordem);
-                            setDeleteModal(true);
-                          }}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                          aria-label={`Excluir ordem ${ordem.numero_op}`}
-                          title="Excluir"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() =>
+                          (window.location.href = `/dashboard/producao/ordens/${ordem.id}`)
+                        }
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors duration-200 hover:bg-blue-50 hover:text-blue-800 focus:outline-none"
+                        aria-label={`Visualizar ordem ${ordem.numero_op}`}
+                        title="Visualizar"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() =>
+                          (window.location.href = `/dashboard/producao/ordens/${ordem.id}/editar`)
+                        }
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none"
+                        aria-label={`Editar ordem ${ordem.numero_op}`}
+                        title="Editar"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedOrdem(ordem);
+                          setDeleteModal(true);
+                        }}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-800 focus:outline-none"
+                        aria-label={`Excluir ordem ${ordem.numero_op}`}
+                        title="Excluir"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

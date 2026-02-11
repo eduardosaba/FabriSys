@@ -29,7 +29,7 @@ export default function OnboardingPage() {
     cnpj: '',
     telefone: '',
     endereco: '',
-    logo_url: '',
+    logo_url: null as string | null,
   });
 
   // 1. Carregar dados atuais da organização
@@ -115,7 +115,7 @@ export default function OnboardingPage() {
       if (profile?.id) {
         await updateTheme(
           {
-            company_logo_url: formData.logo_url,
+            company_logo_url: formData.logo_url ?? undefined,
             // Passamos o objeto completo de cores do preset
             sidebar_bg: selectedPreset.sidebar_bg,
             sidebar_hover_bg: selectedPreset.sidebar_hover_bg,
@@ -132,7 +132,8 @@ export default function OnboardingPage() {
       }
 
       toast.success('Tudo pronto! Bem-vindo ao Confectio.');
-      setTimeout(() => router.push('/dashboard'), 1500);
+      // Redirecionar imediatamente após conclusão (removido timeout)
+      router.push('/dashboard');
     } catch (err) {
       console.error(err);
       toast.error('Erro ao salvar configurações.');
@@ -148,17 +149,30 @@ export default function OnboardingPage() {
 
     const toastId = toast.loading('Enviando logo...');
     try {
-      const path = `logos/${orgId}-${Date.now()}.${file.name.split('.').pop()}`;
-      const { error: uploadError } = await supabase.storage
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = (sessionData as any)?.session;
+      if (!session?.user) {
+        toast.error('Você precisa estar logado para enviar uma logo.');
+        toast.dismiss(toastId);
+        return;
+      }
+      if (!file.type || !file.name) throw new Error('Arquivo inválido');
+
+      const ext = file.name.split('.').pop() || 'png';
+      const path = `logos/${orgId}-${Date.now()}.${ext}`;
+
+      const { data, error } = await supabase.storage
         .from('company-assets')
-        .upload(path, file);
+        .upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type });
 
-      if (uploadError) throw uploadError;
+      if (error) throw error;
 
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from('company-assets').getPublicUrl(path);
-      setFormData((prev) => ({ ...prev, logo_url: publicUrl }));
+      const urlRes = await supabase.storage.from('company-assets').getPublicUrl(path);
+      const urlData = (urlRes as any).data;
+      const urlError = (urlRes as any).error;
+      if (urlError) throw urlError;
+
+      setFormData((prev) => ({ ...prev, logo_url: urlData?.publicUrl ?? null }));
       toast.success('Logo enviada!', { id: toastId });
     } catch {
       toast.error('Erro no upload.', { id: toastId });

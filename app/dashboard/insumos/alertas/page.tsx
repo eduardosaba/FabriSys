@@ -304,15 +304,17 @@ export default function AlertasPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {reposicaoNecessaria.map((item) => {
+                  {reposicaoNecessaria.map((item, idx) => {
                     const isZero = (item.estoque_atual || 0) === 0;
                     const alvoReposicao = Math.ceil(item.estoque_minimo_alerta * 1.5);
                     const qtdSugerida = alvoReposicao - item.estoque_atual;
                     const custoEstimado = qtdSugerida * item.custo_por_ue;
 
+                    const safeKey = Number.isFinite(Number(item.id)) ? item.id : `repo-${idx}`;
+
                     return (
                       <tr
-                        key={item.id}
+                        key={safeKey}
                         className={`transition-colors ${isZero ? 'bg-red-50/30 hover:bg-red-50/60' : 'hover:bg-yellow-50/30'}`}
                       >
                         <td className="px-6 py-4">
@@ -382,7 +384,7 @@ export default function AlertasPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {alertasValidade.map((item) => {
+                {alertasValidade.map((item, idx) => {
                   const statusColor =
                     item.status === 'vencido'
                       ? 'text-red-600 bg-red-50 border-red-100'
@@ -397,8 +399,10 @@ export default function AlertasPage() {
                         ? 'VENCE HOJE'
                         : 'A VENCER';
 
+                  const safeKey = Number.isFinite(Number(item.id)) ? item.id : `val-${idx}`;
+
                   return (
-                    <tr key={item.id} className="hover:bg-orange-50/10 transition-colors">
+                    <tr key={safeKey} className="hover:bg-orange-50/10 transition-colors">
                       <td className="px-6 py-4">
                         <span
                           className={`px-2 py-1 rounded text-[10px] font-bold border ${statusColor}`}
@@ -467,11 +471,11 @@ export default function AlertasPage() {
             </p>
             <div className="max-h-64 overflow-y-auto bg-white p-3 rounded border border-blue-100">
               <ul className="text-sm text-slate-600 space-y-1">
-                {reposicaoNecessaria.map((c) => {
+                {reposicaoNecessaria.map((c, idx) => {
                   const isZero = (c.estoque_atual || 0) === 0;
                   return (
                     <li
-                      key={c.id}
+                      key={Number.isFinite(Number(c.id)) ? c.id : `modal-${idx}`}
                       className="flex justify-between border-b border-slate-50 last:border-0 py-2 items-center"
                     >
                       <div className="flex items-center gap-2">

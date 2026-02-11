@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
@@ -39,6 +39,7 @@ export default function KanbanPage() {
   const [ordens, setOrdens] = useState<OrdemKanban[]>([]);
   const [loading, setLoading] = useState(true);
   const [movendo, setMovendo] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
   // Estado para controlar qual ordem está sendo expedida (abre o modal)
   const [ordemParaExpedir, setOrdemParaExpedir] = useState<OrdemKanban | null>(null);
@@ -91,21 +92,26 @@ export default function KanbanPage() {
         };
       });
 
-      setOrdens(formatadas);
+      if (mountedRef.current) setOrdens(formatadas);
     } catch (error) {
       console.error(error);
       toast.error('Erro ao carregar quadro.');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
+    mountedRef.current = true;
+
     void carregarKanban();
     const interval = setInterval(() => {
       void carregarKanban();
     }, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      mountedRef.current = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const moverOrdem = async (ordemId: string, estagioAtual: string, novoEstagioManual?: string) => {
@@ -144,7 +150,7 @@ export default function KanbanPage() {
       console.error(err);
       toast.error('Erro ao mover ordem.');
     } finally {
-      setMovendo(null);
+      if (mountedRef.current) setMovendo(null);
     }
   };
 

@@ -43,8 +43,10 @@ export default function RelatorioEstoquePage() {
       if (error) throw error;
 
       const rows = (data ?? []) as unknown[];
-      const formatados: EstoqueItem[] = rows.map((item) => {
+      const formatados: EstoqueItem[] = rows.map((item, idx) => {
         const it = item as Record<string, unknown>;
+        const rawId = Number(it['id'] ?? NaN);
+        const safeId = Number.isFinite(rawId) ? rawId : idx;
         const qtd = Number(it['estoque_atual'] ?? 0) || 0;
         const custo = Number(it['custo_por_ue'] ?? 0) || 0;
         const min = Number(it['estoque_minimo_alerta'] ?? 0) || 0;
@@ -54,7 +56,7 @@ export default function RelatorioEstoquePage() {
         else if (qtd <= min) status = 'baixo';
 
         return {
-          id: Number(it['id'] ?? 0),
+          id: safeId,
           nome: String(it['nome'] ?? ''),
           categoria: String(
             (it['categoria'] as Record<string, unknown> | undefined)?.['nome'] ?? 'Sem Categoria'
@@ -198,9 +200,9 @@ export default function RelatorioEstoquePage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 print:divide-gray-300">
-            {itensFiltrados.map((item) => (
+            {itensFiltrados.map((item, idx) => (
               <tr
-                key={item.id}
+                key={Number.isFinite(item.id) ? item.id : `item-${idx}`}
                 className="hover:bg-slate-50 transition-colors print:break-inside-avoid"
               >
                 <td className="px-6 py-3 print:px-2 print:py-1">

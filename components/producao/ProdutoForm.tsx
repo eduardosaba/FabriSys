@@ -65,7 +65,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
   useEffect(() => {
     if (produto) {
       // Converte o objeto do banco para o formato do formulário
-      const dadosFormulario = {
+      const dadosFormulario: ProdutoFormData = {
         nome: produto.nome || '',
         preco_venda: Number(produto.preco_venda || 0),
         peso_unitario: Number((produto as any)?.peso_unitario || 0),
@@ -75,8 +75,8 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
           ? Number((produto as any).categoria_id)
           : undefined,
         codigo_interno: produto.codigo_interno || '',
-        descricao: produto.descricao || '',
-        imagem_url: (produto as any)?.imagem_url || null,
+        descricao: produto.descricao || null,
+        imagem_url: (produto as any)?.imagem_url ? String((produto as any).imagem_url) : null,
       };
 
       // Reseta o formulário com os dados do banco

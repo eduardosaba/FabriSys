@@ -48,28 +48,22 @@ export default function OrdensProducaoPage() {
     try {
       const { data, error } = await supabase
         .from('ordens_producao')
-        .select(
-          `
-          id,
-          numero_op,
-          quantidade_prevista,
-          status,
-          data_prevista,
-          custo_previsto,
-          created_at,
-          produto_final:produtos_finais!inner(nome, preco_venda)
-        `
-        )
+        .select('id, numero_op, quantidade_prevista, status, data_prevista, custo_previsto, created_at, produto_final_id')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      // Transformar os dados para o formato correto
-      const ordensFormatadas = (data || []).map((ordem: OrdemProducaoRaw) => ({
+      const rows = (data || []) as any[];
+      const produtoIds = Array.from(new Set(rows.map((r) => String(r.produto_final_id)).filter(Boolean)));
+      const produtoMap: Record<string, { nome?: string; preco_venda?: number }> = {};
+      if (produtoIds.length > 0) {
+        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome, preco_venda').in('id', produtoIds);
+        (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome, preco_venda: Number(p.preco_venda || 0) }));
+      }
+
+      const ordensFormatadas = rows.map((ordem: any) => ({
         ...ordem,
-        produto_final: Array.isArray(ordem.produto_final)
-          ? ordem.produto_final[0]
-          : ordem.produto_final,
+        produto_final: produtoMap[String(ordem.produto_final_id)] || { nome: '', preco_venda: 0 },
       }));
 
       setOrdens(ordensFormatadas);
@@ -254,7 +248,7 @@ export default function OrdensProducaoPage() {
                           </button>
                           <button
                             onClick={() =>
-                              (window.location.href = `/dashboard/producao/ordens/${ordem.id}/editar`)
+                              (window.location.href = `/dashboard/producao/ordens/${ordem.id}`)
                             }
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-yellow-600 transition-colors duration-200 hover:bg-yellow-50 hover:text-yellow-800 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
                             aria-label={`Editar ordem ${ordem.numero_op}`}

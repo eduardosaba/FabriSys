@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { toast } from 'react-hot-toast';
 import { ThemeSettings, ThemeColors } from '@/lib/types';
 import { supabase } from './supabase';
 
@@ -281,96 +282,274 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return Promise.resolve(defaultTheme);
   }, []);
 
-  const fetchUserThemeColors = useCallback(
-    async (userId: string): Promise<Partial<ThemeColors> | null> => {
+  const fetchScopedThemeColors = useCallback(
+    async (
+      options: { userId?: string; organizationId?: string }
+    ): Promise<Partial<ThemeColors> | null> => {
       try {
-        const { data, error } = await supabase
-          .from('user_theme_colors')
-          .select(
-            'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family, sidebar_bg, sidebar_hover_bg, sidebar_text, sidebar_active_text'
-          )
-          .eq('user_id', userId)
-          .eq('theme_mode', resolvedTheme)
-          .maybeSingle();
+        // Primeiro tenta buscar tema vinculado à organização (maior prioridade)
+        if (options.organizationId) {
+          const { data: orgData, error: orgErr } = await supabase
+            .from('user_theme_colors')
+            .select(
+              'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family, sidebar_bg, sidebar_hover_bg, sidebar_text, sidebar_active_text'
+            )
+            .eq('organization_id', options.organizationId)
+            .eq('theme_mode', resolvedTheme)
+            .maybeSingle();
 
-        if (error) {
-          console.error('Erro ao buscar cores do usuário:', error);
-          return null;
+          if (orgErr) {
+            console.error('Erro ao buscar cores da organização:', orgErr);
+          } else if (orgData) {
+            return {
+              primary: orgData.primary_color as string,
+              tituloPaginas: orgData.titulo_paginas_color as string,
+              logo_url: orgData.logo_url as string,
+              logo_scale: orgData.logo_scale as number,
+              company_logo_url: orgData.company_logo_url as string,
+              company_logo_scale: orgData.company_logo_scale as number,
+              font_family: orgData.font_family as string,
+              sidebar_bg: orgData.sidebar_bg as string,
+              sidebar_hover_bg: orgData.sidebar_hover_bg as string,
+              sidebar_text: orgData.sidebar_text as string,
+              sidebar_active_text: orgData.sidebar_active_text as string,
+            };
+          }
         }
 
-        if (data) {
-          return {
-            primary: data.primary_color as string,
-            tituloPaginas: data.titulo_paginas_color as string,
-            logo_url: data.logo_url as string,
-            logo_scale: data.logo_scale as number,
-            company_logo_url: data.company_logo_url as string,
-            company_logo_scale: data.company_logo_scale as number,
-            font_family: data.font_family as string,
-            sidebar_bg: data.sidebar_bg as string,
-            sidebar_hover_bg: data.sidebar_hover_bg as string,
-            sidebar_text: data.sidebar_text as string,
-            sidebar_active_text: data.sidebar_active_text as string,
-          };
+        // Se não encontrou por organização, tenta por usuário
+        if (options.userId) {
+          const { data, error } = await supabase
+            .from('user_theme_colors')
+            .select(
+              'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family, sidebar_bg, sidebar_hover_bg, sidebar_text, sidebar_active_text'
+            )
+            .eq('user_id', options.userId)
+            .eq('theme_mode', resolvedTheme)
+            .maybeSingle();
+
+          if (error) {
+            console.error('Erro ao buscar cores do usuário:', error);
+            return null;
+          }
+
+          if (data) {
+            return {
+              primary: data.primary_color as string,
+              tituloPaginas: data.titulo_paginas_color as string,
+              logo_url: data.logo_url as string,
+              logo_scale: data.logo_scale as number,
+              company_logo_url: data.company_logo_url as string,
+              company_logo_scale: data.company_logo_scale as number,
+              font_family: data.font_family as string,
+              sidebar_bg: data.sidebar_bg as string,
+              sidebar_hover_bg: data.sidebar_hover_bg as string,
+              sidebar_text: data.sidebar_text as string,
+              sidebar_active_text: data.sidebar_active_text as string,
+            };
+          }
         }
 
         return null;
       } catch (err) {
-        console.error('Erro ao carregar cores do usuário:', err);
+        console.error('Erro ao carregar cores do usuário/organização:', err);
         return null;
       }
     },
     [resolvedTheme]
   );
 
-  const saveUserThemeColors = useCallback(
-    async (userId: string, colors: Partial<ThemeColors>) => {
-      try {
-        // Primeiro tenta atualizar o registro existente
-        const { data: updateData, error: updateError } = await supabase
-          .from('user_theme_colors')
-          .update({
-            primary_color: colors.primary ?? '#4A2C2B',
-            titulo_paginas_color: colors.tituloPaginas ?? '#ffffff',
-            logo_url: colors.logo_url ?? '/logo.png',
-            logo_scale: colors.logo_scale ?? 1.0,
-            company_logo_url: colors.company_logo_url,
-            company_logo_scale: colors.company_logo_scale ?? 1.0,
-            font_family: colors.font_family ?? 'Inter',
-            sidebar_bg: colors.sidebar_bg ?? colors.secondary ?? '#e8e8e8',
-            sidebar_hover_bg: colors.sidebar_hover_bg ?? '#88544c',
-            sidebar_text: colors.sidebar_text ?? '#4a2c2b',
-            sidebar_active_text: colors.sidebar_active_text ?? '#88544c',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', userId)
-          .eq('theme_mode', resolvedTheme)
-          .select();
-
-        // Se não atualizou nada (registro não existe), faz insert
-        if (!updateData || updateData.length === 0) {
-          const { error: insertError } = await supabase.from('user_theme_colors').insert({
-            user_id: userId,
-            theme_mode: resolvedTheme,
-            primary_color: colors.primary ?? '#4A2C2B',
-            titulo_paginas_color: colors.tituloPaginas ?? '#ffffff',
-            logo_url: colors.logo_url ?? '/logo.png',
-            logo_scale: colors.logo_scale ?? 1.0,
-            company_logo_url: colors.company_logo_url,
-            company_logo_scale: colors.company_logo_scale ?? 1.0,
-            font_family: colors.font_family ?? 'Inter',
-            sidebar_bg: colors.sidebar_bg ?? colors.secondary ?? '#e8e8e8',
-            sidebar_hover_bg: colors.sidebar_hover_bg ?? '#88544c',
-            sidebar_text: colors.sidebar_text ?? '#4a2c2b',
-            sidebar_active_text: colors.sidebar_active_text ?? '#88544c',
-          });
-
-          if (insertError) throw insertError;
-        } else if (updateError) {
-          throw updateError;
+  const fetchSystemSettings = useCallback(async (organizationId?: string) => {
+    try {
+      if (!organizationId) {
+        const { data: sessionData } = await supabase.auth.getUser();
+        const user = (sessionData as any)?.user;
+        if (user) {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('id', user.id)
+            .maybeSingle();
+          organizationId = (profileData as any)?.organization_id;
         }
+      }
+
+      // Try organization-specific first
+      if (organizationId) {
+        const { data: sysRow } = await supabase
+          .from('configuracoes_sistema')
+          .select('logo_url, company_logo_url, company_name, nome_empresa, theme, theme_mode, primary_color, colors_json, features')
+          .eq('chave', 'system_settings')
+          .eq('organization_id', organizationId)
+          .limit(1)
+          .maybeSingle();
+        if (sysRow) return sysRow as any;
+      }
+
+      // Fallback to global
+      const { data: globalRow } = await supabase
+        .from('configuracoes_sistema')
+        .select('logo_url, company_logo_url, company_name, nome_empresa, theme, theme_mode, primary_color, colors_json, features')
+        .eq('chave', 'system_settings')
+        .is('organization_id', null)
+        .limit(1)
+        .maybeSingle();
+      return globalRow as any || null;
+    } catch (err) {
+      console.error('Erro ao buscar system_settings:', err);
+      return null;
+    }
+  }, []);
+
+  const saveScopedThemeColors = useCallback(
+    async (
+      options: { userId?: string; organizationId?: string },
+      colors: Partial<ThemeColors>
+    ) => {
+      try {
+        // Proteção: evite tentar upserts quando não houver um usuário autenticado.
+        // Chamadas anônimas chegarão ao Postgres sem auth.uid() e serão bloqueadas por RLS.
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) {
+            console.warn('saveScopedThemeColors abortado: usuário não autenticado');
+            throw new Error('Usuário não autenticado');
+          }
+
+          // Se estamos gravando por organização, confirme que o usuário pertence a ela
+          if (options.organizationId) {
+            try {
+              const { data: profileData, error: profErr } = await supabase
+                .from('profiles')
+                .select('organization_id')
+                .eq('id', user.id)
+                .maybeSingle();
+              if (profErr) {
+                console.warn('Não foi possível verificar organization_id do perfil:', profErr);
+                throw new Error('Erro ao validar organização do usuário');
+              }
+              const userOrg = (profileData as any)?.organization_id;
+              if (!userOrg || String(userOrg) !== String(options.organizationId)) {
+                console.warn(
+                  'Usuário não pertence à organization_id fornecida — abortando upsert.'
+                );
+                throw new Error('Usuário não autorizado para essa organização');
+              }
+            } catch (e) {
+              throw e;
+            }
+          }
+        } catch (authErr) {
+          // Propaga para o caller tratar — evita que façamos requests anônimos
+          console.error('saveScopedThemeColors: abortando por falta de autenticação', authErr);
+          throw authErr;
+        }
+
+        // Preparar payload comum
+        const payloadBase: any = {
+          theme_mode: resolvedTheme,
+          primary_color: colors.primary ?? '#4A2C2B',
+          titulo_paginas_color: colors.tituloPaginas ?? '#ffffff',
+          logo_url: colors.logo_url ?? '/logo.png',
+          logo_scale: colors.logo_scale ?? 1.0,
+          company_logo_url: colors.company_logo_url,
+          company_logo_scale: colors.company_logo_scale ?? 1.0,
+          font_family: colors.font_family ?? 'Inter',
+          sidebar_bg: colors.sidebar_bg ?? colors.secondary ?? '#e8e8e8',
+          sidebar_hover_bg: colors.sidebar_hover_bg ?? '#88544c',
+          sidebar_text: colors.sidebar_text ?? '#4a2c2b',
+          sidebar_active_text: colors.sidebar_active_text ?? '#88544c',
+          updated_at: new Date().toISOString(),
+          // Persistir JSON completo com as cores/customizações para garantir
+          // que todas as chaves personalizadas sejam salvas mesmo que não haja
+          // colunas específicas para cada uma.
+          colors_json: JSON.stringify({
+            theme_mode: resolvedTheme,
+            colors: colors || {},
+            logo_url: colors.logo_url ?? null,
+            logo_scale: colors.logo_scale ?? null,
+            company_logo_url: colors.company_logo_url ?? null,
+            company_logo_scale: colors.company_logo_scale ?? null,
+            font_family: colors.font_family ?? null,
+          }),
+        };
+
+        if (options.organizationId) {
+          const payload = { ...payloadBase, organization_id: options.organizationId };
+          try {
+            const { error } = await supabase
+              .from('user_theme_colors')
+              .upsert(payload, { onConflict: 'organization_id,theme_mode' });
+            if (error) throw error;
+            return;
+          } catch (upsertErr: any) {
+            const msg = String(upsertErr?.message || upsertErr);
+            // Fallback manual: se o ON CONFLICT não for suportado por falta de índice,
+            // tentar select -> update ou insert para garantir persistência.
+            if (msg.includes('no unique') || msg.includes('ON CONFLICT')) {
+              const { data: existing, error: selErr } = await supabase
+                .from('user_theme_colors')
+                .select('*')
+                .eq('organization_id', options.organizationId)
+                .eq('theme_mode', payload.theme_mode)
+                .maybeSingle();
+              if (selErr) throw selErr;
+              if (existing) {
+                const { error: updErr } = await supabase
+                  .from('user_theme_colors')
+                  .update(payload)
+                  .eq('id', (existing as any).id);
+                if (updErr) throw updErr;
+                return;
+              }
+              const { error: insErr } = await supabase.from('user_theme_colors').insert(payload);
+              if (insErr) throw insErr;
+              return;
+            }
+            throw upsertErr;
+          }
+        }
+
+        if (options.userId) {
+          const payload = { ...payloadBase, user_id: options.userId };
+          try {
+            const { error } = await supabase.from('user_theme_colors').upsert(payload, {
+              onConflict: 'user_id,theme_mode',
+            });
+            if (error) throw error;
+            return;
+          } catch (upsertErr: any) {
+            const msg = String(upsertErr?.message || upsertErr);
+            if (msg.includes('no unique') || msg.includes('ON CONFLICT')) {
+              const { data: existing, error: selErr } = await supabase
+                .from('user_theme_colors')
+                .select('*')
+                .eq('user_id', options.userId)
+                .eq('theme_mode', payload.theme_mode)
+                .maybeSingle();
+              if (selErr) throw selErr;
+              if (existing) {
+                const { error: updErr } = await supabase
+                  .from('user_theme_colors')
+                  .update(payload)
+                  .eq('id', (existing as any).id);
+                if (updErr) throw updErr;
+                return;
+              }
+              const { error: insErr } = await supabase.from('user_theme_colors').insert(payload);
+              if (insErr) throw insErr;
+              return;
+            }
+            throw upsertErr;
+          }
+        }
+
+        // Se não houver escopo fornecido, simplesmente retorna sem persistir
+        console.warn('Nenhum userId ou organizationId informado para salvar cores.');
       } catch (err) {
-        console.error('Erro ao salvar cores do usuário:', err);
+        console.error('Erro ao salvar cores do usuário/organização:', err);
         throw err;
       }
     },
@@ -438,7 +617,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         // Se apenas o theme_mode está sendo alterado, tentar aplicar cores customizadas do usuário
         if (newTheme.theme_mode && newTheme.theme_mode !== 'system' && !newTheme.colors && userId) {
           try {
-            const userColors = await fetchUserThemeColors(userId);
+            const userColors = await fetchScopedThemeColors({ userId });
             if (userColors) {
               // Aplicar cores customizadas ao novo modo
               const mode = newTheme.theme_mode;
@@ -460,7 +639,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
         // Se for um usuário admin e estiver salvando cores específicas ou configurações de logo, salva no banco
         if (
-          userId &&
+          (userId || undefined) &&
           (newTheme.colors ||
             newTheme.logo_url ||
             newTheme.company_logo_url ||
@@ -473,7 +652,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             newTheme.colors?.[themeMode as keyof typeof newTheme.colors] ||
             updatedTheme.colors[themeMode as keyof typeof updatedTheme.colors];
 
-          // Incluir configurações de logo nas cores a serem salvas
           const colorsToSave: Partial<ThemeColors> = {
             ...(colors as Partial<ThemeColors>),
             logo_url: newTheme.logo_url || updatedTheme.logo_url,
@@ -488,8 +666,60 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             sidebar_active_text: newTheme.sidebar_active_text || updatedTheme.sidebar_active_text,
           };
 
-          if (colorsToSave) {
-            await saveUserThemeColors(userId, colorsToSave);
+          // Tentar resolver escopo: organization primeiro, senão user
+          let resolvedOrgId: string | undefined;
+          let resolvedUserId: string | undefined = userId;
+
+          if (!resolvedUserId) {
+            try {
+              const { data: sessionData } = await supabase.auth.getUser();
+              const user = (sessionData as any)?.user;
+              if (user) resolvedUserId = user.id;
+            } catch (e) {
+              // ignore
+            }
+          }
+
+          if (resolvedUserId) {
+            try {
+              const { data: profileData } = await supabase
+                .from('profiles')
+                .select('organization_id')
+                .eq('id', resolvedUserId)
+                .maybeSingle();
+              resolvedOrgId = (profileData as any)?.organization_id;
+            } catch (e) {
+              // ignore
+            }
+          }
+
+          if (resolvedOrgId) {
+            await saveScopedThemeColors({ organizationId: resolvedOrgId }, colorsToSave);
+            // Além de salvar em `user_theme_colors`, também gravar/atualizar a linha consolidada
+            try {
+              const themeModeForPrimary: 'light' | 'dark' =
+                updatedTheme.theme_mode === 'system' ? resolvedTheme : ((updatedTheme.theme_mode as any) ?? 'light');
+
+              const rpcPayload = {
+                p_organization_id: resolvedOrgId,
+                p_chave: 'system_settings',
+                p_valor: {
+                  logo_url: colorsToSave.logo_url,
+                  company_logo_url: colorsToSave.company_logo_url,
+                  company_name: updatedTheme.footer_company_name,
+                  theme: { mode: updatedTheme.theme_mode, colors: colorsToSave },
+                  theme_mode: updatedTheme.theme_mode,
+                  primary_color: colorsToSave.primary ?? updatedTheme.colors?.[themeModeForPrimary]?.primary,
+                  colors_json: colorsToSave,
+                },
+              } as any;
+              const { error } = await supabase.rpc('rpc_upsert_configuracoes_sistema', rpcPayload);
+              if (error) console.warn('RPC system_settings warning:', error.message || error);
+            } catch (e) {
+              console.warn('Erro ao gravar system_settings via RPC:', e);
+            }
+          } else if (resolvedUserId) {
+            await saveScopedThemeColors({ userId: resolvedUserId }, colorsToSave);
           }
         }
 
@@ -517,12 +747,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         applyTheme(updatedTheme);
       } catch (err) {
         console.error('Erro ao atualizar tema:', err);
+        const msg = err instanceof Error ? err.message : String(err ?? 'Erro ao atualizar tema');
+        // Mensagem amigável para o usuário (erros de autenticação/autorizaÃ§Ã£o sÃ£o tratadas aqui)
+        if (msg.includes('Usuário') || msg.includes('autorizad')) {
+          toast.error(msg);
+        } else {
+          toast.error('Erro ao atualizar tema. Tente novamente.');
+        }
         setError(err instanceof Error ? err : new Error('Erro ao atualizar tema'));
       } finally {
         setLoading(false);
       }
     },
-    [theme, applyTheme, saveUserThemeColors, fetchUserThemeColors]
+    [theme, applyTheme, saveScopedThemeColors, fetchScopedThemeColors]
   );
 
   useEffect(() => {
@@ -540,11 +777,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             data: { user },
           } = await supabase.auth.getUser();
           if (user) {
-            const userColors = await fetchUserThemeColors(user.id);
+            const userColors = await fetchScopedThemeColors({ userId: user.id });
             if (userColors) {
-              // Aplicar configurações do usuário sobre o tema padrão
-              const themeMode =
-                systemTheme.theme_mode === 'system' ? resolvedTheme : systemTheme.theme_mode;
+              const themeMode: 'light' | 'dark' =
+                systemTheme.theme_mode === 'system' ? resolvedTheme : (systemTheme.theme_mode as 'light' | 'dark');
               activeTheme = {
                 ...systemTheme,
                 logo_url: userColors.logo_url || systemTheme.logo_url,
@@ -554,11 +790,46 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
                 colors: {
                   ...systemTheme.colors,
                   [themeMode]: {
-                    ...systemTheme.colors[themeMode],
+                    ...((systemTheme.colors as any)[themeMode] || {}),
                     ...userColors,
                   },
                 },
               };
+            }
+
+            // Também tentar carregar `system_settings` por organização e mesclar
+            try {
+              const { data: profileData } = await supabase
+                .from('profiles')
+                .select('organization_id')
+                .eq('id', user.id)
+                .maybeSingle();
+              const orgId = (profileData as any)?.organization_id;
+              const sys = await fetchSystemSettings(orgId);
+              if (sys) {
+                let themeMode: 'light' | 'dark' = activeTheme.theme_mode as 'light' | 'dark';
+                if (sys.theme_mode) {
+                  themeMode = sys.theme_mode === 'system' ? resolvedTheme : (sys.theme_mode as 'light' | 'dark');
+                }
+                const sysColors = (sys.colors_json as any) || (sys.theme as any) || {};
+                activeTheme = {
+                  ...activeTheme,
+                  logo_url: sys.logo_url || activeTheme.logo_url,
+                  company_logo_url: sys.company_logo_url || activeTheme.company_logo_url,
+                  footer_company_name: sys.company_name || activeTheme.footer_company_name,
+                  font_family: sys.font_family || activeTheme.font_family,
+                  theme_mode: themeMode,
+                  colors: {
+                    ...activeTheme.colors,
+                    [themeMode]: {
+                      ...((activeTheme.colors as any)[themeMode] || {}),
+                      ...(sysColors || {}),
+                    },
+                  },
+                };
+              }
+            } catch (e) {
+              // non-blocking
             }
           }
         } catch (userError) {
@@ -592,7 +863,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
 
     void initializeTheme();
-  }, [applyTheme, fetchTheme, fetchUserThemeColors, resolvedTheme]);
+  }, [applyTheme, fetchTheme, fetchScopedThemeColors, resolvedTheme]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

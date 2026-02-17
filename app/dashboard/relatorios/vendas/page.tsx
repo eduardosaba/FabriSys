@@ -11,7 +11,7 @@ import { toast } from 'react-hot-toast';
 interface Venda {
   id: string;
   created_at: string;
-  valor_total: number;
+  total_venda: number;
   metodo_pagamento: string;
   local?: { nome: string };
 }
@@ -47,7 +47,7 @@ export default function RelatorioVendasPage() {
           `
             id,
             created_at,
-            valor_total,
+            total_venda,
             metodo_pagamento,
             local:locais(nome)
           `
@@ -70,16 +70,16 @@ export default function RelatorioVendasPage() {
     void carregarVendas();
   }, [carregarVendas]);
 
-  const totalPeriodo = vendas.reduce((acc, v) => acc + (v.valor_total || 0), 0);
+  const totalPeriodo = vendas.reduce((acc, v) => acc + (v.total_venda || 0), 0);
   const totalPix = vendas
     .filter((v) => v.metodo_pagamento === 'pix')
-    .reduce((acc, v) => acc + (v.valor_total || 0), 0);
+    .reduce((acc, v) => acc + (v.total_venda || 0), 0);
   const totalDinheiro = vendas
     .filter((v) => v.metodo_pagamento === 'dinheiro')
-    .reduce((acc, v) => acc + (v.valor_total || 0), 0);
+    .reduce((acc, v) => acc + (v.total_venda || 0), 0);
   const totalCartao = vendas
     .filter((v) => v.metodo_pagamento === 'cartao')
-    .reduce((acc, v) => acc + (v.valor_total || 0), 0);
+    .reduce((acc, v) => acc + (v.total_venda || 0), 0);
 
   if (loading) return <Loading />;
 
@@ -191,7 +191,7 @@ export default function RelatorioVendasPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">
-                    R$ {(venda.valor_total || 0).toFixed(2)}
+                    R$ {(venda.total_venda || 0).toFixed(2)}
                   </td>
                 </tr>
               ))}

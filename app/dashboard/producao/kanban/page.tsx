@@ -21,18 +21,21 @@ const COLUNAS = [
   { id: 'fogao', label: 'No Fogão 🔥', cor: 'bg-orange-50 border-orange-200' },
   { id: 'descanso', label: 'Descanso ❄️', cor: 'bg-blue-50 border-blue-200' },
   { id: 'finalizacao', label: 'Finalização 🍬', cor: 'bg-purple-50 border-purple-200' },
-  { id: 'expedicao', label: 'Expedição 📦', cor: 'bg-green-50 border-green-200' },
+  { id: 'concluido', label: 'Concluído 📦', cor: 'bg-green-50 border-green-200' },
 ];
 
 interface OrdemKanban {
   id: string;
   numero_op: string;
   produto_nome: string;
+  produto_tipo?: string;
   quantidade_prevista: number;
   qtd_receitas: number;
   massa_total: number;
   estagio: string;
   distribuicao: { local: string; qtd: number }[];
+  baseDisponivel?: boolean;
+  baseDetalhes?: any[];
 }
 
 export default function KanbanPage() {
@@ -46,22 +49,47 @@ export default function KanbanPage() {
 
   const carregarKanban = async () => {
     try {
-      const { data, error } = await supabase
+      // Primeiro, tenta filtrar por status_logistica != 'pendente' (se a coluna existir)
+      let data: any[] | null = null;
+      let error: any = null;
+
+      const baseQuery = supabase
         .from('ordens_producao')
         .select(
           `
-          id, numero_op, quantidade_prevista, 
+          id, numero_op, quantidade_prevista,
           qtd_receitas_calculadas, massa_total_kg, estagio_atual,
-          produto_final:produtos_finais(nome),
+          produto_final_id,
           distribuicao:distribuicao_pedidos(quantidade_solicitada, local:locais(nome))
         `
         )
-        .neq('estagio_atual', 'concluido')
         .order('created_at', { ascending: true });
+
+      // Tentar aplicar filtro por status_logistica — se falhar (coluna não existe), cairá no fallback abaixo
+      try {
+        const res = await (baseQuery as any).neq('status_logistica', 'pendente');
+        data = res.data ?? null;
+        error = res.error ?? null;
+        if (error) throw error;
+      } catch (e) {
+        // Fallback: filtra por estagio_atual != 'concluido' como antes
+        const res2 = await baseQuery.neq('estagio_atual', 'concluido');
+        data = res2.data ?? null;
+        error = res2.error ?? null;
+        if (error) throw error;
+      }
 
       if (error) throw error;
 
-      const rows = (data ?? []) as unknown[];
+      const rows = (data ?? []) as any[];
+
+      const produtoIds = Array.from(new Set(rows.map((r) => String(r.produto_final_id)).filter(Boolean)));
+      const produtoMap: Record<string, { nome?: string; tipo?: string }> = {};
+      if (produtoIds.length > 0) {
+        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome, tipo').in('id', produtoIds);
+        (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome, tipo: p.tipo }));
+      }
+
       const formatadas: OrdemKanban[] = rows.map((d) => {
         const obj = d as Record<string, unknown>;
 
@@ -79,20 +107,38 @@ export default function KanbanPage() {
         return {
           id: String(obj['id'] ?? ''),
           numero_op: String(obj['numero_op'] ?? ''),
-          produto_nome: String(
-            (Array.isArray(obj['produto_final'])
-              ? obj['produto_final'][0]
-              : obj['produto_final'])?.['nome'] ?? ''
-          ),
+          produto_nome: String(produtoMap[String(obj['produto_final_id'])]?.nome ?? ''),
+          produto_tipo: String(produtoMap[String(obj['produto_final_id'])]?.tipo ?? ''),
           quantidade_prevista: Number(obj['quantidade_prevista'] ?? 0),
           qtd_receitas: Number(obj['qtd_receitas_calculadas'] ?? 0),
           massa_total: Number(obj['massa_total_kg'] ?? 0),
           estagio: String(obj['estagio_atual'] ?? 'planejamento'),
           distribuicao,
+          baseDisponivel: true,
+          baseDetalhes: [] as any,
         };
       });
 
-      if (mountedRef.current) setOrdens(formatadas);
+      // Para OPs que são produtos acabados, verificar disponibilidade de bases (semi-acabados)
+      const checks = formatadas.map(async (o) => {
+        // se o produto for acabado, verificar bases necessárias
+        if (o.produto_tipo === 'acabado') {
+          try {
+            const { data }: any = await supabase.rpc('check_bases_disponiveis', { p_op_id: o.id });
+            if (data) {
+              o.baseDisponivel = Boolean(data.tem_base ?? true);
+              o.baseDetalhes = data.detalhes ?? [];
+            }
+          } catch (err) {
+            console.warn('check_bases_disponiveis falhou para OP', o.id, err);
+            o.baseDisponivel = true;
+          }
+        }
+        return o;
+      });
+
+      const withChecks = await Promise.all(checks);
+      if (mountedRef.current) setOrdens(withChecks);
     } catch (error) {
       console.error(error);
       toast.error('Erro ao carregar quadro.');
@@ -124,11 +170,48 @@ export default function KanbanPage() {
       proximoEstagio = COLUNAS[idxAtual + 1].id;
     }
 
+    // Se o próximo estágio for 'concluido', usamos a RPC atômica que também
+    // registra a entrada no estoque (`finalizar_op_kanban`). Isso garante
+    // que ordens finalizadas realmente atualizem o estoque da fábrica.
+    if (proximoEstagio === 'concluido') {
+      setMovendo(ordemId);
+      try {
+        const ordemObj = ordens.find((o) => o.id === ordemId as string) as OrdemKanban | undefined;
+        const quantidadeProduzida = ordemObj?.quantidade_prevista ?? 0;
+
+        const rpc = (await supabase.rpc('finalizar_op_kanban', {
+          p_op_id: ordemId,
+          p_quantidade_produzida: quantidadeProduzida,
+        })) as any;
+
+        if (rpc?.error) throw rpc.error;
+
+        const data = rpc?.data ?? rpc;
+        const success = Boolean((data && (data.success === true || (Array.isArray(data) && data[0]?.success === true))) || false);
+        const message = (data && (data.message || (Array.isArray(data) && data[0]?.message))) || 'OP finalizada e estoque atualizado.';
+
+        if (!success) throw new Error(message);
+
+        toast.success(message);
+        // remover do Kanban imediatamente (fallback caso o refresh do servidor demore)
+        setOrdens((prev) => prev.filter((o) => o.id !== ordemId));
+        await carregarKanban();
+      } catch (err) {
+        console.error('Erro ao finalizar OP via RPC:', err);
+        toast.error('Erro ao finalizar ordem: ' + ((err as any)?.message ?? String(err)));
+      } finally {
+        if (mountedRef.current) setMovendo(null);
+      }
+      return;
+    }
+
+    // Caso genérico: mantemos o comportamento anterior para mover entre colunas
     setMovendo(ordemId);
     try {
       const rpcRes = (await supabase.rpc('movimentar_ordem', {
         p_ordem_id: ordemId,
         p_novo_estagio: proximoEstagio,
+        p_novo_status: null,
       })) as unknown as { data?: unknown; error?: unknown };
 
       const data = rpcRes.data;
@@ -142,6 +225,12 @@ export default function KanbanPage() {
 
       if (success) {
         toast.success(message || 'Ordem movida');
+        try {
+          await supabase.from('ordens_producao').update({ status_logistica: 'pendente' }).eq('id', ordemId);
+        } catch (_e) {
+          console.warn('Não foi possível setar status_logistica (coluna ausente ou sem permissão)');
+        }
+
         await carregarKanban();
       } else {
         toast.error(message || 'Falha ao mover ordem');
@@ -161,10 +250,45 @@ export default function KanbanPage() {
 
   const confirmarExpedicao = async () => {
     if (!ordemParaExpedir) return;
-    // Mover para 'concluido' remove do quadro Kanban
-    await moverOrdem(ordemParaExpedir.id, 'expedicao', 'concluido');
-    setOrdemParaExpedir(null);
-    toast.success('Ordem expedida e arquivada!');
+
+    const toastId = toast.loading('Finalizando produção e atualizando estoque...');
+
+    try {
+      if (ordemParaExpedir.produto_tipo === 'semi_acabado') {
+        // Lógica para Massas/Bases: Vai para Insumos (Geladeira)
+        const { error } = await supabase.rpc('finalizar_producao_intermediaria', {
+          p_op_id: ordemParaExpedir.id,
+          p_quantidade: ordemParaExpedir.quantidade_prevista,
+        });
+
+        if (error) throw error;
+        toast.success('Massa enviada para a geladeira virtual!', { id: toastId });
+
+      } else {
+        // Lógica para Produtos Acabados: Vai para a Doca de Saída (Fábrica)
+        const { data, error } = await supabase.rpc('finalizar_op_kanban', {
+          p_op_id: ordemParaExpedir.id,
+          p_quantidade_produzida: ordemParaExpedir.quantidade_prevista,
+        });
+
+        if (error) throw error;
+
+        // Verifica se a RPC retornou sucesso (dependendo de como você estruturou o retorno no SQL)
+        // Se a sua RPC VOID não retorna nada, o simples fato de não ter 'error' já basta.
+        toast.success('Doces finalizados! Já estão disponíveis na Expedição.', { id: toastId });
+      }
+
+      // Remove do Kanban localmente para feedback instantâneo
+      setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExpedir.id));
+      setOrdemParaExpedir(null);
+      
+      // Recarrega o quadro para garantir sincronia
+      await carregarKanban();
+
+    } catch (err: any) {
+      console.error('Erro ao finalizar:', err);
+      toast.error('Falha na operação: ' + (err?.message || 'Erro desconhecido'), { id: toastId });
+    }
   };
 
   if (loading) return <Loading />;
@@ -215,7 +339,25 @@ export default function KanbanPage() {
                         </span>
                       </div>
 
-                      <h4 className="font-bold text-gray-800 mb-2">{ordem.produto_nome}</h4>
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="font-bold text-gray-800">{ordem.produto_nome}</h4>
+                        <span
+                          className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold"
+                          title={ordem.produto_tipo === 'semi_acabado' ? 'Semi-acabado (ingrediente interno)' : ordem.produto_tipo === 'acabado' ? 'Produto acabado' : 'Tipo desconhecido'}
+                        >
+                          {ordem.produto_tipo === 'semi_acabado' ? 'Semi' : ordem.produto_tipo === 'acabado' ? 'Acabado' : '—'}
+                        </span>
+                        {ordem.produto_tipo === 'acabado' && (
+                          <div
+                            className={`text-[10px] ml-2 px-2 py-0.5 rounded-full font-semibold ${
+                              ordem.baseDisponivel ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                            }`}
+                            title={ordem.baseDisponivel ? 'Bases disponíveis na geladeira' : 'Faltam bases (semi-acabados)'}
+                          >
+                            {ordem.baseDisponivel ? 'Base OK' : 'Aguardando Base'}
+                          </div>
+                        )}
+                      </div>
 
                       <div className="flex items-center gap-2 mb-3 bg-orange-50 p-2 rounded border border-orange-100 text-orange-800 text-xs font-medium">
                         <ChefHat size={14} />
@@ -235,14 +377,14 @@ export default function KanbanPage() {
 
                       {/* Lógica do Botão: Expedição vs Movimentação Normal */}
                       <div className="mt-3">
-                        {coluna.id === 'expedicao' ? (
-                          <button
-                            onClick={() => handleExpedir(ordem)}
-                            className="w-full py-2 rounded flex items-center justify-center gap-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 shadow-sm transition-all"
-                          >
-                            <Package size={16} /> Gerar Romaneio
-                          </button>
-                        ) : (
+                        {coluna.id === 'concluido' ? (
+                                  <button
+                                    onClick={() => handleExpedir(ordem)}
+                                    className="w-full py-2 rounded flex items-center justify-center gap-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 shadow-sm transition-all"
+                                  >
+                                    <Package size={16} /> Finalizar
+                                  </button>
+                                ) : (
                           <button
                             onClick={() => void moverOrdem(ordem.id, ordem.estagio)}
                             disabled={movendo === ordem.id}
@@ -274,7 +416,7 @@ export default function KanbanPage() {
         </div>
       </div>
 
-      {/* Modal de Expedição / Romaneio */}
+      {/* Modal de Finalização */}
       {ordemParaExpedir && (
         <ModalExpedicao
           ordem={ordemParaExpedir}
@@ -303,7 +445,7 @@ function ModalExpedicao({
         <div className="bg-green-600 p-4 text-white print:bg-white print:text-black print:border-b print:p-0 print:mb-4">
           <div className="flex justify-between items-center">
             <h3 className="font-bold text-lg flex items-center gap-2">
-              <Package className="print:hidden" /> Romaneio de Saída
+              <Package className="print:hidden" /> Finalizar Produção
             </h3>
             <button
               onClick={onClose}
@@ -344,12 +486,12 @@ function ModalExpedicao({
           </div>
 
           <div className="bg-yellow-50 p-3 rounded text-xs text-yellow-800 border border-yellow-200 print:hidden">
-            ⚠️ Confira as quantidades antes de liberar o motorista.
+            ⚠️ Confira as quantidades antes de confirmar a finalização.
           </div>
         </div>
 
         {/* Rodapé com Ações (Escondido na impressão) */}
-        <div className="bg-gray-50 p-4 flex gap-3 justify-end print:hidden border-t">
+          <div className="bg-gray-50 p-4 flex gap-3 justify-end print:hidden border-t">
           <button
             onClick={() => window.print()}
             className="px-4 py-2 bg-white border border-gray-300 rounded text-gray-700 font-medium hover:bg-gray-100 flex items-center gap-2"
@@ -360,7 +502,7 @@ function ModalExpedicao({
             onClick={onConfirmar}
             className="px-4 py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700 shadow-lg flex items-center gap-2"
           >
-            <CheckCircle size={18} /> Confirmar Envio
+            <CheckCircle size={18} /> Confirmar Finalização
           </button>
         </div>
       </div>

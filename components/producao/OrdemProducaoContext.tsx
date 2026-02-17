@@ -32,7 +32,7 @@ export function OrdemProducaoProvider({ children }: { children: React.ReactNode 
       setLoading(true);
       const resp = (await supabase
         .from('ordens_producao')
-        .select('*, produto_final:produtos_finais(nome)')
+        .select('*, produto_final_id')
         .order('data_prevista', { ascending: false })) as unknown as {
         data?: unknown[];
         error?: unknown;
@@ -42,10 +42,17 @@ export function OrdemProducaoProvider({ children }: { children: React.ReactNode 
       const error = resp.error;
       if (error) throw error;
 
-      // Normaliza produto_final (PostgREST pode retornar array)
-      const normalized = (data as any[]).map((d) => ({
+      const rows = data as any[];
+      const produtoIds = Array.from(new Set(rows.map((r) => String(r.produto_final_id)).filter(Boolean)));
+      const produtoMap: Record<string, { nome?: string }> = {};
+      if (produtoIds.length > 0) {
+        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
+        (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
+      }
+
+      const normalized = rows.map((d: any) => ({
         ...d,
-        produto_final: Array.isArray(d.produto_final) ? d.produto_final[0] : d.produto_final,
+        produto_final: produtoMap[String(d.produto_final_id)] || null,
       }));
 
       setOrdens(normalized as OrdemProducao[]);

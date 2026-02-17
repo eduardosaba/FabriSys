@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -19,10 +19,22 @@ import {
   Store,
   Truck,
   Shield,
+  DollarSign,
 } from 'lucide-react';
 
 import { useTheme } from '@/lib/theme';
 import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
+import getImageUrl from '@/lib/getImageUrl';
+
+const DEFAULT_PERMISSOES: Record<string, string[]> = {
+  master: ['all'],
+  admin: ['all'],
+  gerente: [],
+  compras: [],
+  fabrica: [],
+  pdv: ['pdv', 'relatorios'],
+};
 
 const usePageTracking = () => {
   const [pinned, setPinned] = useState<string[]>([
@@ -37,64 +49,83 @@ const usePageTracking = () => {
   };
 };
 
+// Sub-item (child) do menu
+interface SidebarChild {
+  name: string;
+  href: string;
+  // Se definido, apenas roles listados terão acesso ao sub-item
+  allowedRoles?: string[];
+  id?: string;
+}
+
 interface SidebarItem {
   name: string;
   href: string;
   icon: React.ReactNode;
-  children?: {
-    name: string;
-    href: string;
-  }[];
+  children?: SidebarChild[];
   adminOnly?: boolean;
+  // se definido, apenas roles listados terão acesso (ex.: ['admin','master'])
+  allowedRoles?: string[];
+  id?: string;
 }
 
 const sidebarItems: SidebarItem[] = [
   {
+    id: 'dashboard',
     name: 'Visão Geral',
     href: '/dashboard',
     icon: <LayoutDashboard className="h-5 w-5" />,
   },
   {
+    id: 'agenda',
     name: 'Agenda',
     href: '/dashboard/agenda',
     icon: <Calendar className="h-5 w-5" />,
   },
   {
+    id: 'planejamento',
     name: 'Planejamento',
     href: '/dashboard/producao/planejamento',
     icon: <ClipboardList className="h-5 w-5" />,
   },
   {
+    id: 'producao',
     name: 'Fábrica',
     href: '/dashboard/producao',
     icon: <Factory className="h-5 w-5" />,
+    allowedRoles: ['fabrica', 'admin', 'master'],
     children: [
-      { name: 'Chão de Fábrica (Kanban)', href: '/dashboard/producao/kanban' },
-      { name: 'Ordens de Produção', href: '/dashboard/producao/ordens' },
-      { name: 'Produtos Finais', href: '/dashboard/producao/produtos' },
-      { name: 'Fichas Técnicas', href: '/dashboard/producao/fichas-tecnicas' },
+      { id: 'producao_kanban', name: 'Chão de Fábrica (Kanban)', href: '/dashboard/producao/kanban' },
+      { id: 'ordens_producao', name: 'Ordens de Produção', href: '/dashboard/producao/ordens' },
+      { id: 'produtos', name: 'Produtos Finais', href: '/dashboard/producao/produtos' },
+      { id: 'ficha_tecnica', name: 'Fichas Técnicas', href: '/dashboard/producao/fichas-tecnicas' },
     ],
   },
   {
+    id: 'pdv',
     name: 'PDV & Lojas',
     href: '/dashboard/pdv',
     icon: <Store className="h-5 w-5" />,
+    allowedRoles: ['pdv', 'admin', 'master'],
     children: [
-      { name: 'Frente de Caixa', href: '/dashboard/pdv/caixa' },
-      { name: 'Controle de Caixa', href: '/dashboard/pdv/controle-caixa' },
-      { name: 'Recebimento Carga', href: '/dashboard/pdv/recebimento' },
+      { id: 'pdv_caixa', name: 'Frente de Caixa', href: '/dashboard/pdv/caixa' },
+      { id: 'pdv_controle_caixa', name: 'Controle de Caixa', href: '/dashboard/pdv/controle-caixa' },
+      { id: 'pdv_recebimento', name: 'Recebimento Carga', href: '/dashboard/pdv/recebimento' },
     ],
   },
   {
+    id: 'logistica',
     name: 'Logística',
     href: '/dashboard/logistica',
     icon: <Truck className="h-5 w-5" />,
     children: [{ name: 'Expedição', href: '/dashboard/logistica/expedicao' }],
   },
   {
+    id: 'suprimentos',
     name: 'Suprimentos',
     href: '/dashboard/insumos',
     icon: <Package className="h-5 w-5" />,
+    allowedRoles: ['admin', 'fabrica', 'master'],
     children: [
       { name: 'Sugestão de Compras (MRP)', href: '/dashboard/compras/sugestao' },
       { name: 'Pedidos de Compra', href: '/dashboard/insumos/pedidos-compra' },
@@ -106,9 +137,11 @@ const sidebarItems: SidebarItem[] = [
     ],
   },
   {
+    id: 'relatorios',
     name: 'Relatórios',
     href: '/dashboard/relatorios',
     icon: <BarChart2 className="h-5 w-5" />,
+    allowedRoles: ['admin', 'master'],
     children: [
       { name: 'Painel Gerencial', href: '/dashboard/relatorios' },
       { name: 'Vendas Detalhadas', href: '/dashboard/relatorios/vendas' },
@@ -116,34 +149,61 @@ const sidebarItems: SidebarItem[] = [
       { name: 'Validade & Perdas', href: '/dashboard/relatorios/validade' },
       { name: 'Acompanhamento de Metas', href: '/dashboard/relatorios/metas' },
       { name: 'Histórico de Caixas', href: '/dashboard/relatorios/fechamentos' },
+      { id: 'relatorios_dre', name: 'DRE - Demonstrativo (Financeiro)', href: '/dashboard/relatorios/dre' },
     ],
   },
   {
+    id: 'financeiro',
+    name: 'Financeiro',
+    href: '/dashboard/financeiro',
+    icon: <DollarSign className="h-5 w-5" />,
+    allowedRoles: ['admin', 'master'],
+    children: [
+    { id: 'financeiro_contas_pagar', name: 'Contas a Pagar', href: '/dashboard/financeiro/contas-pagar' },
+      { id: 'financeiro_conferencia', name: 'Conferência de Caixas', href: '/dashboard/financeiro/conferencia' },
+      { id: 'financeiro_relatorios', name: 'Relatórios Financeiros', href: '/dashboard/relatorios/dre' },
+    ],
+  },
+  // Link adicional para mobile: garante acesso rápido em telas pequenas
+  {
+    id: 'financeiro_categorias_mobile',
+    name: 'Categorias Financeiras',
+    href: '/dashboard/financeiro/categorias',
+    icon: <ClipboardList className="h-5 w-5" />,
+    allowedRoles: ['admin', 'master'],
+  },
+  {
+    id: 'configuracoes',
     name: 'Configurações',
     href: '/dashboard/configuracoes',
     icon: <Settings className="h-5 w-5" />,
+    allowedRoles: ['admin', 'master'],
     children: [
-      { name: 'Sistema & Regras', href: '/dashboard/configuracoes' },
-      { name: 'Cadastro de Lojas', href: '/dashboard/configuracoes/lojas' },
-      { name: 'Promoções & Combos', href: '/dashboard/configuracoes/promocoes' },
-      { name: 'Equipe & Usuários', href: '/dashboard/configuracoes/usuarios' },
-      { name: 'Gestão de Metas', href: '/dashboard/configuracoes/metas' },
-      { name: 'Gestão de Fidelidade', href: '/dashboard/configuracoes/fidelidade' },
+      { name: 'Sistema & Regras', id: 'configuracoes_sistema', href: '/dashboard/configuracoes/sistema' },
+      { name: 'Permissões', id: 'configuracoes_permissoes', href: '/dashboard/configuracoes/permissoes', allowedRoles: ['admin', 'master'] },
+      { name: 'Aparência & Tema', id: 'configuracoes_customizacao', href: '/dashboard/configuracoes/customizacao' },
+      { name: 'Cadastro de Lojas', id: 'configuracoes_lojas', href: '/dashboard/configuracoes/lojas' },
+      { name: 'Promoções & Combos', id: 'configuracoes_promocoes', href: '/dashboard/configuracoes/promocoes' },
+      { name: 'Equipe & Usuários', id: 'configuracoes_usuarios', href: '/dashboard/configuracoes/usuarios' },
+      { name: 'Gestão de Metas', id: 'configuracoes_metas', href: '/dashboard/configuracoes/metas' },
+      { name: 'Gestão de Fidelidade', id: 'configuracoes_fidelidade', href: '/dashboard/configuracoes/fidelidade' },
     ],
   },
   {
+    id: 'ajuda',
     name: 'Ajuda',
     href: '/dashboard/ajuda',
     icon: <HelpCircle className="h-5 w-5" />,
   },
   {
+    id: 'admin',
     name: 'Admin Master',
     href: '/dashboard/admin',
     icon: <Shield className="h-5 w-5 text-purple-500" />,
     adminOnly: true,
     children: [
-      { name: 'Novo Cliente', href: '/dashboard/admin/novo-cliente' },
-      { name: 'Equipe & Usuários', href: '/dashboard/configuracoes/usuarios' },
+      { id: 'admin_novo_cliente', name: 'Novo Cliente', href: '/dashboard/admin/novo-cliente' },
+      { id: 'configuracoes_usuarios', name: 'Equipe & Usuários', href: '/dashboard/configuracoes/usuarios' },
     ],
   },
 ];
@@ -155,20 +215,83 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [openSubmenu, setOpenSubmenu] = useState<string | null>('Produção');
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const pathname = usePathname();
 
   const { pinnedPages, togglePinPage, isPagePinned } = usePageTracking();
   const { theme, loading } = useTheme();
   const { profile } = useAuth();
+  const [permissoes, setPermissoes] = useState<Record<string, string[]>>({});
+  const [permissoesLoading, setPermissoesLoading] = useState(true);
+
+  useEffect(() => {
+    async function carregarPermissoesSidebar() {
+      setPermissoesLoading(true);
+      try {
+        if (profile?.organization_id) {
+          const { data: globalData } = await supabase
+            .from('configuracoes_sistema')
+            .select('valor')
+            .eq('chave', 'permissoes_acesso')
+            .is('organization_id', null)
+            .limit(1)
+            .maybeSingle();
+
+          const { data: orgData } = await supabase
+            .from('configuracoes_sistema')
+            .select('valor')
+            .eq('chave', 'permissoes_acesso')
+            .eq('organization_id', profile.organization_id)
+            .limit(1)
+            .maybeSingle();
+
+          let parsedGlobal: Record<string, string[]> = {};
+          let parsedOrg: Record<string, string[]> = {};
+          try {
+            if (globalData && globalData.valor) parsedGlobal = JSON.parse(globalData.valor);
+          } catch {}
+          try {
+            if (orgData && orgData.valor) parsedOrg = JSON.parse(orgData.valor);
+          } catch {}
+
+          const merged = { ...DEFAULT_PERMISSOES, ...(parsedGlobal || {}), ...(parsedOrg || {}) };
+          setPermissoes(merged as Record<string, string[]>);
+        } else {
+          const { data } = await supabase
+            .from('configuracoes_sistema')
+            .select('valor')
+            .eq('chave', 'permissoes_acesso')
+            .is('organization_id', null)
+            .limit(1)
+            .maybeSingle();
+          if (data?.valor) {
+            try {
+              const parsed = JSON.parse(data.valor) as Record<string, string[]>;
+              setPermissoes({ ...DEFAULT_PERMISSOES, ...(parsed || {}) });
+            } catch {
+              setPermissoes(DEFAULT_PERMISSOES);
+            }
+          } else {
+            setPermissoes(DEFAULT_PERMISSOES);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar permissoes sidebar', err);
+        setPermissoes(DEFAULT_PERMISSOES);
+      } finally {
+        setPermissoesLoading(false);
+      }
+    }
+
+    void carregarPermissoesSidebar();
+  }, [profile?.organization_id]);
 
   const logoSrc = ((): string | null => {
     const company = theme?.company_logo_url?.toString?.().trim();
     const logo = theme?.logo_url?.toString?.().trim();
-    if (company) return company;
-    if (logo) return logo;
-    return '/logo.png';
+    const raw = company || logo || '/logo.png';
+    return getImageUrl(raw) || raw;
   })();
 
   const toggleSidebar = () => {
@@ -182,9 +305,54 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     setOpenSubmenu(openSubmenu === itemName ? null : itemName);
   };
 
+  const handleNavClick = () => {
+    try {
+      if (onClose && typeof window !== 'undefined' && window.innerWidth < 1024) {
+        onClose();
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
   const isActive = (href: string) => pathname === href;
   const isSubmenuActive = (item: SidebarItem) =>
     item.children?.some((child) => pathname === child.href);
+
+  const hasAccess = (item: SidebarItem) => {
+    // adminOnly: apenas master
+    if (item.adminOnly) return profile?.role === 'master';
+
+    // Se item explicitamente restringe roles, respeitar primeiro
+    if (item.allowedRoles && item.allowedRoles.length > 0) {
+      if (!item.allowedRoles.includes(profile?.role ?? '')) return false;
+    }
+
+    // Se não temos perfil carregado, negar por segurança
+    if (!profile) return false;
+
+    // Se não houver configuração de permissoes carregada, manter comportamento antigo
+    const hasConfig = Object.keys(permissoes).length > 0;
+    if (!hasConfig) return true;
+
+    if (profile.role === 'master') return true;
+
+    const role = profile?.role ?? '';
+    const rolePerms = permissoes[role] || DEFAULT_PERMISSOES[role] || [];
+    if (rolePerms.includes('all')) return true;
+
+    // Determina id do módulo para checagem (prefere item.id, senão deriva do href)
+    const moduleId = (item as any).id ?? (() => {
+      try {
+        const parts = item.href.split('/').filter(Boolean);
+        if (parts.length === 0) return item.href;
+        // ex: /dashboard/producao -> 'producao' ou '/dashboard' -> 'dashboard'
+        return parts[parts.length - 1] === 'dashboard' ? 'dashboard' : parts[parts.length - 1];
+      } catch { return item.href; }
+    })();
+
+    return rolePerms.includes(moduleId);
+  };
 
   return (
     <aside
@@ -266,43 +434,54 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
           <div className={`space-y-1 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
             {pinnedPages.slice(0, isCollapsed ? 5 : 10).map((href) => {
-              const item =
-                sidebarItems.find((si) => si.href === href) ||
-                sidebarItems.find((si) => si.children?.some((c) => c.href === href));
-              if (!item) return null;
+                const item =
+                  sidebarItems.find((si) => si.href === href) ||
+                  sidebarItems.find((si) => si.children?.some((c) => c.href === href));
+                if (!item) return null;
 
-              const childItem = item.children?.find((c) => c.href === href);
-              const displayItem = childItem || item;
+                // ocultar favoritos que o usuário não tem acesso
+                if (!hasAccess(item)) return null;
 
-              return (
-                <Link
-                  key={`fav-${displayItem.href}`}
-                  href={displayItem.href}
-                  onMouseEnter={() => setHoveredItem(displayItem.href)}
-                  onMouseLeave={() => setHoveredItem(null)}
-                  className={`flex items-center rounded-md p-2 text-sm transition-colors text-slate-600 ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
-                  title={isCollapsed ? displayItem.name : undefined}
-                  style={
-                    hoveredItem === displayItem.href
-                      ? {
-                          backgroundColor: 'var(--sidebar-hover-bg)',
-                          color: 'var(--sidebar-active-text)',
-                          opacity: 0.92,
-                        }
-                      : undefined
-                  }
-                >
-                  <span style={{ color: 'var(--sidebar-text)' }}>
-                    {childItem ? <ChevronRight size={14} /> : item.icon}
-                  </span>
-                  {!isCollapsed && (
-                    <span className="truncate font-medium" style={{ color: 'var(--sidebar-text)' }}>
-                      {displayItem.name}
+                const childItem = item.children?.find((c) => c.href === href);
+                // Se o sub-item tiver restrição de roles e o usuário não tiver, ocultar
+                if (
+                  childItem &&
+                  childItem.allowedRoles &&
+                  !childItem.allowedRoles.includes(profile?.role ?? '')
+                )
+                  return null;
+                const displayItem = childItem || item;
+
+                return (
+                  <Link
+                    key={`fav-${displayItem.href}`}
+                    href={displayItem.href}
+                    onClick={handleNavClick}
+                    onMouseEnter={() => setHoveredItem(displayItem.href)}
+                    onMouseLeave={() => setHoveredItem(null)}
+                    className={`flex items-center rounded-md p-2 text-sm transition-colors text-slate-600 ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
+                    title={isCollapsed ? displayItem.name : undefined}
+                    style={
+                      hoveredItem === displayItem.href
+                        ? {
+                            backgroundColor: 'var(--sidebar-hover-bg)',
+                            color: 'var(--sidebar-active-text)',
+                            opacity: 0.92,
+                          }
+                        : undefined
+                    }
+                  >
+                    <span style={{ color: 'var(--sidebar-text)' }}>
+                      {childItem ? <ChevronRight size={14} /> : item.icon}
                     </span>
-                  )}
-                </Link>
-              );
-            })}
+                    {!isCollapsed && (
+                      <span className="truncate font-medium" style={{ color: 'var(--sidebar-text)' }}>
+                        {displayItem.name}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
           </div>
         </div>
       )}
@@ -314,8 +493,32 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
         <ul className="space-y-1">
           {sidebarItems.map((item) => {
-            // Bloqueio de segurança para itens Master
-            if (item.adminOnly && profile?.role !== 'master') return null;
+            if (!hasAccess(item)) return null;
+
+            // calcula subitens visíveis de acordo com permissões e allowedRoles
+            const visibleChildren = (item.children || []).filter((child) => {
+              if (child.allowedRoles && !child.allowedRoles.includes(profile?.role ?? '')) return false;
+              const hasConfig = Object.keys(permissoes).length > 0;
+              if (hasConfig && profile?.role !== 'master') {
+                const role = profile?.role ?? '';
+                const rolePerms = permissoes[role] || DEFAULT_PERMISSOES[role] || [];
+                if (!rolePerms.includes('all')) {
+                  const childModuleId = (child as any).id ?? (() => {
+                    try {
+                      const parts = child.href.split('/').filter(Boolean);
+                      return parts[parts.length - 1];
+                    } catch {
+                      return child.href;
+                    }
+                  })();
+                  const parentModuleId = (item as any).id;
+                  if (!(rolePerms.includes(childModuleId) || (parentModuleId && rolePerms.includes(parentModuleId)))) {
+                    return false;
+                  }
+                }
+              }
+              return true;
+            });
 
             const active = isActive(item.href) || isSubmenuActive(item);
             const isHovered = hoveredItem === item.href;
@@ -335,37 +538,29 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 : undefined;
 
             return (
-              <li key={item.name}>
+              <li key={item.name} className={`${(item as any).mobileOnly ? 'lg:hidden' : ''}`}>
                 <div
                   className={`group relative flex cursor-pointer items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200`}
-                  onClick={() => (item.children ? toggleSubmenu(item.name) : null)}
+                  onClick={() => (visibleChildren.length > 0 ? toggleSubmenu(item.name) : null)}
                   onMouseEnter={() => setHoveredItem(item.href)}
                   onMouseLeave={() => setHoveredItem(null)}
                   style={itemStyle}
                 >
-                  {!item.children ? (
+                  {/* Se não houver subitens visíveis, renderiza o link dentro do container */}
+                  {!visibleChildren || visibleChildren.length === 0 ? (
                     <Link
                       href={item.href}
+                      onClick={handleNavClick}
                       className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
                     >
-                      <span
-                        style={{
-                          color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
-                        }}
-                      >
+                      <span style={{ color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)' }}>
                         {item.icon}
                       </span>
                       {!isCollapsed && <span className="flex-1">{item.name}</span>}
                     </Link>
                   ) : (
-                    <div
-                      className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
-                    >
-                      <span
-                        style={{
-                          color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
-                        }}
-                      >
+                    <div className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}>
+                      <span style={{ color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)' }}>
                         {item.icon}
                       </span>
                       {!isCollapsed && (
@@ -410,9 +605,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   )}
                 </div>
 
-                {!isCollapsed && item.children && openSubmenu === item.name && (
+                {!isCollapsed && visibleChildren && visibleChildren.length > 0 && openSubmenu === item.name && (
                   <ul className="mt-1 ml-9 animate-fade-up space-y-1 border-l border-slate-200 pl-2">
-                    {item.children.map((child) => {
+                    {visibleChildren.map((child) => {
                       const childActive = isActive(child.href);
                       const childIsHovered = hoveredItem === child.href;
                       return (
@@ -492,6 +687,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
           )}
         </div>
+        {/* debug panel removed per request */}
       </div>
     </aside>
   );

@@ -10,62 +10,60 @@ import {
   DraggableProvided,
   DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
-import { Card } from './Card';
+import { Card } from './Card'; // Seu novo Card atualizado
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
+import { cn } from '@/lib/utils';
+import { WIDGET_REGISTRY } from './index'; // Importa o registro central de widgets
 
 import { WidgetConfig } from '@/lib/types/dashboard';
 
-const DASHBOARD_STYLES = {
-  container:
-    'grid auto-rows-[minmax(250px,auto)] grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg shadow-lg',
-  widget: 'bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300',
-  placeholder: 'h-64 bg-gray-200 rounded-lg animate-pulse',
-};
-
 interface DashboardLayoutProps {
-  widgetComponents: Record<string, React.ComponentType<{ config?: WidgetConfig }>>;
+  // context define a chave única de salvamento (ex: dashboard_admin, dashboard_fabrica)
+  context: 'principal' | 'producao' | string; 
   defaultLayout?: WidgetConfig[];
-  context: 'principal' | 'producao'; // Adicionado para diferenciar dashboards
 }
 
+// Mapeamento de classes de Grid para o container do Draggable
+const sizeClasses = {
+  '1x1': 'col-span-1 row-span-1',
+  '2x1': 'col-span-1 md:col-span-2 row-span-1', // Ocupa 2 colunas em telas médias+
+  '1x2': 'col-span-1 row-span-2',
+  '2x2': 'col-span-1 md:col-span-2 row-span-2',
+  '4x1': 'col-span-1 md:col-span-4 row-span-1', // Linha inteira (ex: Financeiro)
+};
+
 export function DashboardLayout({
-  widgetComponents,
-  defaultLayout = [],
   context,
+  defaultLayout = [],
 }: DashboardLayoutProps) {
   const [widgets, setWidgets] = useState<WidgetConfig[]>(defaultLayout);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  // 1. CARREGAR LAYOUT DO BANCO
   const loadLayout = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: settings } = await supabase
+      
+      const { data: settings, error } = await supabase
         .from('system_settings')
         .select('value')
-        .eq('key', 'dashboard_layout')
-        .single();
-
-      let widgets = defaultLayout;
+        .eq('key', `dashboard_layout_${context}`)
+        .maybeSingle();
 
       if (settings?.value) {
-        widgets = settings.value as WidgetConfig[];
+        const savedWidgets = settings.value as WidgetConfig[];
+        
+        // Validação de Segurança: Filtra widgets que não existem mais no código
+        // Isso evita que o dashboard quebre se você deletar um arquivo de widget antigo
+        const validWidgets = savedWidgets.filter(w => WIDGET_REGISTRY[w.type]);
+        
+        setWidgets(validWidgets.length > 0 ? validWidgets : defaultLayout);
+      } else {
+        // Se não tem nada salvo, usa o padrão
+        setWidgets(defaultLayout);
       }
-
-      // Filtrar widgets com base no contexto
-      const filteredWidgets = widgets.filter((widget) => {
-        if (context === 'principal') {
-          return ['kpi_mercadoria', 'kpi_producao', 'kpi_vendas', 'kpi_financeiro'].includes(
-            widget.type
-          );
-        } else if (context === 'producao') {
-          return ['kpi_producao', 'produtos_finais', 'status_producao'].includes(widget.type);
-        }
-        return false;
-      });
-
-      setWidgets(filteredWidgets);
     } catch (error) {
       console.error('Erro ao carregar layout:', error);
       setWidgets(defaultLayout);
@@ -78,71 +76,31 @@ export function DashboardLayout({
     void loadLayout();
   }, [loadLayout]);
 
+  // 2. SALVAR LAYOUT NO BANCO
   const saveLayout = async (newLayout: WidgetConfig[]) => {
     try {
-      console.log('Iniciando salvamento do layout...');
-
-      // Verificar se o registro já existe
-      const { data: existingRecord, error: fetchError } = await supabase
+      // Upsert: Atualiza se existir, cria se não existir
+      const { error } = await supabase
         .from('system_settings')
-        .select('id, key')
-        .eq('key', `dashboard_layout_${context}`) // Contexto adicionado para diferenciar dashboards
-        .single();
-
-      console.log('Resultado da verificação:', { existingRecord, fetchError });
-
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        // Código para "registro não encontrado"
-        console.error('Erro ao verificar existência do registro:', fetchError);
-        throw fetchError;
-      }
-
-      if (existingRecord) {
-        console.log('Registro existente encontrado, atualizando...');
-        // Atualizar o registro existente
-        const { error: updateError } = await supabase
-          .from('system_settings')
-          .update({
-            value: newLayout,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('key', `dashboard_layout_${context}`);
-
-        if (updateError) {
-          console.error('Erro ao atualizar registro:', updateError);
-          throw updateError;
-        }
-      } else {
-        console.log('Registro não encontrado, inserindo novo...');
-        // Inserir um novo registro
-        const { error: insertError } = await supabase.from('system_settings').insert({
+        .upsert({
           key: `dashboard_layout_${context}`,
           value: newLayout,
-          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        });
+        }, { onConflict: 'key' });
 
-        if (insertError) {
-          console.error('Erro ao inserir novo registro:', insertError);
-          throw insertError;
-        }
-      }
+      if (error) throw error;
 
-      toast({
-        title: 'Layout salvo',
-        description: 'As alterações foram salvas com sucesso.',
-        variant: 'success',
-      });
     } catch (error) {
       console.error('Erro ao salvar layout:', error);
       toast({
-        title: 'Erro ao salvar',
-        description: 'Não foi possível salvar as alterações do layout.',
+        title: 'Erro de conexão',
+        description: 'Não foi possível salvar a posição dos widgets.',
         variant: 'error',
       });
     }
   };
 
+  // 3. GERENCIAR ARRASTAR E SOLTAR
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
 
@@ -150,15 +108,17 @@ export function DashboardLayout({
     const [reorderedWidget] = newWidgets.splice(result.source.index, 1);
     newWidgets.splice(result.destination.index, 0, reorderedWidget);
 
+    // Atualiza a propriedade 'ordem' (útil se precisarmos ordenar no backend depois)
     const updatedWidgets = newWidgets.map((widget, index) => ({
       ...widget,
       ordem: index,
     }));
 
-    setWidgets(updatedWidgets);
-    void saveLayout(updatedWidgets);
+    setWidgets(updatedWidgets); // Atualiza UI instantaneamente
+    void saveLayout(updatedWidgets); // Salva no banco em background
   };
 
+  // 4. REMOVER WIDGET
   const removeWidget = (widgetId: string) => {
     const newWidgets = widgets.filter((w) => w.id !== widgetId);
     setWidgets(newWidgets);
@@ -166,16 +126,7 @@ export function DashboardLayout({
   };
 
   if (loading) {
-    return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            className={DASHBOARD_STYLES.placeholder} // Aplicando o estilo centralizado
-          />
-        ))}
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (
@@ -185,12 +136,17 @@ export function DashboardLayout({
           <div
             ref={provided.innerRef}
             {...provided.droppableProps}
-            className={DASHBOARD_STYLES.container} // Aplicando o estilo centralizado
+            // GRID MASTER: 4 Colunas no desktop para máxima flexibilidade
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-20"
           >
             {widgets.map((widget, index) => {
-              const WidgetComponent = widgetComponents[widget.type];
+              // Busca o componente no registro usando a chave (ex: 'admin-financial')
+              const registryItem = WIDGET_REGISTRY[widget.type];
+              
+              // Se o widget não existe no registro, não renderiza (evita crash)
+              if (!registryItem) return null;
 
-              if (!WidgetComponent) return null;
+              const WidgetComponent = registryItem.component;
 
               return (
                 <Draggable key={widget.id} draggableId={widget.id} index={index}>
@@ -198,15 +154,26 @@ export function DashboardLayout({
                     <div
                       ref={provided.innerRef}
                       {...provided.draggableProps}
-                      {...provided.dragHandleProps}
-                      className={DASHBOARD_STYLES.widget} // Aplicando o estilo centralizado
+                      className={cn(
+                        "h-full min-h-[150px] transition-all duration-200", 
+                        // Aplica a classe de tamanho baseada na config do widget
+                        sizeClasses[widget.size || registryItem.defaultSize || '1x1'],
+                        // Z-Index alto enquanto arrasta para passar por cima dos outros
+                        snapshot.isDragging && "z-50 scale-[1.02]"
+                      )}
+                      style={{
+                        ...provided.draggableProps.style,
+                      }}
                     >
                       <Card
-                        title={widget.title}
+                        title={widget.title || registryItem.title}
+                        size={widget.size}
+                        theme={widget.theme}
                         isDragging={snapshot.isDragging}
-                        dragHandleProps={provided.dragHandleProps || undefined}
+                        dragHandleProps={provided.dragHandleProps}
                         onRemove={() => removeWidget(widget.id)}
                       >
+                        {/* Passa as configurações para o componente interno */}
                         <WidgetComponent config={widget} />
                       </Card>
                     </div>
@@ -219,5 +186,20 @@ export function DashboardLayout({
         )}
       </Droppable>
     </DragDropContext>
+  );
+}
+
+// Skeleton para o carregamento inicial da página
+function DashboardSkeleton() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">
+      {/* Simula um card 4x1 (Financeiro) */}
+      <div className="h-40 bg-slate-200 rounded-xl col-span-1 md:col-span-4"></div>
+      
+      {/* Simula cards variados */}
+      <div className="h-64 bg-slate-200 rounded-xl col-span-1 md:col-span-2"></div>
+      <div className="h-64 bg-slate-200 rounded-xl col-span-1"></div>
+      <div className="h-64 bg-slate-200 rounded-xl col-span-1"></div>
+    </div>
   );
 }

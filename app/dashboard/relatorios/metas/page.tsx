@@ -215,7 +215,7 @@ export default function RelatorioMetasPage() {
       <div className="bg-white p-4 rounded-lg shadow-sm border">
         <h4 className="font-bold mb-2">Gráfico: Meta vs Realizado por Unidade</h4>
         <div style={{ width: '100%', height: 320 }}>
-          <ResponsiveContainer>
+          <ResponsiveContainer width="100%" height="100%">
             {chartType === 'bar' && (
               <ReBarChart data={porUnidade} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />

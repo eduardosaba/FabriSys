@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Store, TrendingUp, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
+import { Card } from '@/components/dashboard/Card';
+import { Target, TrendingUp, AlertCircle, Trophy, Store } from 'lucide-react';
 
 interface MetaLoja {
   id: string;
@@ -12,120 +14,209 @@ interface MetaLoja {
   percentual: number;
 }
 
+interface ResumoGlobal {
+  totalVendido: number;
+  totalMeta: number;
+  percentual: number;
+}
+
 export default function KPIsMetas() {
+  const { profile } = useAuth();
   const [dados, setDados] = useState<MetaLoja[]>([]);
+  const [global, setGlobal] = useState<ResumoGlobal | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function carregarDados() {
-      try {
-        setLoading(true);
+  const carregarDados = useCallback(async () => {
+    try {
+      if (!profile?.organization_id) return;
+      
+      const hoje = new Date();
+      // Ajuste de fuso horário simples para garantir o dia corrente
+      const inicioDia = new Date(hoje.setHours(0, 0, 0, 0)).toISOString();
+      const fimDia = new Date(hoje.setHours(23, 59, 59, 999)).toISOString();
+      const dataHojeStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-        // 1. Buscar Lojas Ativas
-        const { data: locais, error: errLocais } = await supabase
-          .from('locais')
-          .select('id, nome')
-          .eq('tipo', 'pdv')
-          .eq('ativo', true);
+      // 1. QUERY DE LOJAS (Filtra se for gerente)
+      let queryLocais = supabase
+        .from('locais')
+        .select('id, nome')
+        .eq('organization_id', profile.organization_id)
+        .eq('tipo', 'pdv')
+        .eq('ativo', true);
 
-        if (errLocais) throw errLocais;
-        if (!locais || locais.length === 0) {
-          setDados([]);
-          return;
-        }
-
-        const dataHoje = new Date().toISOString().split('T')[0];
-        const inicioDia = `${dataHoje}T00:00:00.000Z`;
-        const fimDia = `${dataHoje}T23:59:59.999Z`;
-
-        const resultados = await Promise.all(
-          locais.map(async (loja) => {
-            // 2. Buscar Meta (usa maybeSingle para não dar erro 406 se não existir)
-            const { data: metaData } = await supabase
-              .from('metas_vendas')
-              .select('valor_meta')
-              .eq('local_id', loja.id)
-              .eq('data_referencia', dataHoje)
-              .maybeSingle();
-
-            const valorMeta = Number(metaData?.valor_meta || 0);
-
-            // 3. Buscar Vendas (CORREÇÃO: usa 'valor_total')
-            const { data: vendasData } = await supabase
-              .from('vendas')
-              .select('valor_total') // <--- NOME CORRIGIDO AQUI
-              .eq('local_id', loja.id)
-              .gte('created_at', inicioDia)
-              .lte('created_at', fimDia);
-
-            const totalVendas = (vendasData || []).reduce(
-              (acc, v) => acc + Number(v.valor_total || 0), // <--- NOME CORRIGIDO AQUI
-              0
-            );
-
-            return {
-              id: loja.id,
-              nome: loja.nome,
-              meta: valorMeta,
-              vendas: totalVendas,
-              percentual: valorMeta > 0 ? (totalVendas / valorMeta) * 100 : 0,
-            };
-          })
-        );
-
-        setDados(resultados);
-      } catch (err) {
-        console.error('Erro ao carregar KPIs:', err);
-      } finally {
-        setLoading(false);
+      if (profile.role !== 'admin' && profile.role !== 'master' && (profile as any).local_id) {
+        queryLocais = queryLocais.eq('id', (profile as any).local_id);
       }
+
+      // 2. QUERY DE METAS (Todas de hoje)
+      const queryMetas = supabase
+        .from('metas_vendas')
+        .select('local_id, valor_meta')
+        .eq('organization_id', profile.organization_id)
+        .eq('data_referencia', dataHojeStr);
+
+      // 3. QUERY DE VENDAS (Todas de hoje)
+      let queryVendas = supabase
+        .from('vendas')
+        .select('local_id, total_venda')
+        .eq('organization_id', profile.organization_id)
+        .eq('status', 'concluida') // Importante: apenas vendas válidas
+        .gte('created_at', inicioDia)
+        .lte('created_at', fimDia);
+
+      // Executa tudo em paralelo (Performance Boost 🚀)
+      const [resLocais, resMetas, resVendas] = await Promise.all([
+        queryLocais,
+        queryMetas,
+        queryVendas
+      ]);
+
+      if (resLocais.error) throw resLocais.error;
+
+      const lojas = resLocais.data || [];
+      const metasMap = new Map(resMetas.data?.map(m => [m.local_id, m.valor_meta]) || []);
+      const vendas = resVendas.data || [];
+
+      // Processamento dos Dados
+      let acumuladoVendas = 0;
+      let acumuladoMeta = 0;
+
+      const resultados: MetaLoja[] = lojas.map(loja => {
+        const meta = Number(metasMap.get(loja.id) || 0);
+        
+        // Soma vendas desta loja específica
+        const vendasLoja = vendas
+          .filter(v => v.local_id === loja.id)
+          .reduce((acc, curr) => acc + (curr.total_venda || 0), 0);
+
+        acumuladoVendas += vendasLoja;
+        acumuladoMeta += meta;
+
+        return {
+          id: loja.id,
+          nome: loja.nome,
+          meta,
+          vendas: vendasLoja,
+          percentual: meta > 0 ? (vendasLoja / meta) * 100 : 0
+        };
+      });
+
+      // Ordena: Quem bateu a meta primeiro aparece em cima
+      resultados.sort((a, b) => b.percentual - a.percentual);
+
+      setDados(resultados);
+      setGlobal({
+        totalVendido: acumuladoVendas,
+        totalMeta: acumuladoMeta,
+        percentual: acumuladoMeta > 0 ? (acumuladoVendas / acumuladoMeta) * 100 : 0
+      });
+
+    } catch (err) {
+      console.error('Erro ao carregar KPIs:', err);
+    } finally {
+      setLoading(false);
     }
+  }, [profile]);
 
+  useEffect(() => {
     void carregarDados();
-  }, []);
 
-  if (loading) return <div className="h-40 bg-slate-100 rounded-xl animate-pulse"></div>;
-  if (dados.length === 0) return null;
+    // Realtime: Escuta novas vendas para atualizar a barra de progresso ao vivo
+    const channel = supabase
+      .channel('widget_kpis_realtime')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'vendas', filter: profile?.organization_id ? `organization_id=eq.${profile.organization_id}` : undefined },
+        () => void carregarDados()
+      )
+      .subscribe();
 
+    return () => { supabase.removeChannel(channel); };
+  }, [carregarDados, profile?.organization_id]);
+
+  // Renderização
   return (
-    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-      <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-        <Store size={20} className="text-blue-600" /> Desempenho por Loja (Hoje)
-      </h3>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {dados.map((loja) => (
-          <div key={loja.id} className="p-4 border border-slate-100 rounded-lg bg-slate-50">
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-bold text-slate-700 truncate">{loja.nome}</span>
-              <span
-                className={`text-xs font-bold px-2 py-1 rounded-full ${loja.percentual >= 100 ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}
-              >
-                {loja.percentual.toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex items-end gap-1 mb-2">
+    <Card title="Acompanhamento de Metas (Dia)" size="2x1" loading={loading} className="overflow-hidden">
+      
+      {/* 1. RESUMO GLOBAL (Cabeçalho do Widget) */}
+      {global && (profile?.role === 'admin' || profile?.role === 'master') && (
+        <div className="bg-slate-50 -mx-5 -mt-2 mb-4 p-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total da Empresa</p>
+            <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-slate-800">
-                R$ {loja.vendas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(global.totalVendido)}
               </span>
-              <span className="text-xs text-slate-400 mb-1">
-                / {loja.meta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              <span className="text-xs text-slate-400">
+                de {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(global.totalMeta)}
               </span>
             </div>
-            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${loja.percentual >= 100 ? 'bg-green-500' : loja.percentual >= 50 ? 'bg-blue-500' : 'bg-orange-400'}`}
-                style={{ width: `${Math.min(loja.percentual, 100)}%` }}
-              ></div>
+          </div>
+          <div className="text-right">
+             <div className={`text-xl font-bold ${global.percentual >= 100 ? 'text-emerald-600' : 'text-blue-600'}`}>
+                {global.percentual.toFixed(1)}%
+             </div>
+             <div className="w-24 h-1.5 bg-slate-200 rounded-full mt-1 ml-auto">
+                <div 
+                  className={`h-full rounded-full ${global.percentual >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} 
+                  style={{ width: `${Math.min(global.percentual, 100)}%` }}
+                />
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. LISTA DE LOJAS */}
+      <div className="space-y-4 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
+        {dados.map((loja) => (
+          <div key={loja.id} className="group">
+            <div className="flex justify-between items-end mb-1">
+              <div className="flex items-center gap-2">
+                <Store size={14} className="text-slate-400" />
+                <span className="font-medium text-sm text-slate-700 truncate max-w-[120px]" title={loja.nome}>
+                  {loja.nome}
+                </span>
+                {loja.percentual >= 100 && (
+                   <Trophy size={14} className="text-yellow-500 animate-bounce" />
+                )}
+              </div>
+              <div className="text-xs font-medium text-slate-600">
+                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(loja.vendas)}
+                 <span className="text-slate-400 mx-1">/</span>
+                 <span className="text-slate-400">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(loja.meta)}</span>
+              </div>
             </div>
+
+            <div className="relative w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+               {/* Background Striped (Opcional para dar estilo) */}
+               <div className="absolute inset-0 bg-slate-100"></div>
+               
+               {/* Barra de Progresso */}
+               <div
+                  className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ease-out
+                    ${loja.percentual >= 100 ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : 
+                      loja.percentual >= 70 ? 'bg-gradient-to-r from-blue-400 to-blue-500' : 
+                      loja.percentual >= 40 ? 'bg-gradient-to-r from-orange-300 to-orange-400' : 
+                      'bg-slate-300'}
+                  `}
+                  style={{ width: `${Math.min(loja.percentual, 100)}%` }}
+               />
+            </div>
+            
             {loja.meta === 0 && (
-              <p className="text-[10px] text-orange-500 mt-2 flex items-center gap-1">
+              <p className="text-[10px] text-orange-500 mt-1 flex items-center gap-1">
                 <AlertCircle size={10} /> Meta não definida
               </p>
             )}
           </div>
         ))}
+
+        {dados.length === 0 && (
+          <div className="text-center py-8 text-slate-400">
+            <Target size={32} className="mx-auto mb-2 opacity-50" />
+            <p className="text-sm">Nenhuma loja ativa com metas.</p>
+          </div>
+        )}
       </div>
-    </div>
+    </Card>
   );
 }

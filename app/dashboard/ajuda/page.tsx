@@ -215,11 +215,11 @@ export default function AjudaPage() {
 
                 <div className="border p-4 rounded-lg hover:bg-slate-50 border-green-200 bg-green-50/30">
                   <h4 className="font-bold text-green-800 flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div> 5. Expedição 📦
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div> 5. Finalização 📦
                   </h4>
                   <p className="text-xs text-slate-600 mt-1">
-                    Aqui você gera o <strong>Romaneio</strong> (Etiqueta) que diz: &quot;100 para
-                    Shopping, 50 para Centro&quot;.
+                    Aqui você finaliza a produção e gera a etiqueta de saída (romaneio) que diz:
+                    &quot;100 para Shopping, 50 para Centro&quot;.
                   </p>
                 </div>
               </div>

@@ -95,36 +95,34 @@ export default function UsuariosPage() {
     }
 
     try {
-      if (editingId) {
-        // EDITAR (Via Supabase direto)
-        const { error } = await supabase
-          .from('colaboradores')
-          .update({
-            nome: formData.nome,
-            role: formData.role,
-            ativo: formData.ativo,
-          })
-          .eq('id', editingId);
+      const savePromise = (async () => {
+        if (editingId) {
+          const { error } = await supabase
+            .from('colaboradores')
+            .update({ nome: formData.nome, role: formData.role, ativo: formData.ativo })
+            .eq('id', editingId);
+          if (error) throw error;
+          return 'updated';
+        }
 
-        if (error) throw error;
-        toast.success('Dados atualizados!');
-      } else {
-        // CRIAR NOVO (Via API)
-        // Enviando currentUserId para a API validar a permissão
         const response = await fetch('/api/admin/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            currentUserId: profile?.id, // ID de quem está criando
-          }),
+          body: JSON.stringify({ ...formData, currentUserId: profile?.id }),
         });
 
         const result = await response.json();
-
         if (!response.ok) throw new Error(result.error || 'Erro na API');
+        return 'created';
+      })();
 
-        toast.success('Usuário criado com sucesso!');
+      const result = await toast.promise(savePromise as unknown as Promise<any>, {
+        loading: 'Salvando usuário...',
+        success: (res) => (res === 'created' ? 'Usuário criado com sucesso!' : 'Dados atualizados!'),
+        error: (err) => `Erro: ${err?.message || ''}`,
+      });
+
+      if (result === 'created') {
         toast('Anote a senha e envie para o funcionário.', { icon: '🔑', duration: 6000 });
       }
 
@@ -224,10 +222,10 @@ export default function UsuariosPage() {
                       className={
                         'px-2 py-1 rounded text-xs font-bold border uppercase ' +
                         (user.role === 'admin'
-                          ? 'bg-purple-50 text-purple-700 border-purple-200'
-                          : user.role === 'master'
-                            ? 'bg-slate-800 text-white border-slate-900'
-                            : 'bg-primary text-primary border-primary')
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : user.role === 'master'
+                                ? 'bg-slate-800 text-white border-slate-900'
+                                : 'bg-blue-50 text-blue-700 border-blue-200')
                       }
                     >
                       {user.role}

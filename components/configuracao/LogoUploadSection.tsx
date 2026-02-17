@@ -112,7 +112,7 @@ export function LogoUploadSection({
               </span>
             )}
           </div>
-          <div className="relative">
+          <div>
             <input
               type="file"
               accept="image/*"
@@ -121,10 +121,8 @@ export function LogoUploadSection({
               className="text-muted-foreground file:bg-primary/10 hover:file:bg-primary/20 block w-full text-sm file:mr-4 file:rounded-full file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary"
             />
             {selectedFileName && !uploading && (
-              <div className="absolute left-0 top-0 flex items-center h-full pl-3 pointer-events-none">
-                <span className="text-sm text-gray-600 truncate max-w-[200px]">
-                  {selectedFileName}
-                </span>
+              <div className="mt-2 text-sm text-gray-600 truncate max-w-full">
+                <strong>Arquivo:</strong>&nbsp;<span className="truncate">{selectedFileName}</span>
               </div>
             )}
           </div>

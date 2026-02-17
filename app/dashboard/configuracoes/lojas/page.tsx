@@ -41,41 +41,43 @@ export default function LojasPage() {
     if (authLoading) return toast.error('Autenticação em andamento, aguarde.');
     if (!profile?.id) return toast.error('Perfil não definido. Faça login novamente.');
     setLoading(true);
+    try {
+      const savePromise = (async () => {
+        if (editingId) {
+          const { error } = await supabase
+            .from('locais')
+            .update({ nome: formData.nome, tipo: formData.tipo })
+            .eq('id', editingId);
+          if (error) throw error;
+          return 'updated';
+        }
 
-    if (editingId) {
-      // Editar existente
-      const { error } = await supabase
-        .from('locais')
-        .update({ nome: formData.nome, tipo: formData.tipo })
-        .eq('id', editingId);
-      setLoading(false);
-      if (error) {
-        toast.error('Erro ao atualizar');
-      } else {
-        toast.success('Loja atualizada!');
-        setIsModalOpen(false);
-        setEditingId(null);
-        setFormData({ nome: '', tipo: 'pdv' });
-        void carregar();
-      }
-    } else {
-      // Criar novo
-      const payload: Record<string, unknown> = {
-        ...formData,
-        created_by: profile.id,
-      };
-      if (profile.organization_id) payload.organization_id = profile.organization_id;
+        const payload: Record<string, unknown> = {
+          ...formData,
+          created_by: profile.id,
+        };
+        if (profile.organization_id) payload.organization_id = profile.organization_id;
 
-      const { error } = await supabase.from('locais').insert(payload);
+        const { error } = await supabase.from('locais').insert(payload);
+        if (error) throw error;
+        return 'created';
+      })();
+
+      const result = await toast.promise(savePromise, {
+        loading: editingId ? 'Atualizando loja...' : 'Cadastrando loja...',
+        success: editingId ? 'Loja atualizada!' : 'Loja cadastrada!',
+        error: (err) => `Erro: ${err?.message || ''}`,
+      });
+
+      setIsModalOpen(false);
+      setEditingId(null);
+      setFormData({ nome: '', tipo: 'pdv' });
+      void carregar();
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao salvar');
+    } finally {
       setLoading(false);
-      if (error) {
-        toast.error('Erro ao salvar');
-      } else {
-        toast.success('Loja cadastrada!');
-        setIsModalOpen(false);
-        setFormData({ nome: '', tipo: 'pdv' });
-        void carregar();
-      }
     }
   };
 
@@ -143,7 +145,7 @@ export default function LojasPage() {
                       'px-2 py-1 rounded text-xs font-bold uppercase border ' +
                       (local.tipo === 'fabrica'
                         ? 'bg-orange-50 text-orange-700 border-orange-200'
-                        : 'bg-primary text-primary border-primary')
+                        : 'bg-blue-50 text-blue-700 border-blue-200')
                     }
                   >
                     {local.tipo}

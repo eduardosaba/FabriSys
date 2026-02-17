@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function debugProdutosFinaisPolicies() {
   try {
-    console.log('=== DEBUG POLÍTICAS PRODUTOS FINAIS ===');
+    // debug log removed
 
     // Verificar se produto específico existe
     console.log('=== VERIFICANDO PRODUTO ESPECÍFICO ===');

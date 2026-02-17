@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, Clock, PauseCircle, PlayCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import safeSelect from '@/lib/supabaseSafeSelect';
 import { useToast } from '@/hooks/useToast';
 
 interface OrdemProducao {
@@ -23,36 +24,26 @@ export default function StatusProducao() {
 
   const loadOrdens = useCallback(async () => {
     try {
-      const resp = await supabase
-        .from('ordens_producao')
-        .select(
-          `
-          id,
-          numero_op,
-          produto:produtos_finais(nome),
-          quantidade_prevista,
-          status,
-          data_inicio,
-          data_fim
-        `
-        )
-        .in('status', ['em_producao', 'pausada'])
-        .order('data_inicio', { ascending: false })
-        .limit(5);
+      const resp = await safeSelect(supabase, 'ordens_producao', 'id, numero_op, produto_final_id, quantidade_prevista, status, data_inicio, data_fim', (b: any) => b
+        .in('status', ['pendente', 'em_producao'])
+        .limit(50)
+      );
 
       const data = resp.data as unknown;
       const error = resp.error as unknown;
       if (error) throw error;
 
       const rows = Array.isArray(data) ? data : [];
-      const mappedData = rows.map((item) => {
-        const it = item as Record<string, unknown>;
-        const produtoField = it.produto;
-        const produtoObj = Array.isArray(produtoField)
-          ? (produtoField[0] as Record<string, unknown>)
-          : (produtoField as Record<string, unknown> | undefined);
-        const produtoNome =
-          produtoObj && typeof produtoObj.nome === 'string' ? produtoObj.nome : '';
+
+      const produtoIds = Array.from(new Set(rows.map((r: any) => String(r.produto_final_id)).filter(Boolean)));
+      const produtoMap: Record<string, { nome?: string }> = {};
+      if (produtoIds.length > 0) {
+        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
+        (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
+      }
+
+      const mappedData = rows.map((it: any) => {
+        const produtoNome = produtoMap[String(it.produto_final_id)]?.nome || '';
         const statusRaw = String(it.status ?? 'pendente');
         const statusMapped = statusRaw === 'em_producao' ? 'em_andamento' : statusRaw;
 

@@ -141,7 +141,7 @@ export default function ListaProdutos({ produtos, onUpdate }: ListaProdutosProps
                           </span>
                         </div>
                       </div>
-                      <div className="mt-3 flex gap-2">
+                      <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           onClick={() => handleViewFicha(produto)}
                           className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"

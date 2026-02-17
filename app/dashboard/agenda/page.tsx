@@ -101,12 +101,26 @@ export default function AgendaPage() {
       const fimMes = new Date(ano, mes, 0).toISOString().split('T')[0];
 
       // 1. Buscar Ordens de Produção (Automático)
-      const { data: ordens } = await supabase
+      const { data: ordensRaw } = await supabase
         .from('ordens_producao')
-        .select('id, numero_op, data_prevista, status, produto:produtos_finais(nome)')
+        .select('id, numero_op, data_prevista, status, produto_final_id')
         .gte('data_prevista', inicioMes)
         .lte('data_prevista', fimMes)
         .neq('status', 'cancelada');
+
+      const ordensList = ordensRaw || [];
+      const produtoIds = Array.from(new Set(ordensList.map((o: any) => String(o.produto_final_id)).filter(Boolean)));
+      const produtoMap: Record<string, { nome?: string }> = {};
+      if (produtoIds.length > 0) {
+        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
+        (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
+      }
+
+      // Reescrever ordens com nome do produto
+      const ordens = (ordensList || []).map((o: any) => ({
+        ...o,
+        produto: { nome: produtoMap[String(o.produto_final_id)]?.nome },
+      }));
 
       // 2. Buscar Tarefas Manuais
       const { data: tarefas } = await supabase

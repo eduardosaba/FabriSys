@@ -6,6 +6,7 @@ import { Trash2, AlertOctagon, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import Button from '@/components/Button';
 import { useAuth } from '@/lib/auth';
+import { getOperationalContext } from '@/lib/operationalLocal';
 
 const MOTIVOS = [
   { value: 'vencimento', label: 'Vencimento / Estragado' },
@@ -60,12 +61,23 @@ export default function RegistroPerdaModal({
   if (!isOpen) return null;
 
   const handleSalvar = async () => {
-    if (!produtoId || !qtd || !localId) return toast.error('Preencha os dados');
+    // Resolve local operacional (prefere caixa aberto do usuário)
+    let effectiveLocal = localId;
+    if (!effectiveLocal) {
+      try {
+        const ctx = await getOperationalContext(profile);
+        effectiveLocal = ctx.caixa?.local_id ?? ctx.localId ?? null;
+      } catch (e) {
+        effectiveLocal = null;
+      }
+    }
+
+    if (!produtoId || !qtd || !effectiveLocal) return toast.error('Preencha os dados');
 
     try {
       setLoading(true);
       const { error } = await supabase.rpc('registrar_perda_estoque', {
-        p_local_id: localId,
+        p_local_id: effectiveLocal,
         p_produto_id: produtoId,
         p_quantidade: parseFloat(qtd),
         p_motivo: motivo,

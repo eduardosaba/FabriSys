@@ -245,7 +245,7 @@ export default function OnboardingPage() {
               <div className="text-center mb-6">
                 <MapPin className="mx-auto h-12 w-12 text-blue-500 mb-2" />
                 <h3 className="font-medium text-lg">Localização</h3>
-                <p className="text-xs text-slate-400">Usado para romaneios e notas.</p>
+                <p className="text-xs text-slate-400">Usado para etiquetas (romaneios) e notas.</p>
               </div>
 
               <div className="space-y-2">

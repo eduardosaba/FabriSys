@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/shared';
 import { useAuth } from '@/lib/auth';
 import { useTheme } from '@/lib/theme'; // Importando o tema para a logo
+import getImageUrl from '@/lib/getImageUrl';
 import PageHeader from '@/components/ui/PageHeader';
 
 // Exposição dev-only: tipagem para função de diagnóstico no `window`
@@ -978,13 +979,17 @@ export default function PedidosCompraPage() {
           {/* Cabeçalho Impressão */}
           <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
             <div className="flex items-center gap-4">
-              {/* Logo */}
-              <img
-                src={theme?.company_logo_url ?? theme?.logo_url ?? '/logo.png'}
-                alt="Logo"
-                className="h-16 w-auto object-contain grayscale"
-                onError={(e) => (e.currentTarget.style.display = 'none')}
-              />
+                {/* Logo */}
+                <img
+                  src={
+                    getImageUrl(theme?.company_logo_url as string | undefined) ||
+                    getImageUrl(theme?.logo_url as string | undefined) ||
+                    '/logo.png'
+                  }
+                  alt="Logo"
+                  className="h-16 w-auto object-contain grayscale"
+                  onError={(e) => (e.currentTarget.style.display = 'none')}
+                />
               <div>
                 <h1 className="text-3xl font-bold text-black uppercase tracking-tight">
                   Pedido de Compra

@@ -2,7 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   turbopack: {
-    root: 'D:/DOCUMENTOS PAI/SistemaLari/syslari'
+    // Use project root for Turbopack to avoid invalid absolute paths
+    root: '.'
   },
   images: {
     // Permite exibir logos hospedadas no Supabase Storage via next/image

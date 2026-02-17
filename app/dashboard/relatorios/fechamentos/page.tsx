@@ -20,6 +20,7 @@ import {
   Search,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import getImageUrl from '@/lib/getImageUrl';
 
 // Componente simples de Modal para ver detalhes
 function DetalhesCaixaModal({ caixa, onClose }: { caixa: any; onClose: () => void }) {
@@ -211,7 +212,10 @@ export default function RelatorioFechamentosPage() {
   };
 
   const exportarPDF = () => {
-    const logo = theme?.company_logo_url ?? theme?.logo_url ?? '/logo.png';
+    const logo =
+      getImageUrl(theme?.company_logo_url as string | undefined) ||
+      getImageUrl(theme?.logo_url as string | undefined) ||
+      '/logo.png';
     const issuedDate = new Date();
 
     const resumoHtml = `

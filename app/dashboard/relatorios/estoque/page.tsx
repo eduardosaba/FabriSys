@@ -7,6 +7,7 @@ import Loading from '@/components/ui/Loading';
 import { Package, Printer, Filter } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useTheme } from '@/lib/theme'; // Importando o tema para pegar a logo
+import getImageUrl from '@/lib/getImageUrl';
 
 interface EstoqueItem {
   id: number;
@@ -151,7 +152,11 @@ export default function RelatorioEstoquePage() {
           <div className="flex items-center gap-4">
             {/* Logo da Empresa */}
             <img
-              src={theme?.company_logo_url ?? theme?.logo_url ?? '/logo.png'}
+              src={
+                getImageUrl(theme?.company_logo_url as string | undefined) ||
+                getImageUrl(theme?.logo_url as string | undefined) ||
+                '/logo.png'
+              }
               alt="Logo"
               className="h-16 w-auto object-contain grayscale" // Grayscale economiza tinta colorida
               onError={(e) => (e.currentTarget.style.display = 'none')}

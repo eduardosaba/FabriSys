@@ -1,6 +1,7 @@
 import React from 'react';
 import Image from 'next/image';
 import { useTheme } from '../lib/theme';
+import getImageUrl from '@/lib/getImageUrl';
 import Text from '../components/ui/Text';
 
 type Props = {
@@ -40,7 +41,7 @@ export default function Header({ onMenuClick }: Props) {
             {theme?.logo_url && theme.logo_url.trim() !== '' && (
               <div className="relative">
                 <Image
-                  src={theme.logo_url}
+                  src={getImageUrl(theme.logo_url) || theme.logo_url}
                   alt={theme?.name || 'Logo Sistema'}
                   width={32}
                   height={32}

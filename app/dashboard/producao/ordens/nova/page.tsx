@@ -93,10 +93,10 @@ export default function NovaOrdemPage() {
       const { error } = await supabase.from('ordens_producao').insert({
         numero_op: numeroOp,
         produto_final_id: formData.produto_final_id,
-        quantidade_prevista: parseFloat(formData.quantidade_prevista),
+        quantidade_prevista: parseInt(String(formData.quantidade_prevista), 10) || 0,
         data_prevista: formData.data_prevista,
         custo_previsto: 0,
-        status: 'planejada',
+        status: 'pendente',
 
         // CAMPOS OBRIGATÓRIOS PARA RLS:
         organization_id: profile.organization_id,

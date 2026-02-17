@@ -1,15 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { FLOAT_BTN_SIZE, loadFloatingPosition, saveFloatingPosition, saveFloatingPositionServer, loadFloatingPositionServer } from './floatingPosition';
 import { supabase } from '@/lib/supabase';
 import { BellRing, Send } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '@/lib/auth';
+import { getOperationalContext } from '@/lib/operationalLocal';
 
-export default function SolicitacaoReposicao({ localId }: { localId: string }) {
+export default function SolicitacaoReposicao({ localId }: { localId?: string | null }) {
   const [isOpen, setIsOpen] = useState(false);
   const [produtos, setProdutos] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [quantidade, setQuantidade] = useState<number>(10);
+  const { profile } = useAuth();
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const draggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
+  const movedRef = useRef(0);
 
   useEffect(() => {
     if (isOpen && produtos.length === 0) {
@@ -24,11 +33,63 @@ export default function SolicitacaoReposicao({ localId }: { localId: string }) {
     }
   }, [isOpen, produtos.length]);
 
+  useEffect(() => {
+    const update = () => setIsDesktop(window.innerWidth >= 768);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktop) return;
+    let mounted = true;
+    (async () => {
+      try {
+        if (profile?.id) {
+          const srv = await loadFloatingPositionServer(profile.id, 'floating:reposicao');
+          if (srv && srv.x !== undefined && srv.y !== undefined) {
+            if (mounted) setPosition(srv);
+            return;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      try {
+        const saved = loadFloatingPosition('floating:reposicao');
+        if (saved) {
+          if (mounted) setPosition(saved);
+          return;
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // default position: bottom-left (compute top from window height)
+      const defaultBottom = 80; // keep above payment bar
+      if (mounted) setPosition({ x: 16, y: Math.max(16, window.innerHeight - FLOAT_BTN_SIZE - defaultBottom) });
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [isDesktop, profile?.id]);
+
   const solicitar = async (produtoId: string) => {
     setLoading(true);
     try {
+      let effectiveLocal = localId ?? null;
+      if (!effectiveLocal) {
+        try {
+          const ctx = await getOperationalContext(profile);
+          effectiveLocal = ctx.caixa?.local_id ?? ctx.localId ?? null;
+        } catch (e) {
+          effectiveLocal = null;
+        }
+      }
+      if (!effectiveLocal) throw new Error('Loja não identificada para solicitação');
       const { error } = await supabase.from('solicitacoes_reposicao').insert({
-        local_id: localId,
+        local_id: effectiveLocal,
         produto_id: produtoId,
         status: 'pendente',
         urgencia: 'alta',
@@ -46,18 +107,112 @@ export default function SolicitacaoReposicao({ localId }: { localId: string }) {
     }
   };
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isDesktop) return;
+    draggingRef.current = true;
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      offsetX: position?.x ?? 16,
+      offsetY: position?.y ?? 16,
+    };
+    movedRef.current = 0;
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const dx = ev.clientX - dragStartRef.current.x;
+      const dy = ev.clientY - dragStartRef.current.y;
+      const newX = dragStartRef.current.offsetX + dx;
+      const newY = dragStartRef.current.offsetY + dy;
+      // clamp to viewport
+      const clampedX = Math.max(8, Math.min(newX, window.innerWidth - 56 - 8));
+      const clampedY = Math.max(8, Math.min(newY, window.innerHeight - 56 - 8));
+      setPosition({ x: clampedX, y: clampedY });
+      movedRef.current = Math.hypot(dx, dy);
+    };
+    const onUp = () => {
+      draggingRef.current = false;
+      saveFloatingPosition('floating:reposicao', position);
+      void saveFloatingPositionServer(profile?.id, 'floating:reposicao', position);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isDesktop) return;
+    const t = e.touches[0];
+    draggingRef.current = true;
+    dragStartRef.current = {
+      x: t.clientX,
+      y: t.clientY,
+      offsetX: position?.x ?? 16,
+      offsetY: position?.y ?? 16,
+    };
+    movedRef.current = 0;
+    const onMove = (ev: TouchEvent) => {
+      if (!draggingRef.current) return;
+      const touch = ev.touches[0];
+      const dx = touch.clientX - dragStartRef.current.x;
+      const dy = touch.clientY - dragStartRef.current.y;
+      const newX = dragStartRef.current.offsetX + dx;
+      const newY = dragStartRef.current.offsetY + dy;
+      const clampedX = Math.max(8, Math.min(newX, window.innerWidth - 56 - 8));
+      const clampedY = Math.max(8, Math.min(newY, window.innerHeight - 56 - 8));
+      setPosition({ x: clampedX, y: clampedY });
+      movedRef.current = Math.hypot(dx, dy);
+    };
+    const onEnd = () => {
+      draggingRef.current = false;
+      try {
+        if (position) localStorage.setItem('solicitacaoReposicaoPosition', JSON.stringify(position));
+        void saveFloatingPositionServer(profile?.id, 'floating:reposicao', position);
+      } catch (e) {}
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+    };
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+  };
+
+  const handleClick = () => {
+    // ignore click if it was a drag
+    if (movedRef.current > 6) {
+      movedRef.current = 0;
+      return;
+    }
+    setIsOpen(true);
+  };
+
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 left-4 bg-orange-600 text-white p-3 rounded-full shadow-lg hover:bg-orange-700 transition-all z-40 flex items-center gap-2 group"
-        title="Pedir Reposição"
-      >
-        <BellRing size={24} />
-        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-sm font-bold">
-          Pedir Reposição
-        </span>
-      </button>
+      {isDesktop ? (
+        <button
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+          onClick={handleClick}
+          style={position ? { left: position.x, top: position.y } : { left: 16 }}
+          className="fixed bg-orange-600 text-white p-3 rounded-full shadow-lg hover:bg-orange-700 transition-all z-50 flex items-center gap-2 group"
+          title="Pedir Reposição"
+        >
+          <BellRing size={24} />
+          <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-sm font-bold">
+            Pedir Reposição
+          </span>
+        </button>
+      ) : (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-20 md:bottom-4 left-4 bg-orange-600 text-white p-3 rounded-full shadow-lg hover:bg-orange-700 transition-all z-50 flex items-center gap-2 group"
+          title="Pedir Reposição"
+        >
+          <BellRing size={24} />
+          <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-sm font-bold">
+            Pedir Reposição
+          </span>
+        </button>
+      )}
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4 animate-in fade-in">

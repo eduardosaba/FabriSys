@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { getOperationalContext } from '@/lib/operationalLocal';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
@@ -45,6 +46,7 @@ export default function ControleCaixaPage() {
   const [loading, setLoading] = useState(true);
   const [localId, setLocalId] = useState<string | null>(null);
   const [modoPdv, setModoPdv] = useState<'padrao' | 'inventario'>('padrao'); // Padrão por segurança
+  const [listaLojasDisponiveis, setListaLojasDisponiveis] = useState<any[]>([]);
 
   // Inputs de Abertura
   const [valorAbertura, setValorAbertura] = useState('');
@@ -77,18 +79,39 @@ export default function ControleCaixaPage() {
       return;
     }
     try {
-      // 1. Carregar Configuração do Modo PDV
-      const { data: config, error: cfgErr } = await supabase
-        .from('configuracoes_sistema')
-        .select('valor')
-        .eq('chave', 'modo_pdv')
-        .maybeSingle();
+      // 1. Carregar Configuração do Modo PDV (prioriza configuração por organização)
+      let cfg: any = null;
+      try {
+        if (profile?.organization_id) {
+          const { data: cfgOrg, error: cfgOrgErr } = await supabase
+            .from('configuracoes_sistema')
+            .select('valor')
+            .eq('chave', 'modo_pdv')
+            .eq('organization_id', profile.organization_id)
+            .maybeSingle();
+          if (cfgOrgErr) throw cfgOrgErr;
+          cfg = cfgOrg;
+        }
 
-      if (cfgErr) console.warn('Erro ao ler modo_pdv:', cfgErr);
-      if (config && config.valor) setModoPdv(config.valor as 'padrao' | 'inventario');
+        if (!cfg) {
+          const { data: cfgGlobal, error: cfgGlobalErr } = await supabase
+            .from('configuracoes_sistema')
+            .select('valor')
+            .eq('chave', 'modo_pdv')
+            .is('organization_id', null)
+            .maybeSingle();
+          if (cfgGlobalErr) throw cfgGlobalErr;
+          cfg = cfgGlobal;
+        }
+      } catch (cfgErr) {
+        console.warn('Erro ao ler modo_pdv:', cfgErr);
+      }
 
-      // 2. Identificar Loja — preferir profile.local_id
-      let meuLocalId = profile?.local_id ?? null;
+      if (cfg && cfg.valor) setModoPdv(cfg.valor as 'padrao' | 'inventario');
+
+      // 2. Identificar Loja — preferir contexto operacional (caixa aberto do usuário), depois profile.local_id
+      const opCtx = await getOperationalContext(profile);
+      let meuLocalId = opCtx.caixa?.local_id ?? opCtx.localId ?? profile?.local_id ?? null;
       if (!meuLocalId) {
         const { data: locais } = await supabase
           .from('locais')
@@ -105,18 +128,24 @@ export default function ControleCaixaPage() {
       }
       setLocalId(meuLocalId);
 
-      // 3. Buscar Caixa (filtrar por usuário a menos que seja admin/master)
-      let caixaQuery: any = supabase
-        .from('caixa_sessao')
-        .select('*')
-        .eq('local_id', meuLocalId)
-        .eq('status', 'aberto');
+      // 3. Buscar Caixa — se o contexto operacional já trouxe uma sessão, usamos ela
+      let caixa: any = null;
+      if (opCtx.caixa) {
+        caixa = opCtx.caixa;
+      } else {
+        let caixaQuery: any = supabase
+          .from('caixa_sessao')
+          .select('*')
+          .eq('local_id', meuLocalId)
+          .eq('status', 'aberto');
 
-      if (profile?.role !== 'admin' && profile?.role !== 'master') {
-        caixaQuery = caixaQuery.eq('usuario_abertura', profile.id);
+        if (profile?.role !== 'admin' && profile?.role !== 'master') {
+          caixaQuery = caixaQuery.eq('usuario_abertura', profile.id);
+        }
+
+        const { data: caixaData } = await caixaQuery.maybeSingle();
+        caixa = caixaData;
       }
-
-      const { data: caixa } = await caixaQuery.maybeSingle();
 
       if (caixa) {
         // Carregar produtos
@@ -125,7 +154,8 @@ export default function ControleCaixaPage() {
           .select(
             `id, nome, preco_venda, imagem_url, estoque:estoque_produtos(quantidade, local_id)`
           )
-          .eq('ativo', true);
+          .eq('ativo', true)
+          .eq('tipo', 'final');
 
         const listaContagem = (prods || []).map((p: any) => {
           const est = p.estoque?.find((e: any) => e.local_id === meuLocalId);
@@ -169,6 +199,26 @@ export default function ControleCaixaPage() {
     void carregarEstado();
   }, [authLoading, profile?.id, carregarEstado]);
 
+  // Se for admin/master, carrega lista de lojas PDV da organização para seleção
+  useEffect(() => {
+    const buscarLojas = async () => {
+      if (!profile) return;
+      if (profile.role === 'admin' || profile.role === 'master') {
+        try {
+          const { data } = await supabase
+            .from('locais')
+            .select('id,nome')
+            .eq('organization_id', profile.organization_id)
+            .eq('tipo', 'pdv');
+          setListaLojasDisponiveis(data || []);
+        } catch (e) {
+          console.error('Erro ao buscar lojas para admin', e);
+        }
+      }
+    };
+    void buscarLojas();
+  }, [profile]);
+
   // Mascara simples para moeda BRL (mostra 1234 -> 12,34)
   const formatCurrencyInput = (raw: string) => {
     if (!raw) return '';
@@ -179,34 +229,68 @@ export default function ControleCaixaPage() {
     return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  const parseCurrency = (formatted: string) => {
+    if (!formatted) return 0;
+    const cleaned = String(formatted).replace(/\./g, '').replace(/,/g, '.').replace(/[^0-9.\-]/g, '');
+    const n = parseFloat(cleaned);
+    return Number.isFinite(n) ? n : 0;
+  };
+
   const abrirCaixa = async () => {
-    // Validações iniciais
     if (!valorAbertura) return toast.error('Informe o fundo de troco');
-    if (!localId) return toast.error('Erro: Loja não identificada. Recarregue a página.');
+
+    // Ajuste para Admin: Se não houver localId detectado, avisamos.
+    if (!localId) {
+      console.error('LocalID ausente:', { localId, profileLocal: profile?.local_id });
+      return toast.error('Selecione uma loja para abrir o caixa.');
+    }
+
+    if (!profile?.organization_id) return toast.error('Erro: Organização não identificada no seu perfil.');
 
     try {
+      // Checagem rápida: evita tentar abrir se já existe caixa aberto para este local
+      try {
+        const { data: already, error: chkErr } = await supabase
+          .from('caixa_sessao')
+          .select('id')
+          .eq('local_id', localId)
+          .eq('status', 'aberto')
+          .maybeSingle();
+        if (chkErr) console.warn('Erro ao checar caixa aberto existente', chkErr);
+        if (already) return toast.error('Já existe um caixa aberto para esta loja. Feche-o antes de abrir outro.');
+      } catch (e) {
+        console.warn('Falha na checagem de caixa aberto (ignorando):', e);
+      }
+
       setLoading(true);
+      const numericValor = parseCurrency(valorAbertura) || 0;
 
-      const numericValor =
-        parseFloat(String(valorAbertura).replace(/\./g, '').replace(',', '.')) || 0;
+      console.log(`Abrindo caixa para: ${profile?.nome || profile?.id} no LocalID: ${localId}`);
 
-      const { error } = await supabase.from('caixa_sessao').insert({
-        local_id: localId,
-        usuario_abertura: profile?.id,
-        organization_id: profile?.organization_id,
-        saldo_inicial: numericValor,
-        status: 'aberto',
-      });
+      const { data, error } = await supabase
+        .from('caixa_sessao')
+        .insert({
+          local_id: localId,
+          usuario_abertura: profile?.id,
+          organization_id: profile?.organization_id,
+          saldo_inicial: numericValor,
+          status: 'aberto',
+          data_abertura: new Date().toISOString(),
+        })
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro Supabase Insert:', error);
+        throw error;
+      }
 
-      toast.success('Caixa Aberto!');
-      // Recarrega o estado; carregarEstado já seta loading=false no finally
+      toast.success(`Caixa aberto por ${profile?.nome || profile?.id || 'Admin'}`);
       await carregarEstado();
-    } catch (err) {
-      console.error(err);
-      toast.error('Erro ao abrir caixa. Verifique suas permissões.');
-      setLoading(false); // CORREÇÃO: destrava o botão em caso de erro
+    } catch (err: any) {
+      console.error('Erro ao abrir caixa:', err);
+      toast.error('Erro ao abrir caixa: ' + (err?.message || String(err)));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -228,9 +312,9 @@ export default function ControleCaixaPage() {
     }
 
     const totalInformado =
-      (parseFloat(valoresFechamento.dinheiro) || 0) +
-      (parseFloat(valoresFechamento.pix) || 0) +
-      (parseFloat(valoresFechamento.cartao) || 0);
+      (parseCurrency(valoresFechamento.dinheiro) || 0) +
+      (parseCurrency(valoresFechamento.pix) || 0) +
+      (parseCurrency(valoresFechamento.cartao) || 0);
 
     // No modo inventário, descontos diminuem o valor esperado (para bater o caixa)
     const descontos = modoPdv === 'inventario' ? valorTotalDescontos : 0;
@@ -317,6 +401,7 @@ export default function ControleCaixaPage() {
       }
 
       // B. Fechar Caixa
+      // Também atualiza o registro em `caixa_diario` para manter consistência com vendas
       const { error } = await supabase
         .from('caixa_sessao')
         .update({
@@ -331,6 +416,9 @@ export default function ControleCaixaPage() {
         .eq('id', caixaAberto?.id);
 
       if (error) throw error;
+
+      // NOTE: atualização de `caixa_diario` é feita pelo trigger DB (migration). Não
+      // realizamos atualizações client-side aqui para evitar duplicidade.
 
       toast.success('Dia Encerrado!');
       setCaixaAberto(null);
@@ -364,25 +452,54 @@ export default function ControleCaixaPage() {
             <Unlock size={40} />
           </div>
           <h2 className="text-2xl font-bold text-slate-800 mb-2">Abrir Novo Dia</h2>
-          <div className="text-left mt-6">
-            <label className="text-sm font-bold text-slate-700 block mb-2">
-              Fundo de Troco (R$)
-            </label>
-            <input
-              type="text"
-              inputMode="decimal"
-              className="w-full p-4 border rounded-xl text-xl font-bold text-center focus:ring-2 focus:ring-green-500 outline-none bg-slate-50"
-              placeholder="0,00"
-              value={valorAbertura}
-              onChange={(e) => setValorAbertura(formatCurrencyInput(e.target.value))}
-            />
+
+          <div className="text-left mt-6 space-y-4">
+            {(profile?.role === 'admin' || profile?.role === 'master') && (
+              <div>
+                <label className="text-sm font-bold text-slate-700 block mb-2 uppercase text-[10px]">
+                  Unidade / Loja
+                </label>
+                <select
+                  className="w-full p-3 border rounded-xl bg-slate-50 font-medium outline-none focus:ring-2 focus:ring-green-500"
+                  value={localId || ''}
+                  onChange={(e) => setLocalId(e.target.value)}
+                >
+                  <option value="">Selecione a Loja...</option>
+                  {listaLojasDisponiveis.map((loja) => (
+                    <option key={loja.id} value={loja.id}>
+                      {loja.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="text-sm font-bold text-slate-700 block mb-2 uppercase text-[10px]">
+                Fundo de Troco (R$)
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                className="w-full p-4 border rounded-xl text-xl font-bold text-center focus:ring-2 focus:ring-green-500 outline-none bg-slate-50"
+                placeholder="0,00"
+                value={valorAbertura}
+                onChange={(e) => setValorAbertura(formatCurrencyInput(e.target.value))}
+              />
+            </div>
           </div>
+
           <Button
             onClick={abrirCaixa}
+            disabled={!localId}
             className="w-full py-4 text-lg mt-6 bg-green-600 hover:bg-green-700"
           >
-            Confirmar Abertura
+            Confirmar Abertura como {(profile?.nome || profile?.id || '').split(' ')[0] || 'Você'}
           </Button>
+
+          <p className="text-[10px] text-slate-400 mt-4 uppercase tracking-widest">
+            O log de abertura será registrado em seu nome.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -470,12 +587,13 @@ export default function ControleCaixaPage() {
                     <Banknote size={16} className="text-green-600" /> Dinheiro em Espécie
                   </label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     className="w-full p-3 border rounded-lg bg-slate-50 font-bold text-right"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={valoresFechamento.dinheiro}
                     onChange={(e) =>
-                      setValoresFechamento({ ...valoresFechamento, dinheiro: e.target.value })
+                      setValoresFechamento({ ...valoresFechamento, dinheiro: formatCurrencyInput(e.target.value) })
                     }
                   />
                 </div>
@@ -485,12 +603,13 @@ export default function ControleCaixaPage() {
                       Pix
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       className="w-full p-2 border rounded bg-slate-50 text-right"
-                      placeholder="0.00"
+                      placeholder="0,00"
                       value={valoresFechamento.pix}
                       onChange={(e) =>
-                        setValoresFechamento({ ...valoresFechamento, pix: e.target.value })
+                        setValoresFechamento({ ...valoresFechamento, pix: formatCurrencyInput(e.target.value) })
                       }
                     />
                   </div>
@@ -499,12 +618,13 @@ export default function ControleCaixaPage() {
                       Cartão
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       className="w-full p-2 border rounded bg-slate-50 text-right"
-                      placeholder="0.00"
+                      placeholder="0,00"
                       value={valoresFechamento.cartao}
                       onChange={(e) =>
-                        setValoresFechamento({ ...valoresFechamento, cartao: e.target.value })
+                        setValoresFechamento({ ...valoresFechamento, cartao: formatCurrencyInput(e.target.value) })
                       }
                     />
                   </div>

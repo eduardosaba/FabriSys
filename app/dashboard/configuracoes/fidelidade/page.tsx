@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth';
 import PageHeader from '@/components/ui/PageHeader';
 import Button from '@/components/Button';
 import { Gift, Save, Search, User } from 'lucide-react';
@@ -13,6 +14,7 @@ export default function FidelidadeConfigPage() {
   const [clientes, setClientes] = useState<any[]>([]);
   const [busca, setBusca] = useState('');
   const [loading, setLoading] = useState(false);
+  const { profile } = useAuth();
 
   useEffect(() => {
     void supabase
@@ -47,28 +49,43 @@ export default function FidelidadeConfigPage() {
       { chave: 'fidelidade_ativa', valor: String(fidelidadeAtiva) },
     ];
 
+    setLoading(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = (sessionData as any)?.session;
-      if (!session?.user) {
-        toast.error('Você precisa entrar para salvar as configurações');
-        return;
-      }
+      const savePromise = (async () => {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const session = (sessionData as any)?.session;
+        if (!session?.user) {
+          throw new Error('Você precisa entrar para salvar as configurações');
+        }
 
-      const { error } = await supabase.from('configuracoes_sistema').upsert(
-        updates.map((u) => ({ ...u, updated_at: new Date().toISOString() })),
-        { onConflict: 'chave' }
-      );
+        const timestamp = new Date().toISOString();
+        const payload = updates.map((u) => ({ ...u, updated_at: timestamp }));
 
-      if (error) {
-        console.error('Erro ao salvar configuracoes_fidelidade:', error);
-        toast.error(error.message || 'Erro ao salvar configurações');
-        return;
-      }
-      toast.success('Configurações atualizadas!');
+        // Usar RPC para upsert seguro por chave
+        const results = await Promise.all(payload.map(async (p) => {
+          const rpcPayload = {
+            p_organization_id: profile?.organization_id || null,
+            p_chave: p.chave,
+            p_valor: p.valor,
+          };
+          const { error } = await supabase.rpc('rpc_upsert_configuracoes_sistema', rpcPayload);
+          if (error) throw error;
+          return true;
+        }));
+
+        return results.length > 0;
+      })();
+
+      await toast.promise(savePromise, {
+        loading: 'Salvando configurações...',
+        success: 'Configurações atualizadas!',
+        error: (err) => `Erro ao salvar configurações: ${err?.message || ''}`,
+      });
     } catch (err: any) {
       console.error('Exception ao salvar configuracoes_fidelidade:', err);
       toast.error(err?.message || 'Erro ao salvar configurações');
+    } finally {
+      setLoading(false);
     }
   };
 

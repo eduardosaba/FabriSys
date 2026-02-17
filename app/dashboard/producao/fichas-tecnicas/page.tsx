@@ -45,15 +45,7 @@ export default function FichasTecnicasPage() {
     try {
       const resp = await supabase
         .from('fichas_tecnicas')
-        .select(
-          `
-          id,
-          slug,
-          produto_final:produtos_finais!fk_produto_final(nome),
-          created_at,
-          ativo
-        `
-        )
+        .select('id, slug, produto_final_id, created_at, ativo')
         .order('created_at', { ascending: false });
 
       const data = resp.data as unknown;
@@ -62,24 +54,17 @@ export default function FichasTecnicasPage() {
 
       // Transformar os dados para o formato correto
       const rows = Array.isArray(data) ? data : [];
-      const fichasFormatadas = rows.map((row: Record<string, unknown>) => {
-        const produtoField = row.produto_final;
-        let produtoFinal: unknown;
-        if (
-          Array.isArray(produtoField) &&
-          produtoField.length > 0 &&
-          typeof produtoField[0] === 'object'
-        ) {
-          produtoFinal = produtoField[0];
-        } else if (produtoField && typeof produtoField === 'object') {
-          produtoFinal = produtoField;
-        }
+      const produtoIds = Array.from(new Set(rows.map((r: any) => String(r.produto_final_id)).filter(Boolean)));
+      const produtoMap: Record<string, { nome?: string }> = {};
+      if (produtoIds.length > 0) {
+        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
+        (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
+      }
 
-        return {
-          ...row,
-          produto_final: produtoFinal || { nome: '' },
-        } as unknown as FichaTecnica;
-      });
+      const fichasFormatadas = rows.map((row: any) => ({
+        ...row,
+        produto_final: produtoMap[String(row.produto_final_id)] || { nome: '' },
+      } as FichaTecnica));
 
       setFichas(fichasFormatadas);
     } catch (err) {

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ThemeProvider, useTheme } from '@/lib/theme';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Check, AlertCircle, Loader2, X, Mail } from 'lucide-react';
+import getImageUrl from '@/lib/getImageUrl';
 
 // Nota: removemos importações estáticas do Firebase para evitar erro de build
 // quando a dependência não estiver instalada. Fazemos inicialização dinâmica
@@ -265,7 +266,11 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
         <div className="mb-8 drop-shadow-2xl">
           {/* Wrapper simplificado: sem fundo e sem borda */}
           {theme?.logo_url ? (
-            <img src={theme.logo_url} alt="Logo" className="h-38 md:h-38 object-contain" />
+            <img
+              src={getImageUrl(theme.logo_url) || theme.logo_url}
+              alt="Logo"
+              className="h-38 md:h-38 object-contain"
+            />
           ) : null}
         </div>
         <h2 className="mb-6 text-5xl font-bold leading-tight drop-shadow-lg">
@@ -305,7 +310,7 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
             {/* Logo do cliente: responsivo — mobile h-12, md+ ~1.3x (~83.2px) */}
             {theme?.company_logo_url ? (
               <img
-                src={theme.company_logo_url}
+                src={getImageUrl(theme.company_logo_url) || theme.company_logo_url}
                 alt="Logo Cliente"
                 className="mx-auto h-12 md:h-[83.2px] object-contain mb-4"
               />
@@ -400,7 +405,11 @@ function SplashScreen({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900">
       {/* Logo e barra de progresso aumentados em ~3x para destaque */}
-      <img src={theme.logo_url} className="w-[384px] mb-6 animate-pulse" alt="Logo Confectio" />
+      <img
+        src={getImageUrl(theme.logo_url) || theme.logo_url}
+        className="w-[384px] mb-6 animate-pulse"
+        alt="Logo Confectio"
+      />
       <div className="h-3 w-[768px] bg-white/20 rounded-full overflow-hidden">
         <div
           className="h-full bg-orange-500 transition-all duration-200"

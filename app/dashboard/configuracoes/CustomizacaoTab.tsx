@@ -253,17 +253,24 @@ export default function CustomizacaoTab() {
         }
 
         // Salvar configurações específicas do usuário admin para ambos os modos
-        await updateTheme(
-          {
-            ...updatedSettings,
-            colors: {
-              ...themeColors,
-              light: lightUpdatedColors,
-              dark: darkUpdatedColors,
+        await toast.promise(
+          updateTheme(
+            {
+              ...updatedSettings,
+              colors: {
+                ...themeColors,
+                light: lightUpdatedColors,
+                dark: darkUpdatedColors,
+              },
             },
-          },
-          false,
-          userId
+            false,
+            userId
+          ),
+          {
+            loading: 'Salvando customização...',
+            success: 'Customização salva com sucesso!',
+            error: (err) => `Erro ao salvar customização: ${err?.message || ''}`,
+          }
         );
 
         setAppliedPreset(null); // Reset após salvar
@@ -307,20 +314,28 @@ export default function CustomizacaoTab() {
         });
 
         // Salvar configurações específicas do usuário admin
-        await updateTheme(
-          {
-            ...updatedSettings,
-            colors: {
-              ...themeColors,
-              [themeMode]: updatedColors,
+        await toast.promise(
+          updateTheme(
+            {
+              ...updatedSettings,
+              colors: {
+                ...themeColors,
+                [themeMode]: updatedColors,
+              },
             },
-          },
-          false,
-          userId
+            false,
+            userId
+          ),
+          {
+            loading: 'Salvando customização...',
+            success: 'Customização salva com sucesso!',
+            error: (err) => `Erro ao salvar customização: ${err?.message || ''}`,
+          }
         );
       }
     } catch (error) {
       console.error('Erro ao salvar customização:', error);
+      toast.error('Erro ao salvar customização. Tente novamente.');
     }
   };
 
@@ -627,7 +642,7 @@ export default function CustomizacaoTab() {
         <Card className="border-primary/20 bg-primary/5 p-6">
           <div className="mb-4 flex items-center gap-2">
             <Text variant="h3" className="text-primary">
-              {isMasterAdmin ? '🎨 Configuração Completa do Tema' : '🎨 Customização do Sistema'}
+              {isMasterAdmin ? ' ' : ''}
             </Text>
             <span className="bg-primary/10 rounded px-2 py-1 text-xs text-primary">
               {isMasterAdmin ? 'Master Admin - Controle Total' : 'Personalização Individual'}
@@ -637,8 +652,8 @@ export default function CustomizacaoTab() {
           <div className="mb-6 text-sm text-gray-600">
             <p>
               {isMasterAdmin
-                ? 'Configure todas as cores e elementos visuais do sistema. Suas mudanças afetam toda a interface.'
-                : 'Personalize suas cores padrão que serão aplicadas em toda a interface do sistema.'}
+                ? ''
+                : ''}
             </p>
           </div>
 
@@ -654,18 +669,22 @@ export default function CustomizacaoTab() {
                     <div className="mb-6">
                       <Text className="mb-3 font-medium">Logo Personalizado</Text>
 
-                      {/* Nome do Sistema */}
-                      <SystemNameSection settings={settings} onFieldChange={handleFieldChange} />
+                      {/* Nome do Sistema (apenas master) */}
+                      {isMasterAdmin && (
+                        <>
+                          <SystemNameSection settings={settings} onFieldChange={handleFieldChange} />
 
-                      <LogoUploadSection
-                        title="Upload de Logo"
-                        description="Máximo 2MB. Formatos: PNG, JPG, SVG"
-                        logoUrl={settings.logo_url as string}
-                        logoScale={(settings.logo_scale as number) || 1}
-                        onLogoUrlChange={(url) => handleFieldChange('logo_url', url)}
-                        onLogoScaleChange={(scale) => handleFieldChange('logo_scale', scale)}
-                        storagePath="user-logo"
-                      />
+                          <LogoUploadSection
+                            title="Upload de Logo"
+                            description="Máximo 2MB. Formatos: PNG, JPG, SVG"
+                            logoUrl={settings.logo_url as string}
+                            logoScale={(settings.logo_scale as number) || 1}
+                            onLogoUrlChange={(url) => handleFieldChange('logo_url', url)}
+                            onLogoScaleChange={(scale) => handleFieldChange('logo_scale', scale)}
+                            storagePath="user-logo"
+                          />
+                        </>
+                      )}
                     </div>
 
                     {/* Seção de Logo da Empresa */}

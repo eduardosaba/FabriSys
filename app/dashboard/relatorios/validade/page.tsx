@@ -7,6 +7,7 @@ import Loading from '@/components/ui/Loading';
 import { Calendar, Printer, AlertOctagon } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useTheme } from '@/lib/theme';
+import getImageUrl from '@/lib/getImageUrl';
 
 interface LoteValidade {
   id: number;
@@ -148,7 +149,11 @@ export default function RelatorioValidadePage() {
           <div className="flex items-center gap-4">
             {/* Logo */}
             <img
-              src={theme?.company_logo_url ?? theme?.logo_url ?? '/logo.png'}
+              src={
+                getImageUrl(theme?.company_logo_url as string | undefined) ||
+                getImageUrl(theme?.logo_url as string | undefined) ||
+                '/logo.png'
+              }
               alt="Logo"
               className="h-16 w-auto object-contain grayscale"
               onError={(e) => (e.currentTarget.style.display = 'none')}

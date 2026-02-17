@@ -63,13 +63,24 @@ export default function GestaoMetasPage() {
   useEffect(() => {
     void supabase
       .from('locais')
-      .select('id, nome')
+      .select('id, nome, dias_funcionamento')
       .eq('tipo', 'pdv')
       .then(({ data }) => {
         setLocais(data || []);
         if (data?.[0]) setLocalSelecionado(data[0].id);
       });
   }, []);
+
+  // ajustar weekdays ao trocar o PDV selecionado, preferindo o valor salvo no DB
+  useEffect(() => {
+    if (!localSelecionado) return;
+    const l = locais.find((x) => x.id === localSelecionado);
+    if (l && Array.isArray(l.dias_funcionamento) && l.dias_funcionamento.length > 0) {
+      setWeekdays(l.dias_funcionamento as number[]);
+    } else {
+      setWeekdays([0, 1, 2, 3, 4, 5, 6]);
+    }
+  }, [localSelecionado, locais]);
 
   useEffect(() => {
     // calcular metas mensais por local para o mês selecionado
@@ -144,9 +155,7 @@ export default function GestaoMetasPage() {
     if (Number.isNaN(valor) || valor < 0) return toast.error('Valor inválido');
 
     // filtrar apenas os dias ativos conforme seleção do admin
-    const activeDays = metasDiarias.filter((m) =>
-      weekdays.includes(parseISOToLocal(m.data).getDay())
-    );
+    const activeDays = metasDiarias.filter((m) => weekdays.includes(parseISOToLocal(m.data).getDay()));
     if (!activeDays || activeDays.length === 0)
       return toast.error('Selecione ao menos um dia de funcionamento');
 
@@ -163,34 +172,60 @@ export default function GestaoMetasPage() {
   const salvarMetas = async () => {
     setLoading(true);
     try {
+      // determinar meta total como soma das metas diárias (garante valor por local)
+      const metaTotal = (metasDiarias || []).reduce((s, m) => s + Number(m.valor || 0), 0);
+
+      // calcular dias de funcionamento ativos para este mês/local
+      const diasAtivosCount = metasDiarias.filter((m) => weekdays.includes(parseISOToLocal(m.data).getDay())).length;
+
       const upserts = metasDiarias.map((m) => ({
         local_id: localSelecionado,
         data_referencia: m.data,
         valor_meta: m.valor,
+        dias_defuncionamento: diasAtivosCount,
+        meta_total: metaTotal,
       }));
 
-      const { error } = await supabase
+      const savePromise = supabase
         .from('metas_vendas')
         .upsert(upserts, { onConflict: 'local_id, data_referencia' });
 
-      if (error) throw error;
-      toast.success('Metas salvas com sucesso!');
+      await toast.promise(savePromise as unknown as Promise<any>, {
+        loading: 'Salvando metas...',
+        success: 'Metas salvas com sucesso!',
+        error: (err) => `Erro ao salvar: ${err?.message || ''}`,
+      });
+
       // atualizar soma local
-      void (async () => {
-        const [ano, mesNum] = mes.split('-');
-        const dias = new Date(parseInt(ano), parseInt(mesNum), 0).getDate();
-        const start = `${mes}-01`;
-        const end = `${mes}-${String(dias).padStart(2, '0')}`;
-        const { data: metas } = await supabase
-          .from('metas_vendas')
-          .select('local_id, valor_meta')
-          .eq('local_id', localSelecionado)
-          .gte('data_referencia', start)
-          .lte('data_referencia', end);
-        const total = (metas || []).reduce((s: number, x: any) => s + Number(x.valor_meta || 0), 0);
-        setMonthlyMetaByLocal((prev) => ({ ...prev, [localSelecionado]: total }));
-        setSavedStatus((s) => ({ ...s, [localSelecionado]: 'saved' }));
-      })();
+      const [ano, mesNum] = mes.split('-');
+      const dias = new Date(parseInt(ano), parseInt(mesNum), 0).getDate();
+      const start = `${mes}-01`;
+      const end = `${mes}-${String(dias).padStart(2, '0')}`;
+      const { data: metas } = await supabase
+        .from('metas_vendas')
+        .select('local_id, valor_meta')
+        .eq('local_id', localSelecionado)
+        .gte('data_referencia', start)
+        .lte('data_referencia', end);
+      const total = (metas || []).reduce((s: number, x: any) => s + Number(x.valor_meta || 0), 0);
+      setMonthlyMetaByLocal((prev) => ({ ...prev, [localSelecionado]: total }));
+      setSavedStatus((s) => ({ ...s, [localSelecionado]: 'saved' }));
+
+      // Persistir dias de funcionamento selecionados para o PDV
+      if (localSelecionado) {
+        const { data: locData, error: locError } = await supabase
+          .from('locais')
+          .update({ dias_funcionamento: weekdays })
+          .eq('id', localSelecionado)
+          .select('id, nome, dias_funcionamento');
+        if (locError) {
+          console.error('Erro salvando dias_funcionamento:', locError);
+          toast.error('Erro ao salvar dias de funcionamento');
+        } else if (locData && locData[0]) {
+          // atualizar cache local para refletir alteração imediatamente
+          setLocais((prev) => prev.map((l) => (l.id === localSelecionado ? { ...l, dias_funcionamento: locData[0].dias_funcionamento } : l)));
+        }
+      }
     } catch (err) {
       console.error(err);
       toast.error('Erro ao salvar');
@@ -228,13 +263,27 @@ export default function GestaoMetasPage() {
       for (let d = 1; d <= dias; d++) {
         const dataStr = `${mes}-${String(d).padStart(2, '0')}`;
         const valor = daysList.includes(d) ? Number(Number(diario.toFixed(2))) : 0;
-        upserts.push({ local_id: editingLocalId, data_referencia: dataStr, valor_meta: valor });
+        upserts.push({
+          local_id: editingLocalId,
+          data_referencia: dataStr,
+          valor_meta: valor,
+          dias_defuncionamento: daysList.length,
+        });
       }
 
-      const { error } = await supabase
+      // garantir meta_total consistente (soma das diárias para este local/mês)
+      const totalUpsert = upserts.reduce((s, x) => s + Number(x.valor_meta || 0), 0);
+      upserts.forEach((u) => (u.meta_total = totalUpsert));
+
+      const savePromise = supabase
         .from('metas_vendas')
         .upsert(upserts, { onConflict: 'local_id,data_referencia' });
-      if (error) throw error;
+
+      await toast.promise(savePromise as unknown as Promise<any>, {
+        loading: 'Salvando meta...',
+        success: 'Meta mensal atualizada e metas diárias redistribuídas',
+        error: (err) => `Erro ao salvar meta: ${err?.message || ''}`,
+      });
 
       // atualizar soma local
       setMonthlyMetaByLocal((prev) => ({ ...prev, [editingLocalId]: mensal }));
@@ -250,7 +299,6 @@ export default function GestaoMetasPage() {
       }
 
       fecharEdicaoLocal();
-      toast.success('Meta mensal atualizada e metas diárias redistribuídas');
     } catch (err) {
       console.error(err);
       setSavedStatus((s) => ({ ...s, [editingLocalId]: 'error' }));

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import getImageUrl from '@/lib/getImageUrl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
@@ -124,7 +125,9 @@ function UpdatePasswordForm() {
             {theme.company_logo_url || theme.logo_url ? (
               <div style={{ transform: `scale(${theme.logo_scale || 1})` }}>
                 <Image
-                  src={theme.company_logo_url || theme.logo_url}
+                  src={
+                    getImageUrl(theme.company_logo_url) || getImageUrl(theme.logo_url) || theme.company_logo_url || theme.logo_url
+                  }
                   alt={theme.name || 'Confectio'}
                   fill
                   sizes="64px"

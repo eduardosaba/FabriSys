@@ -149,17 +149,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Timeout de segurança: evita loading infinito se houver problemas de rede
-    // Se o profile não carregar em 7s, força loading=false
-    // Mensagem de warning é normal em conexões lentas
+    // Se o profile não carregar em 15s, força loading=false e marca que ocorreu timeout
+    // Aumentamos o limite para 15s para tolerar queries maiores em ambientes remotos.
+    const timeoutOccurred = { value: false } as { value: boolean };
     const _timeout = setTimeout(() => {
+      timeoutOccurred.value = true;
       setLoading((prev) => {
         if (prev) {
-          console.warn('Timeout de loading excedido (Auth).');
+          console.warn('Timeout de loading excedido (Auth). A busca de perfil pode estar lenta.');
           return false;
         }
         return prev;
       });
-    }, 7000);
+    }, 15000);
 
     const getInitialSession = async () => {
       try {
@@ -177,6 +179,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('Erro na sessão inicial:', error);
       } finally {
         clearTimeout(_timeout);
+        if (timeoutOccurred.value) {
+          console.log('[AuthProvider] fetchProfile finalizou após timeout; profile pode ter sido carregado posteriormente.');
+        }
         setLoading(false);
       }
     };

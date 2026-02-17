@@ -1,7 +1,8 @@
 ﻿'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation'; // Importação correta para App Router
+import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import {
   TrendingUp,
@@ -17,7 +18,28 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
-import KPIsMetas from '@/components/dashboard/KPIsMetas'; // O erro está aqui dentro (ver explicação abaixo)
+import KPIsMetas from '@/components/dashboard/KPIsMetas';
+import { WIDGET_REGISTRY as WIDGETS, DEFAULT_LAYOUT_BY_ROLE as DEFAULT_BY_ROLE } from '@/components/dashboard';
+import dynamic from 'next/dynamic';
+import WidgetSkeleton from '@/components/dashboard/WidgetSkeleton';
+
+// dynamic wrappers for specific widgets used in role-specific branches
+const CaixaStatusWidget = dynamic(() => import('@/components/dashboard/CaixaStatusWidget').then((m) => m.default), {
+  ssr: false,
+  loading: () => <WidgetSkeleton />,
+});
+const SalesChartWidget = dynamic(() => import('@/components/dashboard/SalesChartWidget').then((m) => m.default), {
+  ssr: false,
+  loading: () => <WidgetSkeleton />,
+});
+const LowStockWidget = dynamic(() => import('@/components/dashboard/LowStockWidget').then((m) => m.default), {
+  ssr: false,
+  loading: () => <WidgetSkeleton />,
+});
+const ProductionQueueWidget = dynamic(() => import('@/components/dashboard/ProductionQueueWidget').then((m) => m.default), {
+  ssr: false,
+  loading: () => <WidgetSkeleton />,
+});
 
 interface ProdutoRanking {
   nome: string;
@@ -27,6 +49,8 @@ interface ProdutoRanking {
 
 export default function DashboardPage() {
   const router = useRouter(); // Hook de navegação
+  const { profile, loading } = useAuth();
+  // NOTE: não redirecionar automaticamente PDV; mostramos um botão para ir ao caixa
 
   // --- ESTADOS DE FILTRO ---
   const [filtros, setFiltros] = useState({
@@ -221,13 +245,33 @@ export default function DashboardPage() {
       const endIso = `${dataFinal}T23:59:59`;
 
       // 1. Ordens de Produção
-      const { data: ordens, error: errOrdens } = await supabase
+      const { data: ordensRaw, error: errOrdens } = await supabase
         .from('ordens_producao')
-        .select(`quantidade_prevista, produto:produtos_finais(nome, preco_venda)`)
+        .select('quantidade_prevista, produto_final_id, created_at')
         .gte('created_at', startIso)
         .lte('created_at', endIso);
 
       if (errOrdens) throw errOrdens;
+
+      const ordens = ordensRaw || [];
+
+      // Buscar dados dos produtos referenciados
+      const produtoIds = Array.from(new Set(ordens.map((o: any) => String(o.produto_final_id)).filter(Boolean)));
+      const produtoMap: Record<string, { nome: string; preco_venda: number }> = {};
+      if (produtoIds.length > 0) {
+        const chunkSize = 50;
+        for (let i = 0; i < produtoIds.length; i += chunkSize) {
+          const chunk = produtoIds.slice(i, i + chunkSize);
+          const { data: produtos, error: prodErr } = await supabase
+            .from('produtos_finais')
+            .select('id, nome, preco_venda')
+            .in('id', chunk);
+          if (prodErr) throw prodErr;
+          (produtos || []).forEach((p: any) => {
+            produtoMap[String(p.id)] = { nome: p.nome || 'Desconhecido', preco_venda: Number(p.preco_venda || 0) };
+          });
+        }
+      }
 
       // Processamento Ranking
       let totalFat = 0;
@@ -235,10 +279,9 @@ export default function DashboardPage() {
 
       (ordens || []).forEach((item: any) => {
         const qtd = Number(item.quantidade_prevista || 0);
-        // Tratamento seguro para relacionamento que pode vir como array ou objeto
-        const prod = Array.isArray(item.produto) ? item.produto[0] : item.produto;
-        const preco = Number(prod?.preco_venda || 0);
-        const nome = prod?.nome || 'Desconhecido';
+        const prodInfo = produtoMap[String(item.produto_final_id)];
+        const preco = Number(prodInfo?.preco_venda || 0);
+        const nome = prodInfo?.nome || 'Desconhecido';
         const total = qtd * preco;
 
         totalFat += total;
@@ -294,6 +337,177 @@ export default function DashboardPage() {
     void carregarDados();
   }, [carregarDados]);
 
+  const role = profile?.role;
+  const [dashboardConfig, setDashboardConfig] = useState<string[] | null>(null);
+  const [dashboardMeta, setDashboardMeta] = useState<Record<string, Record<string, number>> | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draftConfig, setDraftConfig] = useState<string[] | null>(null);
+  const [draftMeta, setDraftMeta] = useState<Record<string, number> | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function loadDashboardConfig() {
+      try {
+        let parsed: any = null;
+
+        if (profile?.organization_id) {
+          const { data: orgData } = await supabase
+            .from('configuracoes_sistema')
+            .select('valor')
+            .eq('chave', 'dashboard_widgets')
+            .eq('organization_id', profile.organization_id)
+            .limit(1)
+            .maybeSingle();
+          if (orgData?.valor) {
+            try {
+              parsed = JSON.parse(orgData.valor);
+            } catch {}
+          }
+        }
+
+        if (!parsed) {
+          const { data: globalData } = await supabase
+            .from('configuracoes_sistema')
+            .select('valor')
+            .eq('chave', 'dashboard_widgets')
+            .is('organization_id', null)
+            .limit(1)
+            .maybeSingle();
+          if (globalData?.valor) {
+            try {
+              parsed = JSON.parse(globalData.valor);
+            } catch {}
+          }
+        }
+
+        if (parsed) {
+          const rolesPart = parsed.roles || parsed;
+          const metaPart = parsed.meta || {};
+          const chosenRaw = (rolesPart && ((role && rolesPart[role]) || rolesPart.default)) || (role ? DEFAULT_BY_ROLE[role] : null) || null;
+          const chosen = Array.isArray(chosenRaw) ? Array.from(new Set(chosenRaw)) : chosenRaw;
+          setDashboardConfig(chosen);
+          setDashboardMeta(metaPart || {});
+        } else {
+          setDashboardConfig(role ? DEFAULT_BY_ROLE[role] || null : null);
+          setDashboardMeta({});
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dashboard_widgets:', err);
+        setDashboardConfig(role ? DEFAULT_BY_ROLE[role] || null : null);
+        setDashboardMeta({});
+      }
+    }
+
+    void loadDashboardConfig();
+  }, [profile?.organization_id, role]);
+
+  // Sync draft when entering edit mode or when dashboardConfig changes
+  useEffect(() => {
+    if (!editing) {
+      setDraftConfig(dashboardConfig ? Array.from(dashboardConfig) : null);
+      setDraftMeta(dashboardMeta?.[role || ''] ? { ...(dashboardMeta?.[role || ''] as Record<string, number>) } : {});
+    } else {
+      // entering edit mode: initialize draft from current
+      setDraftConfig(dashboardConfig ? Array.from(dashboardConfig) : []);
+      setDraftMeta(dashboardMeta?.[role || ''] ? { ...(dashboardMeta?.[role || ''] as Record<string, number>) } : {});
+    }
+  }, [dashboardConfig, editing]);
+
+  const startEditing = () => {
+    setDraftConfig(dashboardConfig ? Array.from(dashboardConfig) : []);
+    setEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setDraftConfig(dashboardConfig ? Array.from(dashboardConfig) : null);
+    setEditing(false);
+  };
+
+  const saveDashboardConfig = async () => {
+    try {
+      if (!draftConfig) return;
+      const metaToSave = draftMeta || {};
+      const payload = {
+        chave: 'dashboard_widgets',
+        organization_id: profile?.organization_id ?? null,
+        valor: JSON.stringify({ roles: { [(role as string) || 'default']: draftConfig }, meta: { [(role as string) || 'default']: metaToSave } }),
+      } as any;
+
+      // Use RPC to perform upsert securely (rpc_upsert_configuracoes_sistema)
+      const rpcPayload = {
+        p_organization_id: profile?.organization_id ?? null,
+        p_chave: 'dashboard_widgets',
+        p_valor: JSON.stringify({ roles: { [(role as string) || 'default']: draftConfig }, meta: { [(role as string) || 'default']: metaToSave } }),
+      } as any;
+
+      const { error: rpcErr } = await supabase.rpc('rpc_upsert_configuracoes_sistema', rpcPayload as any);
+      if (rpcErr) throw rpcErr;
+      setDashboardConfig(Array.from(draftConfig));
+      setEditing(false);
+      toast.success('Configuração do dashboard salva.');
+    } catch (err) {
+      console.error('Erro ao salvar dashboard_widgets:', err);
+      toast.error('Erro ao salvar configurações.');
+    }
+  };
+
+  // Drag handlers for simple reorder
+  const onDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData('text/plain', String(index));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const configToRender = editing ? draftConfig : dashboardConfig;
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    // compute target index based on pointer position
+    const entries = Object.entries(itemRefs.current);
+    if (!entries.length) return setDropIndex(null);
+    const pointerY = e.clientY;
+    let found: number | null = null;
+    for (const [k, el] of entries) {
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      const centerY = rect.top + rect.height / 2;
+      const idx = Number(k);
+      if (pointerY < centerY) {
+        found = idx;
+        break;
+      }
+    }
+    if (found === null) {
+      setDropIndex(entries.length - 1 + 1);
+    } else {
+      setDropIndex(found);
+    }
+  };
+
+  const onDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    const src = e.dataTransfer.getData('text/plain');
+    if (!draftConfig || src === '') return;
+    const srcIndex = Number(src);
+    if (Number.isNaN(srcIndex)) return;
+    const next = Array.from(draftConfig);
+    const [moved] = next.splice(srcIndex, 1);
+    const insertAt = dropIndex ?? targetIndex;
+    next.splice(insertAt, 0, moved);
+    setDraftConfig(next);
+    setDropIndex(null);
+  };
+
+  const changeSize = (wid: string, size: number) => {
+    setDraftMeta((prev) => {
+      const next = { ...(prev || {}) };
+      next[wid] = size;
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-8 animate-fade-up p-6">
       {/* Filtros e Header */}
@@ -304,6 +518,16 @@ export default function DashboardPage() {
             {new Date(filtros.dataInicial).toLocaleDateString('pt-BR')} até{' '}
             {new Date(filtros.dataFinal).toLocaleDateString('pt-BR')}
           </p>
+          {profile?.role === 'pdv' && (
+            <div className="mt-2">
+              <button
+                onClick={() => router.push('/dashboard/pdv/caixa')}
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-500"
+              >
+                Ir para Caixa
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-xl border shadow-sm">
@@ -349,160 +573,129 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Grid de KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card Produção */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="absolute right-0 top-0 p-4 opacity-5">
-            <TrendingUp size={64} className="text-green-600" />
-          </div>
-          <p className="text-sm font-medium text-slate-500 flex items-center gap-2">
-            <DollarSign size={16} className="text-green-600" /> Valor Produção
-          </p>
-          <h3 className="text-2xl font-bold text-slate-800 mt-2">
-            {kpis.faturamentoEstimado.toLocaleString('pt-BR', {
-              style: 'currency',
-              currency: 'BRL',
+      {/* Grid de KPIs / Widgets modular por role */}
+      {configToRender ? (
+        <div className="space-y-6">
+          {/* Admin edit toolbar */}
+          {(role === 'admin' || role === 'master') && (
+            <div className="flex items-center justify-end gap-2">
+              {!editing ? (
+                <button
+                  onClick={startEditing}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-500"
+                >
+                  Editar layout
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={saveDashboardConfig}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white text-sm rounded-md hover:bg-emerald-500"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    onClick={cancelEditing}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 text-slate-700 text-sm rounded-md hover:bg-slate-200"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {editing && (
+            <p className="text-sm text-slate-500">Modo de edição: arraste e solte os widgets para reordenar. Clique em Salvar para aplicar.</p>
+          )}
+
+            <div ref={containerRef} className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-6">
+              {Array.from(new Set(configToRender)).map((wid, idx) => {
+              const entry = WIDGETS[wid];
+              if (!entry) return null;
+              const Comp = entry.component;
+
+              // Map small cols (1..3) to a 12-grid system: 1 -> 4, 2 -> 8, 3 -> 12
+              const metaCols = dashboardMeta?.[role || '']?.[wid];
+              const defaultSizeToCols = (size: any) => {
+                switch (size) {
+                  case '2x1':
+                  case '2x2':
+                    return 2;
+                  case '4x1':
+                    return 3;
+                  default:
+                    return 1;
+                }
+              };
+              const rawCols = metaCols ?? (entry.defaultSize ? defaultSizeToCols(entry.defaultSize) : 1);
+              const mdSpan = Math.max(1, Math.min(12, rawCols * 4));
+              const spanClass = `col-span-12 md:col-span-${mdSpan}`;
+
+              const refFn = (el: HTMLDivElement | null) => {
+                itemRefs.current[idx] = el;
+              };
+
+              const sizeForWidget = (draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1);
+              const spanClassWithSize = `col-span-12 md:col-span-${Math.max(1, Math.min(12, (sizeForWidget || 1) * 4))}`;
+
+              return (
+                <div
+                  key={wid}
+                  ref={refFn}
+                  className={`${spanClassWithSize}`}
+                  draggable={!!editing}
+                  onDragStart={(e) => editing && onDragStart(e, idx)}
+                  onDragOver={(e) => editing && onDragOver(e)}
+                  onDrop={(e) => editing && onDrop(e, idx)}
+                  onDragEnd={() => setDropIndex(null)}
+                >
+                  <div className={`bg-white p-6 rounded-xl border border-slate-200 shadow-sm ${editing && dropIndex === idx ? 'border-dashed border-2 border-indigo-300' : ''}`}>
+                    <h3 className="font-bold text-slate-800 mb-3 flex items-center justify-between">
+                      <span>{entry.title || wid}</span>
+                      <div className="flex items-center gap-2">
+                        {editing && (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => changeSize(wid, 1)} className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 1 ? 'bg-slate-200' : 'bg-white'}`}>1</button>
+                            <button onClick={() => changeSize(wid, 2)} className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 2 ? 'bg-slate-200' : 'bg-white'}`}>2</button>
+                            <button onClick={() => changeSize(wid, 3)} className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 3 ? 'bg-slate-200' : 'bg-white'}`}>3</button>
+                          </div>
+                        )}
+                        {editing && <span className="text-xs text-slate-400">Arraste</span>}
+                      </div>
+                    </h3>
+                    <Comp />
+                  </div>
+                </div>
+              );
             })}
-          </h3>
-        </div>
-
-        {/* Card Meta */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="absolute right-0 top-0 p-4 opacity-5">
-            <DollarSign size={64} className="text-indigo-600" />
-          </div>
-          <div className="flex justify-between items-start">
-            <p className="text-sm font-medium text-slate-500 flex items-center gap-2">
-              <Award size={16} className="text-indigo-600" /> Meta Global
-            </p>
-            <select
-              value={metaScope}
-              onChange={(e) => setMetaScope(e.target.value as any)}
-              className="text-xs border rounded p-1 bg-slate-50 outline-none"
-            >
-              <option value="meta-dia">Dia</option>
-              <option value="meta-mes">Mês</option>
-            </select>
-          </div>
-          <h3 className="text-2xl font-bold text-slate-800 mt-2">
-            {metaKPI.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </h3>
-          <p className="text-xs text-slate-500 mt-1">
-            Faltam:{' '}
-            <span className="font-bold text-red-500">
-              {metaFaltante.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </span>
-          </p>
-        </div>
-
-        {/* Card Kanban */}
-        <div
-          onClick={() => router.push('/dashboard/producao/kanban')}
-          className="bg-blue-50 p-6 rounded-xl border border-blue-100 shadow-sm cursor-pointer relative overflow-hidden group hover:shadow-md transition-all"
-        >
-          <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20">
-            <ChefHat size={64} className="text-blue-600" />
-          </div>
-          <p className="text-sm font-medium text-blue-600 flex items-center gap-2">
-            <ChefHat size={16} /> Em Produção
-          </p>
-          <h3 className="text-3xl font-bold text-blue-900 mt-2">{kpis.ordensAtivas}</h3>
-          <p className="text-xs text-blue-500 mt-1 flex items-center">
-            Ver Quadro <ArrowRight size={12} className="ml-1" />
-          </p>
-        </div>
-
-        {/* Card Alertas */}
-        <div
-          onClick={() => router.push('/dashboard/insumos/alertas')}
-          className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm cursor-pointer relative overflow-hidden group hover:shadow-md transition-all"
-        >
-          <div className="absolute right-0 top-0 p-4 opacity-10">
-            <AlertTriangle
-              size={64}
-              className={kpis.itensCriticos > 0 ? 'text-red-600' : 'text-slate-400'}
-            />
-          </div>
-          <p className="text-sm font-medium text-slate-500 flex items-center gap-2">
-            <Package size={16} /> Estoque Crítico
-          </p>
-          <h3
-            className={`text-3xl font-bold mt-2 ${kpis.itensCriticos > 0 ? 'text-red-600' : 'text-slate-800'}`}
-          >
-            {kpis.itensCriticos}
-          </h3>
-        </div>
-      </div>
-
-      {/* COMPONENTE ONDE OCORREM OS ERROS DE LOG: KPIsMetas */}
-      <KPIsMetas />
-
-      {/* Rankings */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Award className="text-orange-500" size={20} /> Top 5 - Quantidade
-          </h3>
-          <div className="space-y-3">
-            {rankingQtd.map((item, idx) => (
-              <div key={idx} className="relative">
-                <div className="flex justify-between text-sm mb-1 relative z-10 font-medium text-slate-700">
-                  <span>
-                    {idx + 1}. {item.nome}
-                  </span>
-                  <span>{item.quantidade} un</span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-1.5">
-                  <div
-                    className="bg-orange-500 h-1.5 rounded-full"
-                    style={{
-                      width: `${(item.quantidade / (rankingQtd[0]?.quantidade || 1)) * 100}%`,
-                    }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-            {rankingQtd.length === 0 && (
-              <p className="text-slate-400 text-sm text-center">Sem dados</p>
-            )}
           </div>
         </div>
-
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <BarChart3 className="text-green-600" size={20} /> Top 5 - Faturamento
-          </h3>
-          <div className="space-y-3">
-            {rankingFat.map((item, idx) => (
-              <div key={idx} className="relative">
-                <div className="flex justify-between text-sm mb-1 relative z-10 font-medium text-slate-700">
-                  <span>
-                    {idx + 1}. {item.nome}
-                  </span>
-                  <span className="text-green-700">
-                    {item.faturamento.toLocaleString('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL',
-                    })}
-                  </span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-1.5">
-                  <div
-                    className="bg-green-500 h-1.5 rounded-full"
-                    style={{
-                      width: `${(item.faturamento / (rankingFat[0]?.faturamento || 1)) * 100}%`,
-                    }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-            {rankingFat.length === 0 && (
-              <p className="text-slate-400 text-sm text-center">Sem dados</p>
-            )}
-          </div>
+      ) : role === 'admin' || role === 'master' ? (
+        <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-sm text-slate-500">Personalize seu dashboard adicionando widgets em Configuração do Dashboard.</p>
         </div>
-      </div>
+      ) : role === 'gerente' ? (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <CaixaStatusWidget />
+            <SalesChartWidget />
+          </div>
+          <LowStockWidget />
+        </div>
+      ) : role === 'compras' ? (
+        <div className="space-y-6">
+          <LowStockWidget />
+        </div>
+      ) : role === 'fabrica' ? (
+        <div className="space-y-6">
+          <ProductionQueueWidget />
+        </div>
+      ) : (
+        <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-sm text-slate-500">Visualização padrão do dashboard.</p>
+        </div>
+      )}
     </div>
   );
 }

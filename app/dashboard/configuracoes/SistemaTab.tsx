@@ -21,11 +21,13 @@ export default function SistemaTab() {
   useEffect(() => {
     async function loadConfigs() {
       try {
-        const { data, error } = await supabase.from('configuracoes_sistema').select('*');
+        const { data, error } = await supabase
+          .from('configuracoes_sistema')
+          .select('chave, valor, organization_id, created_at, updated_at');
         if (error) throw error;
 
         const configMap: Record<string, string> = {};
-        data?.forEach((item: ConfigItem) => {
+        data?.forEach((item: any) => {
           configMap[item.chave] = item.valor;
         });
 
@@ -43,7 +45,7 @@ export default function SistemaTab() {
     void loadConfigs();
   }, []);
 
-  // Salvar alterações
+  // Salvar alterações (envolvido em toast.promise para feedback consistente)
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -54,22 +56,100 @@ export default function SistemaTab() {
         setSaving(false);
         return;
       }
-      // Usamos um único UPSERT com onConflict para evitar múltiplos POST/403 e garantir atomicidade
-      const updates = Object.entries(configs).map(([chave, valor]) => ({
-        chave,
-        valor,
-        updated_at: new Date().toISOString(),
-      }));
 
-      const { error } = await supabase
-        .from('configuracoes_sistema')
-        .upsert(updates, { onConflict: 'chave' });
+      const savePromise = (async () => {
+        // Resolvemos organização do perfil para gravar escopo quando aplicável
+        let resolvedOrgId: string | null = null;
+        try {
+          const { data: profileData, error: profErr } = await supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('id', session.user.id)
+            .maybeSingle();
+          if (profErr) throw profErr;
+          resolvedOrgId = (profileData as any)?.organization_id ?? null;
+        } catch (e) {
+          console.warn('Não foi possível resolver organization_id do perfil:', e);
+          resolvedOrgId = null;
+        }
 
-      if (error) throw error;
-      toast.success('Regras do sistema atualizadas!');
+        // Em vez de depender de ON CONFLICT (que pode falhar sem índice correspondente),
+        // atualizamos por chave+organization_id e, se não houve linha afetada, inserimos.
+        const entries = Object.entries(configs);
+        let anyChanged = false;
+        for (const [chave, valor] of entries) {
+          const updated_at = new Date().toISOString();
+
+          // Tentar atualizar registro existente com a mesma chave e mesma organização (pode ser null)
+          const updater = supabase.from('configuracoes_sistema').update({ valor, updated_at });
+          let updateResult;
+          if (resolvedOrgId) {
+            updateResult = await updater.match({ chave, organization_id: resolvedOrgId });
+          } else {
+            updateResult = await updater.match({ chave, organization_id: null });
+          }
+
+          if (updateResult.error) {
+            throw updateResult.error;
+          }
+
+          const updatedRows = updateResult.data as any[] | null;
+          if (updatedRows && updatedRows.length > 0) {
+            anyChanged = true;
+            continue;
+          }
+
+          const { data: existing, error: existingErr } = await supabase
+            .from('configuracoes_sistema')
+            .select('chave, organization_id')
+            .eq('chave', chave)
+            .limit(1)
+            .maybeSingle();
+
+          if (existingErr) throw existingErr;
+
+          if (existing && (existing as any).chave) {
+            const { error: idUpdateErr } = await supabase
+              .from('configuracoes_sistema')
+              .update({ valor, updated_at })
+              .eq('chave', chave);
+            if (idUpdateErr) throw idUpdateErr;
+            anyChanged = true;
+          } else {
+            const payload: any = { chave, valor, updated_at };
+            if (resolvedOrgId) payload.organization_id = resolvedOrgId;
+
+            const { error: insertErr } = await supabase.from('configuracoes_sistema').insert(payload);
+            if (insertErr) {
+              if ((insertErr as any).code === '23505') {
+                const { error: conflictUpdateErr } = await supabase
+                  .from('configuracoes_sistema')
+                  .update({ valor, updated_at })
+                  .eq('chave', chave);
+                if (conflictUpdateErr) throw conflictUpdateErr;
+                anyChanged = true;
+              } else {
+                throw insertErr;
+              }
+            } else {
+              anyChanged = true;
+            }
+          }
+        }
+
+        return anyChanged;
+      })();
+
+      const result = await toast.promise(savePromise as unknown as Promise<any>, {
+        loading: 'Salvando configurações...',
+        success: (anyChanged) => (anyChanged ? 'Regras do sistema atualizadas!' : 'Nenhuma alteração necessária'),
+        error: (err) => `Erro ao salvar configurações: ${err?.message || ''}`,
+      });
+
+      void result; // mantemos compatibilidade; resultado já mostrado no toast
     } catch (err) {
-      console.error(err);
-      toast.error('Erro ao salvar.');
+      console.error('Erro ao salvar configurações:', err);
+      toast.error('Erro ao salvar configurações');
     } finally {
       setSaving(false);
     }

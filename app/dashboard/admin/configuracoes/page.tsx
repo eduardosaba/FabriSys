@@ -10,7 +10,7 @@ import { Settings } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function AdminConfigModoPdv() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [orgValue, setOrgValue] = useState<'padrao' | 'inventario' | ''>('');
   const [globalValue, setGlobalValue] = useState<'padrao' | 'inventario' | ''>('');
@@ -27,7 +27,7 @@ export default function AdminConfigModoPdv() {
             .eq('chave', 'modo_pdv')
             .eq('organization_id', profile.organization_id)
             .maybeSingle();
-          if (cfgOrg && cfgOrg.valor) setOrgValue(cfgOrg.valor as any);
+          if (cfgOrg && cfgOrg.valor) setOrgValue(cfgOrg.valor);
         }
         // global
         const { data: cfgGlobal } = await supabase
@@ -36,7 +36,7 @@ export default function AdminConfigModoPdv() {
           .eq('chave', 'modo_pdv')
           .is('organization_id', null)
           .maybeSingle();
-        if (cfgGlobal && cfgGlobal.valor) setGlobalValue(cfgGlobal.valor as any);
+        if (cfgGlobal && cfgGlobal.valor) setGlobalValue(cfgGlobal.valor);
       } catch (e) {
         console.error(e);
         toast.error('Erro ao carregar configurações');
@@ -92,13 +92,23 @@ export default function AdminConfigModoPdv() {
 
   return (
     <div className="p-6">
-      <PageHeader title="Configurações PDV" description="Editar modo PDV por organização ou global" icon={Settings} />
+      <PageHeader
+        title="Configurações PDV"
+        description="Editar modo PDV por organização ou global"
+        icon={Settings}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <h3 className="font-bold mb-2">Organização atual</h3>
-          <p className="text-sm text-slate-500 mb-4">Configuração para sua organização (profile.organization_id)</p>
-          <select value={orgValue} onChange={(e) => setOrgValue(e.target.value as any)} className="w-full p-2 border rounded mb-3">
+          <p className="text-sm text-slate-500 mb-4">
+            Configuração para sua organização (profile.organization_id)
+          </p>
+          <select
+            value={orgValue}
+            onChange={(e) => setOrgValue(e.target.value as any)}
+            className="w-full p-2 border rounded mb-3"
+          >
             <option value="">-- Selecionar --</option>
             <option value="padrao">Padrão</option>
             <option value="inventario">Inventário</option>
@@ -108,8 +118,14 @@ export default function AdminConfigModoPdv() {
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <h3 className="font-bold mb-2">Global</h3>
-          <p className="text-sm text-slate-500 mb-4">Configuração padrão global (quando não há config por organização)</p>
-          <select value={globalValue} onChange={(e) => setGlobalValue(e.target.value as any)} className="w-full p-2 border rounded mb-3">
+          <p className="text-sm text-slate-500 mb-4">
+            Configuração padrão global (quando não há config por organização)
+          </p>
+          <select
+            value={globalValue}
+            onChange={(e) => setGlobalValue(e.target.value as any)}
+            className="w-full p-2 border rounded mb-3"
+          >
             <option value="">-- Selecionar --</option>
             <option value="padrao">Padrão</option>
             <option value="inventario">Inventário</option>

@@ -33,7 +33,7 @@ function getErrorMessage(err: unknown) {
 
 export default function NovaFichaTecnicaPage() {
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [produtos, setProdutos] = useState<
@@ -177,14 +177,22 @@ export default function NovaFichaTecnicaPage() {
       console.log('📦 Total de insumos (local):', novaFichaTecnica.length);
       console.log('📋 Detalhes dos insumos (local):', JSON.stringify(novaFichaTecnica, null, 2));
 
-      // Sanitize insumos payload to server: ensure expected keys exist and remove invalid entries
+      // Sanitize insumos payload to server: accept multiple id keys and normalize quantities
       const payloadInsumos = insumos
-        .map((i) => ({
-          insumoId: (i as any)?.insumoId ?? (i as any)?.insumo_id ?? null,
-          quantidade: (i as any)?.quantidade ?? (i as any)?.quantidade ?? 0,
-          unidadeMedida: (i as any)?.unidadeMedida ?? (i as any)?.unidade_medida ?? null,
-          perdaPadrao: (i as any)?.perdaPadrao ?? (i as any)?.perda_padrao ?? null,
-        }))
+        .map((i) => {
+          const anyI = i as any;
+          const rawQuantidade = anyI?.quantidade ?? anyI?.quantidade ?? 0;
+          const num = Number(rawQuantidade);
+          // Normalizar quantidade para inteiro (evita decimais inesperados na UI)
+          const quantidadeNormalized = Number.isFinite(num) ? Math.round(num) : 0;
+
+          return {
+            insumoId: anyI?.insumoId ?? anyI?.insumo_id ?? anyI?.id ?? null,
+            quantidade: quantidadeNormalized,
+            unidadeMedida: anyI?.unidadeMedida ?? anyI?.unidade_medida ?? null,
+            perdaPadrao: anyI?.perdaPadrao ?? anyI?.perda_padrao ?? null,
+          };
+        })
         .filter((i) => i.insumoId);
 
       if (payloadInsumos.length === 0) {
@@ -193,6 +201,11 @@ export default function NovaFichaTecnicaPage() {
 
       console.log('Enviando dados para API server-side de criação de ficha (sanitizado)');
       try {
+        // Garantir slug único no cliente para reduzir tentativas concorrentes no servidor
+        const slugFinal = slugFichaTecnica
+          ? `${slugFichaTecnica}-${Date.now()}`
+          : `ft-${Date.now()}`;
+
         const res = await fetch('/api/fichas-tecnicas/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -203,6 +216,7 @@ export default function NovaFichaTecnicaPage() {
             preco_venda: precoVenda,
             rendimento,
             slug_base: slugFichaTecnica,
+            slug: slugFinal,
             observacao: observacao || null,
             // garantir que o server grave auditoria/tenant para RLS
             created_by: profile?.id || null,

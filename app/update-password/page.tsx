@@ -1,5 +1,5 @@
 'use client';
-
+import { useAuth } from '@/lib/auth';
 import { useState, useEffect, Suspense } from 'react';
 import getImageUrl from '@/lib/getImageUrl';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -13,6 +13,7 @@ import { useTheme } from '@/lib/theme';
 import { Eye, EyeOff } from 'lucide-react';
 
 function UpdatePasswordForm() {
+  const { profile, loading: authLoading } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -22,6 +23,9 @@ function UpdatePasswordForm() {
   const { theme } = useTheme();
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!profile?.organization_id) return;
+
     // Verificar se há parâmetros de URL para reset de senha
     const accessToken = searchParams.get('access_token');
     const refreshToken = searchParams.get('refresh_token');
@@ -126,7 +130,10 @@ function UpdatePasswordForm() {
               <div style={{ transform: `scale(${theme.logo_scale || 1})` }}>
                 <Image
                   src={
-                    getImageUrl(theme.company_logo_url) || getImageUrl(theme.logo_url) || theme.company_logo_url || theme.logo_url
+                    getImageUrl(theme.company_logo_url) ||
+                    getImageUrl(theme.logo_url) ||
+                    theme.company_logo_url ||
+                    theme.logo_url
                   }
                   alt={theme.name || 'Confectio'}
                   fill
@@ -229,6 +236,8 @@ function UpdatePasswordForm() {
 }
 
 export default function UpdatePasswordPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   return (
     <Suspense fallback={<div>Carregando...</div>}>
       <UpdatePasswordForm />

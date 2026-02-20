@@ -17,7 +17,7 @@ interface ProdutoFinal {
 
 export default function NovaOrdemPage() {
   const router = useRouter();
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [produtos, setProdutos] = useState<ProdutoFinal[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

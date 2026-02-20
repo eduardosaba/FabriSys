@@ -32,18 +32,23 @@ export default function PromocaoLauncher({ onUpdate }: Props) {
   // 1. Carregar Promoções Ativas
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('promocoes')
-        .select('*')
-        .eq('ativo', true);
+      const { data } = await supabase.from('promocoes').select('*').eq('ativo', true);
 
       if (data) {
-        const rows = data as any[];
-        const produtoIds = Array.from(new Set(rows.map((r) => String(r.produto_id)).filter(Boolean)));
+        const rows = data;
+        const produtoIds = Array.from(
+          new Set(rows.map((r) => String(r.produto_id)).filter(Boolean))
+        );
         const produtoMap: Record<string, { nome?: string; preco_venda?: number }> = {};
         if (produtoIds.length > 0) {
-          const { data: produtos } = await supabase.from('produtos_finais').select('id, nome, preco_venda').in('id', produtoIds);
-          (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome, preco_venda: Number(p.preco_venda || 0) }));
+          const { data: produtos } = await supabase
+            .from('produtos_finais')
+            .select('id, nome, preco_venda')
+            .in('id', produtoIds);
+          (produtos || []).forEach(
+            (p: any) =>
+              (produtoMap[String(p.id)] = { nome: p.nome, preco_venda: Number(p.preco_venda || 0) })
+          );
         }
 
         const formatadas = rows.map((p: any) => ({

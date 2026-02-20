@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
@@ -39,9 +40,12 @@ interface OrdemKanban {
 }
 
 export default function KanbanPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const [ordens, setOrdens] = useState<OrdemKanban[]>([]);
   const [loading, setLoading] = useState(true);
   const [movendo, setMovendo] = useState<string | null>(null);
+
   const mountedRef = useRef(true);
 
   // Estado para controlar qual ordem está sendo expedida (abre o modal)
@@ -49,6 +53,8 @@ export default function KanbanPage() {
 
   const carregarKanban = async () => {
     try {
+      if (authLoading) return; // aguarda autenticação
+      if (!profile?.organization_id) return; // precisa do organization para filtrar com RLS
       // Primeiro, tenta filtrar por status_logistica != 'pendente' (se a coluna existir)
       let data: any[] | null = null;
       let error: any = null;
@@ -65,9 +71,11 @@ export default function KanbanPage() {
         )
         .order('created_at', { ascending: true });
 
-      // Tentar aplicar filtro por status_logistica — se falhar (coluna não existe), cairá no fallback abaixo
+      // Tentar aplicar filtro por status_logistica — se a coluna existir, buscar apenas
+      // ordens com status_logistica = 'pendente' (aquelas que precisam de atenção).
+      // Se a coluna não existir, o PostgREST gerará erro e cairemos no fallback.
       try {
-        const res = await (baseQuery as any).neq('status_logistica', 'pendente');
+        const res = await (baseQuery as any).eq('status_logistica', 'pendente');
         data = res.data ?? null;
         error = res.error ?? null;
         if (error) throw error;
@@ -81,13 +89,20 @@ export default function KanbanPage() {
 
       if (error) throw error;
 
-      const rows = (data ?? []) as any[];
+      const rows = data ?? [];
 
-      const produtoIds = Array.from(new Set(rows.map((r) => String(r.produto_final_id)).filter(Boolean)));
+      const produtoIds = Array.from(
+        new Set(rows.map((r) => String(r.produto_final_id)).filter(Boolean))
+      );
       const produtoMap: Record<string, { nome?: string; tipo?: string }> = {};
       if (produtoIds.length > 0) {
-        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome, tipo').in('id', produtoIds);
-        (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome, tipo: p.tipo }));
+        const { data: produtos } = await supabase
+          .from('produtos_finais')
+          .select('id, nome, tipo')
+          .in('id', produtoIds);
+        (produtos || []).forEach(
+          (p: any) => (produtoMap[String(p.id)] = { nome: p.nome, tipo: p.tipo })
+        );
       }
 
       const formatadas: OrdemKanban[] = rows.map((d) => {
@@ -150,15 +165,18 @@ export default function KanbanPage() {
   useEffect(() => {
     mountedRef.current = true;
 
-    void carregarKanban();
-    const interval = setInterval(() => {
+    if (!authLoading && profile?.organization_id) {
       void carregarKanban();
+    }
+
+    const interval = setInterval(() => {
+      if (!authLoading && profile?.organization_id) void carregarKanban();
     }, 30000);
     return () => {
       mountedRef.current = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [authLoading, profile?.organization_id]);
 
   const moverOrdem = async (ordemId: string, estagioAtual: string, novoEstagioManual?: string) => {
     // Se for manual (ex: expedição -> concluído), usa ele. Senão calcula o próximo.
@@ -176,7 +194,7 @@ export default function KanbanPage() {
     if (proximoEstagio === 'concluido') {
       setMovendo(ordemId);
       try {
-        const ordemObj = ordens.find((o) => o.id === ordemId as string) as OrdemKanban | undefined;
+        const ordemObj = ordens.find((o) => o.id === ordemId);
         const quantidadeProduzida = ordemObj?.quantidade_prevista ?? 0;
 
         const rpc = (await supabase.rpc('finalizar_op_kanban', {
@@ -187,8 +205,13 @@ export default function KanbanPage() {
         if (rpc?.error) throw rpc.error;
 
         const data = rpc?.data ?? rpc;
-        const success = Boolean((data && (data.success === true || (Array.isArray(data) && data[0]?.success === true))) || false);
-        const message = (data && (data.message || (Array.isArray(data) && data[0]?.message))) || 'OP finalizada e estoque atualizado.';
+        const success = Boolean(
+          (data && (data.success === true || (Array.isArray(data) && data[0]?.success === true))) ||
+            false
+        );
+        const message =
+          (data && (data.message || (Array.isArray(data) && data[0]?.message))) ||
+          'OP finalizada e estoque atualizado.';
 
         if (!success) throw new Error(message);
 
@@ -225,12 +248,10 @@ export default function KanbanPage() {
 
       if (success) {
         toast.success(message || 'Ordem movida');
-        try {
-          await supabase.from('ordens_producao').update({ status_logistica: 'pendente' }).eq('id', ordemId);
-        } catch (_e) {
-          console.warn('Não foi possível setar status_logistica (coluna ausente ou sem permissão)');
-        }
-
+        // Atualizar o Kanban local — evitar tentativas de PATCH em colunas opcionais
+        // (ex: `status_logistica`) que podem não existir em todas as schemas.
+        // A RPC `movimentar_ordem` já realiza a movimentação no servidor; apenas
+        // recarregamos o quadro para refletir o estado atual.
         await carregarKanban();
       } else {
         toast.error(message || 'Falha ao mover ordem');
@@ -263,7 +284,6 @@ export default function KanbanPage() {
 
         if (error) throw error;
         toast.success('Massa enviada para a geladeira virtual!', { id: toastId });
-
       } else {
         // Lógica para Produtos Acabados: Vai para a Doca de Saída (Fábrica)
         const { data, error } = await supabase.rpc('finalizar_op_kanban', {
@@ -281,10 +301,9 @@ export default function KanbanPage() {
       // Remove do Kanban localmente para feedback instantâneo
       setOrdens((prev) => prev.filter((o) => o.id !== ordemParaExpedir.id));
       setOrdemParaExpedir(null);
-      
+
       // Recarrega o quadro para garantir sincronia
       await carregarKanban();
-
     } catch (err: any) {
       console.error('Erro ao finalizar:', err);
       toast.error('Falha na operação: ' + (err?.message || 'Erro desconhecido'), { id: toastId });
@@ -343,16 +362,32 @@ export default function KanbanPage() {
                         <h4 className="font-bold text-gray-800">{ordem.produto_nome}</h4>
                         <span
                           className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold"
-                          title={ordem.produto_tipo === 'semi_acabado' ? 'Semi-acabado (ingrediente interno)' : ordem.produto_tipo === 'acabado' ? 'Produto acabado' : 'Tipo desconhecido'}
+                          title={
+                            ordem.produto_tipo === 'semi_acabado'
+                              ? 'Semi-acabado (ingrediente interno)'
+                              : ordem.produto_tipo === 'acabado'
+                                ? 'Produto acabado'
+                                : 'Tipo desconhecido'
+                          }
                         >
-                          {ordem.produto_tipo === 'semi_acabado' ? 'Semi' : ordem.produto_tipo === 'acabado' ? 'Acabado' : '—'}
+                          {ordem.produto_tipo === 'semi_acabado'
+                            ? 'Semi'
+                            : ordem.produto_tipo === 'acabado'
+                              ? 'Acabado'
+                              : '—'}
                         </span>
                         {ordem.produto_tipo === 'acabado' && (
                           <div
                             className={`text-[10px] ml-2 px-2 py-0.5 rounded-full font-semibold ${
-                              ordem.baseDisponivel ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                              ordem.baseDisponivel
+                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-100 text-amber-700 border border-amber-200'
                             }`}
-                            title={ordem.baseDisponivel ? 'Bases disponíveis na geladeira' : 'Faltam bases (semi-acabados)'}
+                            title={
+                              ordem.baseDisponivel
+                                ? 'Bases disponíveis na geladeira'
+                                : 'Faltam bases (semi-acabados)'
+                            }
                           >
                             {ordem.baseDisponivel ? 'Base OK' : 'Aguardando Base'}
                           </div>
@@ -378,13 +413,13 @@ export default function KanbanPage() {
                       {/* Lógica do Botão: Expedição vs Movimentação Normal */}
                       <div className="mt-3">
                         {coluna.id === 'concluido' ? (
-                                  <button
-                                    onClick={() => handleExpedir(ordem)}
-                                    className="w-full py-2 rounded flex items-center justify-center gap-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 shadow-sm transition-all"
-                                  >
-                                    <Package size={16} /> Finalizar
-                                  </button>
-                                ) : (
+                          <button
+                            onClick={() => handleExpedir(ordem)}
+                            className="w-full py-2 rounded flex items-center justify-center gap-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 shadow-sm transition-all"
+                          >
+                            <Package size={16} /> Finalizar
+                          </button>
+                        ) : (
                           <button
                             onClick={() => void moverOrdem(ordem.id, ordem.estagio)}
                             disabled={movendo === ordem.id}
@@ -491,7 +526,7 @@ function ModalExpedicao({
         </div>
 
         {/* Rodapé com Ações (Escondido na impressão) */}
-          <div className="bg-gray-50 p-4 flex gap-3 justify-end print:hidden border-t">
+        <div className="bg-gray-50 p-4 flex gap-3 justify-end print:hidden border-t">
           <button
             onClick={() => window.print()}
             className="px-4 py-2 bg-white border border-gray-300 rounded text-gray-700 font-medium hover:bg-gray-100 flex items-center gap-2"

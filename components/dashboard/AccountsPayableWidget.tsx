@@ -1,31 +1,41 @@
-"use client";
+'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth';
 import { Card } from '@/components/dashboard/Card';
 import { Calendar, CheckCircle2 } from 'lucide-react';
 import { format, isPast, isToday, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-export default function AccountsPayableWidget() {
-  const { profile } = useAuth();
+interface WidgetProps {
+  filtros?: any;
+  auxFiltro?: any;
+  organizationId?: string;
+  profile?: any;
+}
+
+export default function AccountsPayableWidget({
+  filtros,
+  auxFiltro,
+  organizationId,
+  profile,
+}: WidgetProps) {
   const [contas, setContas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [resumo, setResumo] = useState({ totalPendente: 0, totalAtrasado: 0 });
 
   useEffect(() => {
     async function fetchBills() {
-      if (!profile?.organization_id) return;
+      if (!organizationId) return;
 
       const { data, error } = await supabase
         .from('fin_contas_pagar')
         .select('*')
-        .eq('organization_id', profile.organization_id)
+        .eq('organization_id', organizationId)
         .eq('status', 'pendente')
         .order('data_vencimento', { ascending: true })
         .limit(10);
 
-        if (!error && data) {
+      if (!error && data) {
         let pendente = 0;
         let atrasado = 0;
 
@@ -53,7 +63,7 @@ export default function AccountsPayableWidget() {
     }
 
     void fetchBills();
-  }, [profile]);
+  }, [organizationId, filtros, auxFiltro, profile]);
 
   return (
     <Card title="Próximos Compromissos" size="1x2" loading={loading}>
@@ -62,13 +72,17 @@ export default function AccountsPayableWidget() {
           <div className="bg-red-50 p-2 rounded-lg border border-red-100">
             <p className="text-[10px] font-bold text-red-600 uppercase">Atrasado</p>
             <p className="text-sm font-bold text-red-700">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(resumo.totalAtrasado)}
+              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                resumo.totalAtrasado
+              )}
             </p>
           </div>
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
             <p className="text-[10px] font-bold text-slate-500 uppercase">A Vencer</p>
             <p className="text-sm font-bold text-slate-700">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(resumo.totalPendente)}
+              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                resumo.totalPendente
+              )}
             </p>
           </div>
         </div>
@@ -89,17 +103,32 @@ export default function AccountsPayableWidget() {
               }
 
               return (
-                <div key={conta.id} className="p-2 border-b border-slate-50 flex justify-between items-center group hover:bg-slate-50 rounded transition-colors">
+                <div
+                  key={conta.id}
+                  className="p-2 border-b border-slate-50 flex justify-between items-center group hover:bg-slate-50 rounded transition-colors"
+                >
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-700 truncate">{conta.descricao}</p>
-                    <p className={`text-[10px] flex items-center gap-1 ${isAtrasado ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
+                    <p className="text-xs font-semibold text-slate-700 truncate">
+                      {conta.descricao}
+                    </p>
+                    <p
+                      className={`text-[10px] flex items-center gap-1 ${isAtrasado ? 'text-red-500 font-bold' : 'text-slate-400'}`}
+                    >
                       <Calendar size={10} />
-                      Vence {vencimento ? (isToday(vencimento) ? 'Hoje' : format(vencimento, "dd/MM", { locale: ptBR })) : '—'}
+                      Vence{' '}
+                      {vencimento
+                        ? isToday(vencimento)
+                          ? 'Hoje'
+                          : format(vencimento, 'dd/MM', { locale: ptBR })
+                        : '—'}
                     </p>
                   </div>
                   <div className="text-right ml-2">
                     <p className="text-xs font-bold text-slate-800">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(conta.valor_total)}
+                      {new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                      }).format(conta.valor_total)}
                     </p>
                     <button className="text-[9px] text-blue-600 opacity-0 group-hover:opacity-100 font-bold uppercase transition-opacity">
                       Pagar

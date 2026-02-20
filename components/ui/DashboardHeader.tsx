@@ -63,7 +63,9 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const { theme, resolvedTheme, updateTheme } = useTheme();
-  const _rawLogo = String(theme?.logo_url ?? '').toString().trim();
+  const _rawLogo = String(theme?.logo_url ?? '')
+    .toString()
+    .trim();
   const logoUrl = getImageUrl(_rawLogo) || _rawLogo;
   const { profile, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -244,8 +246,11 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
       const since = new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(); // últimas 6h
       // admin/master: vê tudo
       if (isAdmin) {
-        const { data: vendas, error: errV } = await safeSelect(supabase, 'vendas', 'id,total_venda,created_at,local:locais(nome)', (b: any) =>
-          b.gte('created_at', since).order('created_at', { ascending: false }).limit(10)
+        const { data: vendas, error: errV } = await safeSelect(
+          supabase,
+          'vendas',
+          'id,total_venda,created_at,local:locais(nome)',
+          (b: any) => b.gte('created_at', since).order('created_at', { ascending: false }).limit(10)
         );
 
         const { data: caixasAbertas, error: errCaixaA } = await supabase
@@ -295,7 +300,9 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
 
         const { data: caixasAbertas } = await supabase
           .from('caixa_sessao')
-          .select('id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome),local_id')
+          .select(
+            'id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome),local_id'
+          )
           .eq('local_id', localId)
           .gte('data_abertura', since)
           .order('data_abertura', { ascending: false })
@@ -303,7 +310,9 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
 
         const { data: caixasFechadas } = await supabase
           .from('caixa_sessao')
-          .select('id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome),local_id')
+          .select(
+            'id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome),local_id'
+          )
           .eq('local_id', localId)
           .gte('data_fechamento', since)
           .order('data_fechamento', { ascending: false })
@@ -368,114 +377,150 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
 
         vendasChannel = supabase
           .channel('public:vendas')
-          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vendas' }, (payload) => {
-            const v = payload.new as any;
-            if (isAdmin) {
-              const notif = mapVendaToNotif(v);
-              setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
-            } else if (isPdv) {
-              if (myLocal && v.local_id === myLocal) {
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'vendas' },
+            (payload) => {
+              const v = payload.new as any;
+              if (isAdmin) {
                 const notif = mapVendaToNotif(v);
                 setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
+              } else if (isPdv) {
+                if (myLocal && v.local_id === myLocal) {
+                  const notif = mapVendaToNotif(v);
+                  setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
+                }
               }
             }
-          })
+          )
           .subscribe();
 
         caixaChannel = supabase
           .channel('public:caixa_sessao')
-          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'caixa_sessao' }, async (payload) => {
-            const c = payload.new as any;
-            if (!isAdmin && !isPdv) return;
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'caixa_sessao' },
+            async (payload) => {
+              const c = payload.new as any;
+              if (!isAdmin && !isPdv) return;
 
-            let localName = c.local?.nome;
-            if (!localName && c.local_id) {
-              try {
-                const { data: l } = await supabase.from('locais').select('nome').eq('id', c.local_id).maybeSingle();
-                localName = l?.nome;
-              } catch (e) {
-                // ignore
+              let localName = c.local?.nome;
+              if (!localName && c.local_id) {
+                try {
+                  const { data: l } = await supabase
+                    .from('locais')
+                    .select('nome')
+                    .eq('id', c.local_id)
+                    .maybeSingle();
+                  localName = l?.nome;
+                } catch (e) {
+                  // ignore
+                }
               }
-            }
 
-            let userName: string | undefined = undefined;
-            if (c.usuario_abertura) {
-              try {
-                const { data: p } = await supabase.from('profiles').select('nome').eq('id', c.usuario_abertura).maybeSingle();
-                userName = p?.nome;
-              } catch (e) {
-                // ignore
+              let userName: string | undefined = undefined;
+              if (c.usuario_abertura) {
+                try {
+                  const { data: p } = await supabase
+                    .from('profiles')
+                    .select('nome')
+                    .eq('id', c.usuario_abertura)
+                    .maybeSingle();
+                  userName = p?.nome;
+                } catch (e) {
+                  // ignore
+                }
               }
+
+              const title = c.data_fechamento ? 'Caixa fechado' : 'Caixa aberto';
+              const message = c.data_fechamento
+                ? `${userName || localName || 'PDV'} fechou o caixa. Vendas: R$ ${Number(c.total_vendas_sistema || 0).toFixed(2)}`
+                : `${userName || localName || 'PDV'} abriu o caixa. Saldo inicial: R$ ${Number(c.saldo_inicial || 0).toFixed(2)}`;
+
+              if (isPdv) {
+                if (myLocal && c.local_id !== myLocal) return;
+              }
+
+              const notif = {
+                id: c.data_fechamento ? `c-close-${c.id}` : `c-open-${c.id}`,
+                title,
+                message,
+                time: c.data_abertura || c.data_fechamento || new Date().toISOString(),
+                type: c.data_fechamento ? 'caixa_fechado' : 'caixa_aberto',
+              };
+
+              setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
             }
+          )
+          .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'caixa_sessao' },
+            async (payload) => {
+              const c = payload.new as any;
+              if (!c.data_fechamento) return;
+              if (!isAdmin && !isPdv) return;
 
-            const title = c.data_fechamento ? 'Caixa fechado' : 'Caixa aberto';
-            const message = c.data_fechamento
-              ? `${userName || localName || 'PDV'} fechou o caixa. Vendas: R$ ${Number(c.total_vendas_sistema || 0).toFixed(2)}`
-              : `${userName || localName || 'PDV'} abriu o caixa. Saldo inicial: R$ ${Number(c.saldo_inicial || 0).toFixed(2)}`;
+              let userName: string | undefined = undefined;
+              let localName = c.local?.nome;
+              if (!localName && c.local_id) {
+                try {
+                  const { data: l } = await supabase
+                    .from('locais')
+                    .select('nome')
+                    .eq('id', c.local_id)
+                    .maybeSingle();
+                  localName = l?.nome;
+                } catch (e) {
+                  void e;
+                }
+              }
+              if (c.usuario_fechamento) {
+                try {
+                  const { data: p } = await supabase
+                    .from('profiles')
+                    .select('nome')
+                    .eq('id', c.usuario_fechamento)
+                    .maybeSingle();
+                  userName = p?.nome;
+                } catch (e) {
+                  void e;
+                }
+              }
 
-            if (isPdv) {
-              if (myLocal && c.local_id !== myLocal) return;
+              if (isPdv) {
+                if (myLocal && c.local_id !== myLocal) return;
+              }
+
+              const notif = {
+                id: `c-close-${c.id}`,
+                title: 'Caixa fechado',
+                message: `${userName || localName || 'PDV'} fechou o caixa. Vendas: R$ ${Number(c.total_vendas_sistema || 0).toFixed(2)}`,
+                time: c.data_fechamento,
+                type: 'caixa_fechado',
+              };
+              setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
             }
-
-            const notif = {
-              id: c.data_fechamento ? `c-close-${c.id}` : `c-open-${c.id}`,
-              title,
-              message,
-              time: c.data_abertura || c.data_fechamento || new Date().toISOString(),
-              type: c.data_fechamento ? 'caixa_fechado' : 'caixa_aberto',
-            };
-
-            setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
-          })
-          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'caixa_sessao' }, async (payload) => {
-            const c = payload.new as any;
-            if (!c.data_fechamento) return;
-            if (!isAdmin && !isPdv) return;
-
-            let userName: string | undefined = undefined;
-            let localName = c.local?.nome;
-            if (!localName && c.local_id) {
-              try {
-                const { data: l } = await supabase.from('locais').select('nome').eq('id', c.local_id).maybeSingle();
-                localName = l?.nome;
-              } catch (e) {}
-            }
-            if (c.usuario_fechamento) {
-              try {
-                const { data: p } = await supabase.from('profiles').select('nome').eq('id', c.usuario_fechamento).maybeSingle();
-                userName = p?.nome;
-              } catch (e) {}
-            }
-
-            if (isPdv) {
-              if (myLocal && c.local_id !== myLocal) return;
-            }
-
-            const notif = {
-              id: `c-close-${c.id}`,
-              title: 'Caixa fechado',
-              message: `${userName || localName || 'PDV'} fechou o caixa. Vendas: R$ ${Number(c.total_vendas_sistema || 0).toFixed(2)}`,
-              time: c.data_fechamento,
-              type: 'caixa_fechado',
-            };
-            setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
-          })
+          )
           .subscribe();
 
         if (isFabrica || isCompras) {
           pedidoChannel = supabase
             .channel('public:notificacoes_pedido')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notificacoes_pedido' }, (payload) => {
-              const p = payload.new as any;
-              const notif = {
-                id: `np-${p.id}`,
-                title: `Pedido #${p.pedido_id}`,
-                message: p.mensagem || 'Notificação de pedido',
-                time: p.created_at || new Date().toISOString(),
-                type: 'pedido',
-              };
-              setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
-            })
+            .on(
+              'postgres_changes',
+              { event: 'INSERT', schema: 'public', table: 'notificacoes_pedido' },
+              (payload) => {
+                const p = payload.new as any;
+                const notif = {
+                  id: `np-${p.id}`,
+                  title: `Pedido #${p.pedido_id}`,
+                  message: p.mensagem || 'Notificação de pedido',
+                  time: p.created_at || new Date().toISOString(),
+                  type: 'pedido',
+                };
+                setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
+              }
+            )
             .subscribe();
         }
       } catch (e) {
@@ -656,7 +701,10 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
               </PopoverTrigger>
 
               <PopoverContent className="w-80 p-0" align="end">
-                <div className="max-h-96 overflow-y-auto rounded-md" style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}>
+                <div
+                  className="max-h-96 overflow-y-auto rounded-md"
+                  style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}
+                >
                   <div className="border-b border-gray-200 p-3 dark:border-gray-700">
                     <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       Ações Rápidas
@@ -669,10 +717,8 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                           className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700"
                           style={{ transition: 'background 0.2s' }}
                           onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
-                              theme,
-                              0.8
-                            );
+                            (e.currentTarget as HTMLElement).style.background =
+                              getPrimaryWithOpacity(theme, 0.8);
                             const icon = e.currentTarget.querySelector('svg');
                             if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
                           }}
@@ -704,13 +750,17 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                           const page = allPages.find((p) => p.href === href);
                           if (!page) return null;
                           return (
-                            <div key={`pinned-${href}`} className="flex items-center justify-between">
+                            <div
+                              key={`pinned-${href}`}
+                              className="flex items-center justify-between"
+                            >
                               <Link
                                 href={href}
                                 className="flex flex-1 items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700"
                                 style={{ transition: 'background 0.2s' }}
                                 onMouseEnter={(e) => {
-                                  (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+                                  (e.currentTarget as HTMLElement).style.background =
+                                    getPrimaryWithOpacity(theme, 0.8);
                                   const icon = e.currentTarget.querySelector('svg');
                                   if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
                                 }}
@@ -749,13 +799,17 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                       </h4>
                       <div className="space-y-1">
                         {recentPages.map((page) => (
-                          <div key={`recent-${page.href}`} className="flex items-center justify-between">
+                          <div
+                            key={`recent-${page.href}`}
+                            className="flex items-center justify-between"
+                          >
                             <Link
                               href={page.href}
                               className="flex flex-1 items-center gap-2 rounded-md px-3 py-2 text-sm text-gray-700"
                               style={{ transition: 'background 0.2s' }}
                               onMouseEnter={(e) => {
-                                (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+                                (e.currentTarget as HTMLElement).style.background =
+                                  getPrimaryWithOpacity(theme, 0.8);
                                 const icon = e.currentTarget.querySelector('svg');
                                 if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
                               }}
@@ -772,7 +826,9 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                             <button
                               onClick={() => togglePinPage(page.href)}
                               className={`p-1 ${pinnedPages.includes(page.href) ? 'text-yellow-500' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
-                              title={pinnedPages.includes(page.href) ? 'Desfixar página' : 'Fixar página'}
+                              title={
+                                pinnedPages.includes(page.href) ? 'Desfixar página' : 'Fixar página'
+                              }
                             >
                               <Pin className="h-3 w-3" />
                             </button>
@@ -817,7 +873,10 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                 className="relative rounded-md p-2"
                 style={{ transition: 'background 0.2s' }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+                  (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
+                    theme,
+                    0.8
+                  );
                   const icon = e.currentTarget.querySelector('svg');
                   if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
                 }}
@@ -839,14 +898,19 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
             </PopoverTrigger>
 
             <PopoverContent className="w-80 p-0" align="end">
-              <div className="rounded-md" style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}>
+              <div
+                className="rounded-md"
+                style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}
+              >
                 <div className="border-b border-gray-200 p-4 dark:border-gray-700">
                   <h3 className="text-sm font-medium">Notificações</h3>
                 </div>
                 <div className="max-h-96 overflow-y-auto">
                   {notificationsList.length === 0 && (
                     <div className="border-b border-gray-200 p-4 dark:border-gray-700">
-                      <p className="text-sm text-gray-600 dark:text-gray-300">Sem novas notificações</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        Sem novas notificações
+                      </p>
                     </div>
                   )}
 
@@ -854,7 +918,9 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                     <div key={n.id} className="border-b border-gray-200 p-4 dark:border-gray-700">
                       <p className="text-sm text-gray-700 dark:text-gray-200">{n.title}</p>
                       <p className="text-xs text-gray-500 mt-1">{n.message}</p>
-                      <p className="mt-1 text-xs text-gray-400">{new Date(n.time).toLocaleString('pt-BR')}</p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {new Date(n.time).toLocaleString('pt-BR')}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -893,7 +959,10 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                 className="flex items-center gap-2 rounded-md p-2"
                 style={{ transition: 'background 0.2s' }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+                  (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
+                    theme,
+                    0.8
+                  );
                   (e.currentTarget as HTMLElement).style.color = '';
                   const icon = e.currentTarget.querySelector('svg');
                   if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
@@ -910,12 +979,17 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                 }}
               >
                 <User className="h-5 w-5" />
-                <span className="hidden text-sm font-medium sm:inline">{profile?.nome || profile?.email || 'Usuário'}</span>
+                <span className="hidden text-sm font-medium sm:inline">
+                  {profile?.nome || profile?.email || 'Usuário'}
+                </span>
               </button>
             </PopoverTrigger>
 
             <PopoverContent className="w-48 p-0" align="end">
-              <div className="rounded-md" style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}>
+              <div
+                className="rounded-md"
+                style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}
+              >
                 <div className="border-b border-gray-200 px-4 py-2 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
                   {profile?.role === 'admin' && 'Administrador'}
                   {profile?.role === 'fabrica' && 'Fábrica'}
@@ -927,7 +1001,10 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                     className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700"
                     style={{ transition: 'background 0.2s' }}
                     onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+                      (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
+                        theme,
+                        0.8
+                      );
                       const icon = e.currentTarget.querySelector('svg');
                       if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
                     }}
@@ -950,7 +1027,10 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                   className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700"
                   style={{ transition: 'background 0.2s' }}
                   onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+                    (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
+                      theme,
+                      0.8
+                    );
                     const icon = e.currentTarget.querySelector('svg');
                     if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
                   }}
@@ -968,7 +1048,10 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                   className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600"
                   style={{ transition: 'background 0.2s' }}
                   onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
+                    (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
+                      theme,
+                      0.8
+                    );
                     const icon = e.currentTarget.querySelector('svg');
                     if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
                   }}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth';
 import { useFichaTecnica } from '@/hooks/useFichaTecnica';
 import type { InsumoFicha } from '@/lib/types/ficha-tecnica';
 import type { FichaTecnica } from '@/lib/types/producao';
@@ -64,6 +65,7 @@ export function FichaTecnicaEditor({
   >([]);
   const [buscaInsumo, setBuscaInsumo] = useState('');
   const [mostrarBusca, setMostrarBusca] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [precoVendaInput, setPrecoVendaInput] = useState('');
 
@@ -101,33 +103,41 @@ export function FichaTecnicaEditor({
     setPrecoVenda(parseReal(valorFormatado));
   };
 
-  useEffect(() => {
-    async function carregarListas() {
-      const [
-        { data: insumosData, error: insumosError },
-        { data: produtosData, error: produtosError },
-      ] = await Promise.all([
-        supabase
-          .from('insumos')
-          .select(
-            'id, nome, unidade_medida, custo_unitario, unidade_estoque, custo_por_ue, unidade_consumo, fator_conversao'
-          )
-          .order('nome'),
-        // Para a lista de preparações, buscar apenas produtos marcados como 'semi_acabado'
-        supabase
-          .from('produtos_finais')
-          .select('id, nome')
-          .eq('ativo', true)
-          .eq('tipo', 'semi_acabado')
-          .order('nome'),
-      ] as any);
+  const { loading: authLoading } = useAuth();
 
-      if (!insumosError && insumosData) setInsumosDisponiveis(insumosData);
-      if (!produtosError && produtosData) setProdutosDisponiveis(produtosData);
+  useEffect(() => {
+    if (authLoading) return; // aguarda autenticação para evitar chamadas que dependem de RLS
+
+    async function carregarListas() {
+      try {
+        const [
+          { data: insumosData, error: insumosError },
+          { data: produtosData, error: produtosError },
+        ] = await Promise.all([
+          supabase
+            .from('insumos')
+            .select(
+              'id, nome, unidade_medida, custo_unitario, unidade_estoque, custo_por_ue, unidade_consumo, fator_conversao'
+            )
+            .order('nome'),
+          // Para a lista de preparações, buscar apenas produtos marcados como 'semi_acabado'
+          supabase
+            .from('produtos_finais')
+            .select('id, nome')
+            .eq('ativo', true)
+            .eq('tipo', 'semi_acabado')
+            .order('nome'),
+        ] as any);
+
+        if (!insumosError && insumosData) setInsumosDisponiveis(insumosData);
+        if (!produtosError && produtosData) setProdutosDisponiveis(produtosData);
+      } catch (e) {
+        console.error('Erro ao carregar listas de insumos/produtos:', e);
+      }
     }
 
     void carregarListas();
-  }, []);
+  }, [authLoading]);
 
   const insumosFiltrados = insumosDisponiveis.filter((insumo) =>
     insumo.nome.toLowerCase().includes(buscaInsumo.toLowerCase())
@@ -242,6 +252,37 @@ export function FichaTecnicaEditor({
           </div>
         </div>
       </div>
+      {/* Modal de Ajuda */}
+      {showHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-w-2xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800">
+            <h4 className="mb-4 text-lg font-bold">Como preencher a Receita</h4>
+            <div className="space-y-3 text-sm text-gray-700 dark:text-gray-200">
+              <p>- Para cada insumo, busque pelo nome e selecione o item correto da lista.</p>
+              <p>
+                - Informe a quantidade na <strong>Unidade de Consumo (UC)</strong>. O sistema
+                converte automaticamente para a unidade de estoque quando necessário.
+              </p>
+              <p>
+                - Use o campo <strong>Peso da Massa pronta</strong> quando quiser calcular
+                panelas/pedidos a partir do rendimento em gramas.
+              </p>
+              <p>
+                - Caso o insumo seja uma preparação (produto final), marque
+                <strong> Preparação</strong> e escolha o produto correspondente.
+              </p>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowHelp(false)}
+                className="rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white hover:brightness-110"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Lista de Insumos */}
       <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-xl dark:border-gray-700 dark:bg-gray-800">
         <div className="mb-6 flex items-center justify-between">
@@ -309,8 +350,12 @@ export function FichaTecnicaEditor({
                     {!insumo.isComposto ? (
                       <input
                         type="text"
-                        value={insumo.nomeInsumo}
-                        onFocus={() => setMostrarBusca(insumo.idLocal)}
+                        // Mostrar o texto que o usuário digita quando o dropdown daquele insumo está ativo
+                        value={mostrarBusca === insumo.idLocal ? buscaInsumo : insumo.nomeInsumo}
+                        onFocus={() => {
+                          setMostrarBusca(insumo.idLocal);
+                          setBuscaInsumo(insumo.nomeInsumo || '');
+                        }}
                         onChange={(e) => {
                           setBuscaInsumo(e.target.value);
                           setMostrarBusca(insumo.idLocal);
@@ -345,6 +390,15 @@ export function FichaTecnicaEditor({
                       size={20}
                     />
                   </div>
+
+                  {/* Botão de Ajuda rápido para o campo de insumo */}
+                  <button
+                    type="button"
+                    onClick={() => setShowHelp(true)}
+                    className="mt-2 text-xs text-blue-600 hover:underline"
+                  >
+                    Como preencher?
+                  </button>
 
                   {/* Dropdown de busca */}
                   {mostrarBusca === insumo.idLocal && (

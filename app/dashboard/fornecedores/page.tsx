@@ -78,7 +78,7 @@ export default function FornecedoresPage() {
   const confirmDialog = useConfirm();
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [loading, setLoading] = useState(true);
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [categoriasDb, setCategoriasDb] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');

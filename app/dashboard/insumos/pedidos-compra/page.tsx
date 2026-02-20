@@ -11,6 +11,7 @@ import {
   Save,
   Search,
   Truck,
+  ChevronDown,
   Clock,
 } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
@@ -57,6 +58,7 @@ interface Pedido {
   status: 'pendente' | 'aprovado' | 'rejeitado' | 'finalizado';
   numero: number;
   fornecedor_id?: string;
+  local_id?: string;
   fornecedor_nome?: string;
   data_prevista?: string;
   itens: {
@@ -92,6 +94,8 @@ export default function PedidosCompraPage() {
   // UI
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [expandedPedidos, setExpandedPedidos] = useState<Record<string, boolean>>({});
+  const [highlightedPedidos, setHighlightedPedidos] = useState<Record<string, boolean>>({});
   const [editingPedidoId, setEditingPedidoId] = useState<string | null>(null);
   const [editingPedidoNumero, setEditingPedidoNumero] = useState<number | null>(null);
   const [diagLoading, setDiagLoading] = useState(false);
@@ -301,14 +305,13 @@ export default function PedidosCompraPage() {
 
   useEffect(() => {
     if (authLoading) return;
-
-    if (!profile?.id) {
+    if (!profile?.organization_id) {
       setLoading(false);
       return;
     }
 
     void fetchDadosIniciais();
-  }, [authLoading, fetchDadosIniciais, profile?.id]);
+  }, [authLoading, fetchDadosIniciais, profile?.organization_id]);
 
   // Diagnóstico (Dev)
   // Chamamos a função de carregamento inicial apenas uma vez no mount.
@@ -334,11 +337,43 @@ export default function PedidosCompraPage() {
   }, []);
 
   // --- FILTRO DE PRODUTOS ---
+  // Busca mais inteligente: normaliza (remove acentos), suporta múltiplos termos
+  // e dá prioridade a matches por prefixo.
   const insumosFiltrados = useMemo(() => {
     if (!termoBusca) return insumosDisponiveis;
-    return insumosDisponiveis.filter((i) =>
-      i.nome.toLowerCase().includes(termoBusca.toLowerCase())
-    );
+
+    const normalize = (s: string) =>
+      String(s || '')
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .toLowerCase();
+
+    const terms = termoBusca
+      .split(/\s+/)
+      .map((t) => normalize(t))
+      .filter(Boolean);
+
+    // Filtra exigindo que todos os termos apareçam em nome/unidade/id
+    const matched = insumosDisponiveis.filter((i) => {
+      const name = normalize(i.nome);
+      const unit = normalize(i.unidade_estoque || '');
+      const id = normalize(String(i.id || ''));
+      return terms.every((t) => name.includes(t) || unit.includes(t) || id.includes(t));
+    });
+
+    // Ordena: prefixo de nome aparece primeiro, depois contains, depois alfabeticamente
+    const firstTerm = terms[0] ?? '';
+    matched.sort((a, b) => {
+      const na = normalize(a.nome);
+      const nb = normalize(b.nome);
+      const rank = (s: string) => (s.startsWith(firstTerm) ? 0 : s.includes(firstTerm) ? 1 : 2);
+      const ra = rank(na);
+      const rb = rank(nb);
+      if (ra !== rb) return ra - rb;
+      return na.localeCompare(nb);
+    });
+
+    return matched;
   }, [insumosDisponiveis, termoBusca]);
 
   // --- AÇÕES DO CARRINHO ---
@@ -384,6 +419,8 @@ export default function PedidosCompraPage() {
     }
 
     try {
+      let insertedCount = 0;
+      let updatedCount = 0;
       setSalvando(true);
 
       let pedidoId: string | number | undefined;
@@ -432,33 +469,57 @@ export default function PedidosCompraPage() {
         // Upsert manual para cada item (simplificado)
         for (const item of itensPedido) {
           if (item.itemId) {
-            await supabase
+            const updateRes = await supabase
               .from('itens_pedido_compra')
               .update({
                 quantidade: item.quantidade,
                 insumo_id: item.insumo.id,
-                valor_unitario: item.insumo.custo_por_ue,
+                valor_unitario: Number(item.insumo?.custo_por_ue ?? 0),
               })
               .eq('id', item.itemId);
+            if (updateRes.error) throw updateRes.error;
+            updatedCount += 1;
           } else {
-            await supabase.from('itens_pedido_compra').insert({
+            const insertItemRes = await supabase.from('itens_pedido_compra').insert({
               pedido_id: pedidoId,
               insumo_id: item.insumo.id,
               quantidade: item.quantidade,
-              valor_unitario: item.insumo.custo_por_ue,
+              valor_unitario: Number(item.insumo?.custo_por_ue ?? 0),
+              organization_id: profile?.organization_id,
             });
+            if (insertItemRes.error) throw insertItemRes.error;
+            // inserted rows count may be in insertItemRes.data
+            insertedCount += Array.isArray(insertItemRes.data as any)
+              ? (insertItemRes.data as any).length
+              : 1;
           }
         }
       } else {
         // INSERT
         const fornecedorValue =
           cabecalhoPedido.fornecedor_id === '' ? null : cabecalhoPedido.fornecedor_id;
+        // Busca automática do local do tipo 'fabrica' vinculado à organização
+        const { data: localFabrica, error: localError } = await supabase
+          .from('locais')
+          .select('id')
+          .eq('organization_id', profile?.organization_id)
+          .eq('tipo', 'fabrica')
+          .single();
+
+        if (localError || !localFabrica) {
+          toast.error('Local "Fábrica" não encontrado. Verifique o cadastro de locais.');
+          setSalvando(false);
+          return;
+        }
+
         const insertRes = await supabase
           .from('pedidos_compra')
           .insert({
             status: 'pendente',
             fornecedor_id: fornecedorValue,
             data_prevista: cabecalhoPedido.data_prevista || null,
+            local_id: localFabrica.id,
+            organization_id: profile?.organization_id,
           })
           .select();
 
@@ -473,13 +534,24 @@ export default function PedidosCompraPage() {
             pedido_id: pedidoId,
             insumo_id: item.insumo.id,
             quantidade: item.quantidade,
-            valor_unitario: item.insumo.custo_por_ue,
+            valor_unitario: Number(item.insumo?.custo_por_ue ?? 0),
+            organization_id: profile?.organization_id,
           }));
-          await supabase.from('itens_pedido_compra').insert(itensParaInserir);
+          const insertItemsRes = await supabase
+            .from('itens_pedido_compra')
+            .insert(itensParaInserir);
+          if (insertItemsRes.error) throw insertItemsRes.error;
+          insertedCount += Array.isArray(insertItemsRes.data as any)
+            ? (insertItemsRes.data as any).length
+            : itensParaInserir.length;
         }
       }
 
-      toast.success('Ordem de compra salva!');
+      if (insertedCount > 0 || updatedCount > 0) {
+        toast.success(`Ordem salva — ${insertedCount} inserido(s), ${updatedCount} atualizado(s)`);
+      } else {
+        toast.success('Ordem de compra salva!');
+      }
       // Reset
       setItensPedido([]);
       setCabecalhoPedido({ fornecedor_id: '', data_prevista: '' });
@@ -495,7 +567,7 @@ export default function PedidosCompraPage() {
     }
   };
 
-  const atualizarStatus = async (id: string, novoStatus: string) => {
+  const atualizarStatus = async (id: string, novoStatus: Pedido['status']) => {
     const { error } = await supabase
       .from('pedidos_compra')
       .update({ status: novoStatus })
@@ -819,10 +891,11 @@ export default function PedidosCompraPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right text-slate-500">
-                            R$ {item.insumo.custo_por_ue.toFixed(2)}
+                            R$ {Number(item.insumo?.custo_por_ue ?? 0).toFixed(2)}
                           </td>
                           <td className="px-4 py-3 text-right text-slate-800 font-bold">
-                            R$ {(item.quantidade * item.insumo.custo_por_ue).toFixed(2)}
+                            R${' '}
+                            {(item.quantidade * Number(item.insumo?.custo_por_ue ?? 0)).toFixed(2)}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <button
@@ -932,6 +1005,34 @@ export default function PedidosCompraPage() {
                           </Button>
                         </>
                       )}
+                      {/* Ações utilitárias do pedido */}
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setExpandedPedidos((prev) => {
+                            const next = { ...prev, [pedido.id]: !prev[pedido.id] };
+                            if (next[pedido.id]) {
+                              // marcar highlight e rolar ao abrir
+                              setHighlightedPedidos((h) => ({ ...h, [pedido.id]: true }));
+                              setTimeout(() => {
+                                const el = document.getElementById(`pedido-items-${pedido.id}`);
+                                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                // remover highlight depois de 900ms
+                                setTimeout(
+                                  () =>
+                                    setHighlightedPedidos((h) => ({ ...h, [pedido.id]: false })),
+                                  900
+                                );
+                              }, 50);
+                            }
+                            return next;
+                          });
+                        }}
+                        className="text-xs h-8 px-3"
+                        icon={ChevronDown}
+                      >
+                        {expandedPedidos[pedido.id] ? 'Ocultar Itens' : 'Ver Itens'}
+                      </Button>
                       {/* BOTÃO IMPRIMIR: Chama a nova função com o pedido específico */}
                       <Button
                         variant="secondary"
@@ -944,28 +1045,44 @@ export default function PedidosCompraPage() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 rounded p-3 text-sm">
-                    <ul className="space-y-1">
-                      {pedido.itens?.map((item, idx) => (
-                        <li
-                          key={idx}
-                          className="flex justify-between text-slate-700 border-b border-slate-200 last:border-0 pb-1 last:pb-0"
-                        >
-                          <span>{item.insumo?.nome}</span>
-                          <span className="font-mono text-xs">
-                            {item.quantidade} {item.insumo?.unidade_estoque} x R${' '}
-                            {item.insumo?.custo_por_ue?.toFixed(2)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="mt-2 pt-2 border-t border-slate-200 text-right font-bold text-slate-800">
-                      Total Pedido: R${' '}
-                      {pedido.itens
-                        ?.reduce((acc, i) => acc + i.quantidade * (i.insumo?.custo_por_ue || 0), 0)
-                        .toFixed(2)}
+                  {expandedPedidos[pedido.id] ? (
+                    <div
+                      id={`pedido-items-${pedido.id}`}
+                      className={`bg-slate-50 rounded p-3 text-sm ${
+                        highlightedPedidos[pedido.id] ? 'ring-2 ring-blue-200 bg-blue-50' : ''
+                      }`}
+                    >
+                      <ul className="space-y-1">
+                        {pedido.itens?.map((item, idx) => (
+                          <li
+                            key={idx}
+                            className="flex justify-between text-slate-700 border-b border-slate-200 last:border-0 pb-1 last:pb-0"
+                          >
+                            <span>{item.insumo?.nome}</span>
+                            <span className="font-mono text-xs">
+                              {item.quantidade} {item.insumo?.unidade_estoque} x R${' '}
+                              {Number(item.insumo?.custo_por_ue ?? 0).toFixed(2)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mt-2 pt-2 border-t border-slate-200 text-right font-bold text-slate-800">
+                        Total Pedido: R${' '}
+                        {pedido.itens
+                          ?.reduce(
+                            (acc, i) => acc + i.quantidade * (i.insumo?.custo_por_ue || 0),
+                            0
+                          )
+                          .toFixed(2)}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="bg-slate-50 rounded p-3 text-sm">
+                      <div className="text-sm text-slate-500">
+                        Itens escondidos ({pedido.itens?.length || 0})
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -979,17 +1096,17 @@ export default function PedidosCompraPage() {
           {/* Cabeçalho Impressão */}
           <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
             <div className="flex items-center gap-4">
-                {/* Logo */}
-                <img
-                  src={
-                    getImageUrl(theme?.company_logo_url as string | undefined) ||
-                    getImageUrl(theme?.logo_url as string | undefined) ||
-                    '/logo.png'
-                  }
-                  alt="Logo"
-                  className="h-16 w-auto object-contain grayscale"
-                  onError={(e) => (e.currentTarget.style.display = 'none')}
-                />
+              {/* Logo */}
+              <img
+                src={
+                  getImageUrl(theme?.company_logo_url) ||
+                  getImageUrl(theme?.logo_url as string | undefined) ||
+                  '/logo.png'
+                }
+                alt="Logo"
+                className="h-16 w-auto object-contain grayscale"
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
               <div>
                 <h1 className="text-3xl font-bold text-black uppercase tracking-tight">
                   Pedido de Compra
@@ -1035,19 +1152,21 @@ export default function PedidosCompraPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-300">
-              {pedidoParaImpressao.itens.map((item, idx) => (
-                <tr key={idx}>
-                  <td className="py-2 text-black">{item.insumo.nome}</td>
-                  <td className="py-2 text-right text-black font-mono">{item.quantidade}</td>
-                  <td className="py-2 text-right text-black">{item.insumo.unidade_estoque}</td>
-                  <td className="py-2 text-right text-black">
-                    R$ {item.insumo.custo_por_ue.toFixed(2)}
-                  </td>
-                  <td className="py-2 text-right text-black font-bold">
-                    R$ {(item.quantidade * item.insumo.custo_por_ue).toFixed(2)}
-                  </td>
-                </tr>
-              ))}
+              {pedidoParaImpressao.itens.map((item, idx) => {
+                const nome = item.insumo?.nome ?? 'Item';
+                const unidade = item.insumo?.unidade_estoque ?? '';
+                const valorUnit = Number(item.insumo?.custo_por_ue ?? 0);
+                const total = item.quantidade * valorUnit;
+                return (
+                  <tr key={idx}>
+                    <td className="py-2 text-black">{nome}</td>
+                    <td className="py-2 text-right text-black font-mono">{item.quantidade}</td>
+                    <td className="py-2 text-right text-black">{unidade}</td>
+                    <td className="py-2 text-right text-black">R$ {valorUnit.toFixed(2)}</td>
+                    <td className="py-2 text-right text-black font-bold">R$ {total.toFixed(2)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-black">
@@ -1057,7 +1176,7 @@ export default function PedidosCompraPage() {
                 <td className="py-2 text-right font-bold text-xl text-black">
                   R${' '}
                   {pedidoParaImpressao.itens
-                    .reduce((acc, i) => acc + i.quantidade * i.insumo.custo_por_ue, 0)
+                    .reduce((acc, i) => acc + i.quantidade * (i.insumo?.custo_por_ue || 0), 0)
                     .toFixed(2)}
                 </td>
               </tr>

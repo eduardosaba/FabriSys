@@ -1,7 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { FLOAT_BTN_SIZE, loadFloatingPosition, saveFloatingPosition, saveFloatingPositionServer, loadFloatingPositionServer } from './floatingPosition';
+import {
+  FLOAT_BTN_SIZE,
+  loadFloatingPosition,
+  saveFloatingPosition,
+  saveFloatingPositionServer,
+  loadFloatingPositionServer,
+} from './floatingPosition';
 import { supabase } from '@/lib/supabase';
 import { BellRing, Send } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -68,7 +74,11 @@ export default function SolicitacaoReposicao({ localId }: { localId?: string | n
 
       // default position: bottom-left (compute top from window height)
       const defaultBottom = 80; // keep above payment bar
-      if (mounted) setPosition({ x: 16, y: Math.max(16, window.innerHeight - FLOAT_BTN_SIZE - defaultBottom) });
+      if (mounted)
+        setPosition({
+          x: 16,
+          y: Math.max(16, window.innerHeight - FLOAT_BTN_SIZE - defaultBottom),
+        });
     })();
     return () => {
       mounted = false;
@@ -166,9 +176,12 @@ export default function SolicitacaoReposicao({ localId }: { localId?: string | n
     const onEnd = () => {
       draggingRef.current = false;
       try {
-        if (position) localStorage.setItem('solicitacaoReposicaoPosition', JSON.stringify(position));
+        if (position)
+          localStorage.setItem('solicitacaoReposicaoPosition', JSON.stringify(position));
         void saveFloatingPositionServer(profile?.id, 'floating:reposicao', position);
-      } catch (e) {}
+      } catch (e) {
+        void e;
+      }
       document.removeEventListener('touchmove', onMove);
       document.removeEventListener('touchend', onEnd);
     };

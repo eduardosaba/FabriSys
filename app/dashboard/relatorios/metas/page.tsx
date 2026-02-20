@@ -1,5 +1,5 @@
 'use client';
-
+import { useAuth } from '@/lib/auth';
 import { useEffect, useState } from 'react';
 import PageHeader from '@/components/ui/PageHeader';
 import { BarChart } from 'lucide-react';
@@ -28,6 +28,8 @@ function monthRange(year: number, monthIndex: number) {
 }
 
 export default function RelatorioMetasPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const [loading, setLoading] = useState(true);
   const [metaMensal, setMetaMensal] = useState(0);
   const [realizadoMensal, setRealizadoMensal] = useState(0);

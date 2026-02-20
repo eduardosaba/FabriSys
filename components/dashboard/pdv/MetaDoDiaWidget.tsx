@@ -2,24 +2,34 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth';
 import { Card } from '@/components/dashboard/Card';
 import { Trophy, Target, TrendingUp, ShoppingBag } from 'lucide-react';
 
-export default function MetaDoDiaWidget() {
-  const { profile } = useAuth();
+interface WidgetProps {
+  filtros?: any;
+  auxFiltro?: any;
+  organizationId?: string;
+  profile?: any;
+}
+
+export default function MetaDoDiaWidget({
+  filtros,
+  auxFiltro,
+  organizationId,
+  profile,
+}: WidgetProps) {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     vendasHoje: 0,
     pedidosHoje: 0,
     metaLoja: 0,
-    percentual: 0
+    percentual: 0,
   });
 
   useEffect(() => {
     async function fetchMyStats() {
-      if (!profile?.organization_id || !(profile as any).local_id) return;
-      const localId = (profile as any).local_id;
+      if (!organizationId || !profile.local_id) return;
+      const localId = profile.local_id;
       const userId = profile.id;
       const hoje = new Date();
 
@@ -47,12 +57,18 @@ export default function MetaDoDiaWidget() {
           .eq('data_referencia', dataHojeStr)
           .maybeSingle();
 
-        const totalVendas = vendas?.reduce((acc: number, curr: any) => acc + (curr.total_venda || 0), 0) || 0;
+        const totalVendas =
+          vendas?.reduce((acc: number, curr: any) => acc + (curr.total_venda || 0), 0) || 0;
         const totalPedidos = vendas?.length || 0;
         const valorMeta = Number(metaData?.valor_meta || 0);
         const percentual = valorMeta > 0 ? (totalVendas / valorMeta) * 100 : 0;
 
-        setStats({ vendasHoje: totalVendas, pedidosHoje: totalPedidos, metaLoja: valorMeta, percentual });
+        setStats({
+          vendasHoje: totalVendas,
+          pedidosHoje: totalPedidos,
+          metaLoja: valorMeta,
+          percentual,
+        });
       } catch (err) {
         console.error('Erro meta pdv:', err);
       } finally {
@@ -61,7 +77,7 @@ export default function MetaDoDiaWidget() {
     }
 
     void fetchMyStats();
-  }, [profile]);
+  }, [profile, organizationId]);
 
   return (
     <Card title="Meu Desempenho (Hoje)" size="1x1" loading={loading}>
@@ -74,7 +90,9 @@ export default function MetaDoDiaWidget() {
             <span className="text-xs font-bold text-slate-500 uppercase">Minhas Vendas</span>
           </div>
           <h3 className="text-3xl font-bold text-slate-800 tracking-tight">
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats.vendasHoje)}
+            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+              stats.vendasHoje
+            )}
           </h3>
           <p className="text-xs text-slate-400 mt-1">{stats.pedidosHoje} pedidos realizados</p>
         </div>
@@ -101,7 +119,6 @@ export default function MetaDoDiaWidget() {
             </div>
           )}
         </div>
-
       </div>
     </Card>
   );

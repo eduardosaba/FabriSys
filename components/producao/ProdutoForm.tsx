@@ -155,6 +155,15 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
 
   // --- SUBMIT ---
   const onSubmit = async (data: ProdutoFormData) => {
+    const generateCodigoInterno = () => {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      const rnd = Math.random().toString(36).substring(2, 6).toUpperCase();
+      return `PROD-${y}${m}${d}-${rnd}`;
+    };
+
     try {
       // Preparar payload para o banco
       const payload = {
@@ -183,13 +192,73 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
         error = res.error;
       } else {
         // INSERT (Adiciona created_by apenas no insert)
-        const res = await supabase
-          .from('produtos_finais')
-          .insert({ ...payload, created_by: user?.id });
-        error = res.error;
-      }
+        // Se codigo_interno não foi fornecido, gerar um automaticamente.
+        if (!payload.codigo_interno) {
+          payload.codigo_interno = generateCodigoInterno();
+          try {
+            setValue('codigo_interno', payload.codigo_interno as any);
+          } catch (e) {
+            void e;
+          }
+        }
 
-      if (error) throw error;
+        let attempts = 0;
+        const maxAttempts = 4;
+        let insertError: any = null;
+        while (attempts < maxAttempts) {
+          try {
+            const res = await supabase
+              .from('produtos_finais')
+              .insert({ ...payload, created_by: user?.id });
+            if (res.error) {
+              const code = (res.error as any)?.code;
+              const msg = String((res.error as any)?.message || '');
+              // Se for conflito em codigo_interno, tentar gerar outro e reenviar
+              if (
+                code === '23505' ||
+                msg.includes('codigo_interno') ||
+                msg.includes('unique constraint')
+              ) {
+                attempts += 1;
+                payload.codigo_interno = generateCodigoInterno();
+                try {
+                  setValue('codigo_interno', payload.codigo_interno as any);
+                } catch (e) {
+                  void e;
+                }
+                continue;
+              }
+              insertError = res.error;
+              break;
+            }
+            // sucesso
+            insertError = null;
+            break;
+          } catch (e: any) {
+            const code = e?.code;
+            const msg = String(e?.message || e || '');
+            if (
+              code === '23505' ||
+              msg.includes('codigo_interno') ||
+              msg.includes('unique constraint')
+            ) {
+              attempts += 1;
+              payload.codigo_interno = generateCodigoInterno();
+              try {
+                setValue('codigo_interno', payload.codigo_interno as any);
+              } catch (e) {
+                void e;
+              }
+              continue;
+            }
+            insertError = e;
+            break;
+          }
+        }
+        if (insertError) {
+          throw insertError;
+        }
+      }
 
       toast({ title: produto ? 'Produto atualizado!' : 'Produto criado!', variant: 'success' });
 
@@ -197,7 +266,24 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
       else router.push('/dashboard/producao/produtos');
     } catch (err: any) {
       console.error(err);
-      const msg = err.message || 'Erro desconhecido';
+      const msg = err?.message || String(err) || 'Erro desconhecido';
+
+      // Unique constraint violation on codigo_interno
+      if (
+        err &&
+        (err.code === '23505' ||
+          msg.includes('codigo_interno') ||
+          msg.includes('unique constraint'))
+      ) {
+        toast({
+          title: 'Código interno duplicado',
+          description:
+            'Já existe um produto com este código interno. Por favor escolha outro código.',
+          variant: 'error',
+        });
+        return;
+      }
+
       // Erro comum de RLS
       if (msg.includes('row-level security')) {
         toast({

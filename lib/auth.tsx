@@ -12,6 +12,7 @@ import {
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/useToast';
 
 export type UserRole = 'master' | 'admin' | 'gerente' | 'compras' | 'fabrica' | 'pdv' | 'user'; // Adicionado fallback
 
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { toast } = useToast();
 
   // Ref para evitar chamadas duplicadas ao fetchProfile
   const fetchingProfile = useRef(false);
@@ -62,23 +64,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log(`[AuthProvider] 🔍 Iniciando fetchProfile para userId=${userId}`);
 
     try {
-      // 1. Tenta buscar na tabela SaaS (COLABORADORES) - Prioridade
-      console.log('[AuthProvider] 📋 Buscando na tabela colaboradores...');
+      // Executar as duas queries em paralelo para reduzir latência total
+      console.log('[AuthProvider] 📋 Buscando em paralelo: colaboradores e profiles...');
       const colabStart = performance.now();
-      const { data: colab, error: colabError } = await supabase
+      const colabPromise = supabase
         .from('colaboradores')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
-      const colabDuration = performance.now() - colabStart;
-      console.log(`[AuthProvider] ⏱️ Query colaboradores: ${colabDuration.toFixed(2)}ms`);
 
-      if (colabError) {
-        console.warn('[AuthProvider] ⚠️ Erro ao buscar colaboradores:', colabError);
-      }
+      const profStart = performance.now();
+      const profPromise = supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+
+      const [colabRes, profRes] = await Promise.all([colabPromise, profPromise]);
+
+      const colabDuration = performance.now() - colabStart;
+      const profDuration = performance.now() - profStart;
+      console.log(`[AuthProvider] ⏱️ Query colaboradores: ${colabDuration.toFixed(2)}ms`);
+      console.log(`[AuthProvider] ⏱️ Query profiles: ${profDuration.toFixed(2)}ms`);
+
+      const colab = (colabRes as any).data;
+      const colabError = (colabRes as any).error;
+      const prof = (profRes as any).data;
+      const profError = (profRes as any).error;
+
+      if (colabError) console.warn('[AuthProvider] ⚠️ Erro ao buscar colaboradores:', colabError);
+      if (profError) console.warn('[AuthProvider] ⚠️ Erro ao buscar profiles:', profError);
 
       if (colab) {
-        // Se achou colaborador, usa esses dados (são os mais completos)
         const totalDuration = performance.now() - startTime;
         console.log(
           `[AuthProvider] ✅ Perfil encontrado em colaboradores. Total: ${totalDuration.toFixed(2)}ms`
@@ -90,21 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         setProfile(colab as Profile);
         return;
-      }
-
-      // 2. Se não achou (ex: usuário recém criado sem vinculo), tenta em PROFILES
-      console.log('[AuthProvider] 📋 Colaborador não encontrado. Buscando na tabela profiles...');
-      const profStart = performance.now();
-      const { data: prof, error: profError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-      const profDuration = performance.now() - profStart;
-      console.log(`[AuthProvider] ⏱️ Query profiles: ${profDuration.toFixed(2)}ms`);
-
-      if (profError) {
-        console.warn('[AuthProvider] ⚠️ Erro ao buscar profiles:', profError);
       }
 
       if (prof) {
@@ -180,7 +178,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         clearTimeout(_timeout);
         if (timeoutOccurred.value) {
-          console.log('[AuthProvider] fetchProfile finalizou após timeout; profile pode ter sido carregado posteriormente.');
+          console.log(
+            '[AuthProvider] fetchProfile finalizou após timeout; profile pode ter sido carregado posteriormente.'
+          );
         }
         setLoading(false);
       }
@@ -195,6 +195,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
+
+      // Tratamento específico quando o refresh do token falha (ex: token inválido)
+      if (String(event) === 'TOKEN_REFRESH_FAILED') {
+        console.warn('[AuthProvider] ❌ TOKEN_REFRESH_FAILED recebido — encerrando sessão local.');
+        // Exibir toast informando expiração
+        try {
+          toast({
+            title: 'Sessão expirada',
+            description: 'Sua sessão expirou. Faça login novamente.',
+            variant: 'error',
+            duration: 6000,
+          });
+        } catch (e) {
+          void e;
+        }
+
+        // Tentar sign out para limpar cookies via SDK
+        try {
+          await supabase.auth.signOut();
+        } catch (e) {
+          console.warn('[AuthProvider] Erro ao signOut após TOKEN_REFRESH_FAILED:', e);
+        }
+
+        // Limpar possíveis tokens remanescentes no storage — pode resolver casos de refresh inválido
+        try {
+          // Remover chaves que possivelmente contenham tokens do Supabase
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (!key) continue;
+            if (/supabase|sb|sb-/.test(key.toLowerCase())) localStorage.removeItem(key);
+          }
+        } catch (e) {
+          console.warn('[AuthProvider] Falha ao limpar localStorage:', e);
+        }
+
+        try {
+          for (let i = sessionStorage.length - 1; i >= 0; i--) {
+            const key = sessionStorage.key(i);
+            if (!key) continue;
+            if (/supabase|sb|sb-/.test(key.toLowerCase())) sessionStorage.removeItem(key);
+          }
+        } catch (e) {
+          console.warn('[AuthProvider] Falha ao limpar sessionStorage:', e);
+        }
+
+        setProfile(null);
+        lastFetchedUserId.current = null;
+        fetchingProfile.current = false;
+        setLoading(false);
+        try {
+          router.push('/login');
+        } catch (e) {
+          void e;
+        }
+        return;
+      }
 
       if (currentSession?.user) {
         // Busca profile apenas se o usuário mudou

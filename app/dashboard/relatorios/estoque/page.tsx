@@ -153,7 +153,7 @@ export default function RelatorioEstoquePage() {
             {/* Logo da Empresa */}
             <img
               src={
-                getImageUrl(theme?.company_logo_url as string | undefined) ||
+                getImageUrl(theme?.company_logo_url) ||
                 getImageUrl(theme?.logo_url as string | undefined) ||
                 '/logo.png'
               }

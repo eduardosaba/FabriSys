@@ -26,7 +26,7 @@ const TIPOS_USUARIO = [
 ];
 
 export default function GestaoAvisosPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [mensagem, setMensagem] = useState('');
   const [alvo, setAlvo] = useState('todos');
   const [tipoAlerta, setTipoAlerta] = useState('info');

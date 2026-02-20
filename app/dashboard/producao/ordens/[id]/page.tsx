@@ -1,4 +1,5 @@
- 'use client';
+'use client';
+import { useAuth } from '@/lib/auth';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -22,6 +23,8 @@ interface OrdemDetail {
 }
 
 export default function OrdemDetailPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
@@ -35,6 +38,9 @@ export default function OrdemDetailPage() {
   const idOrdem = params?.id ? String(params.id) : null;
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!profile?.organization_id) return;
+
     if (!idOrdem) return;
 
     const load = async () => {
@@ -42,7 +48,9 @@ export default function OrdemDetailPage() {
         setLoading(true);
         const { data, error } = await supabase
           .from('ordens_producao')
-          .select('id, numero_op, quantidade_prevista, status, data_prevista, custo_previsto, created_at, produto_final_id')
+          .select(
+            'id, numero_op, quantidade_prevista, status, data_prevista, custo_previsto, created_at, produto_final_id'
+          )
           .eq('id', idOrdem)
           .single();
 
@@ -51,7 +59,11 @@ export default function OrdemDetailPage() {
         const prodId = data.produto_final_id;
         let produtoObj = null;
         if (prodId) {
-          const { data: p } = await supabase.from('produtos_finais').select('id, nome').eq('id', prodId).maybeSingle();
+          const { data: p } = await supabase
+            .from('produtos_finais')
+            .select('id, nome')
+            .eq('id', prodId)
+            .maybeSingle();
           if (p) produtoObj = p;
         }
 
@@ -79,13 +91,24 @@ export default function OrdemDetailPage() {
     if (!idOrdem || !ordem) return;
     try {
       setSavingStatus(true);
-      const { error } = await supabase.from('ordens_producao').update({ status: statusEditValue }).eq('id', idOrdem);
+      const { error } = await supabase
+        .from('ordens_producao')
+        .update({ status: statusEditValue })
+        .eq('id', idOrdem);
       if (error) throw error;
       setOrdem({ ...ordem, status: statusEditValue });
-      toast({ title: 'Status atualizado', description: 'Status da ordem atualizado com sucesso.', variant: 'success' });
+      toast({
+        title: 'Status atualizado',
+        description: 'Status da ordem atualizado com sucesso.',
+        variant: 'success',
+      });
     } catch (e: any) {
       console.error('Erro ao atualizar status:', e);
-      toast({ title: 'Erro', description: 'Não foi possível atualizar o status.', variant: 'error' });
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível atualizar o status.',
+        variant: 'error',
+      });
     } finally {
       setSavingStatus(false);
     }
@@ -150,11 +173,11 @@ export default function OrdemDetailPage() {
           <h3 className="text-xs font-bold text-slate-500 uppercase mb-1">Status</h3>
           <span
             className={`inline-block px-2 py-1 rounded text-xs font-bold uppercase ${
-              (ordem.status === 'finalizada' || ordem.status === 'concluida')
+              ordem.status === 'finalizada' || ordem.status === 'concluida'
                 ? 'bg-green-100 text-green-700'
                 : ordem.status === 'pendente'
-                ? 'bg-yellow-100 text-yellow-700'
-                : 'bg-slate-100 text-slate-700'
+                  ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-slate-100 text-slate-700'
             }`}
           >
             {ordem.status.replace('_', ' ')}

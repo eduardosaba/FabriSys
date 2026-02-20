@@ -95,7 +95,11 @@ const sidebarItems: SidebarItem[] = [
     icon: <Factory className="h-5 w-5" />,
     allowedRoles: ['fabrica', 'admin', 'master'],
     children: [
-      { id: 'producao_kanban', name: 'Chão de Fábrica (Kanban)', href: '/dashboard/producao/kanban' },
+      {
+        id: 'producao_kanban',
+        name: 'Chão de Fábrica (Kanban)',
+        href: '/dashboard/producao/kanban',
+      },
       { id: 'ordens_producao', name: 'Ordens de Produção', href: '/dashboard/producao/ordens' },
       { id: 'produtos', name: 'Produtos Finais', href: '/dashboard/producao/produtos' },
       { id: 'ficha_tecnica', name: 'Fichas Técnicas', href: '/dashboard/producao/fichas-tecnicas' },
@@ -109,7 +113,11 @@ const sidebarItems: SidebarItem[] = [
     allowedRoles: ['pdv', 'admin', 'master'],
     children: [
       { id: 'pdv_caixa', name: 'Frente de Caixa', href: '/dashboard/pdv/caixa' },
-      { id: 'pdv_controle_caixa', name: 'Controle de Caixa', href: '/dashboard/pdv/controle-caixa' },
+      {
+        id: 'pdv_controle_caixa',
+        name: 'Controle de Caixa',
+        href: '/dashboard/pdv/controle-caixa',
+      },
       { id: 'pdv_recebimento', name: 'Recebimento Carga', href: '/dashboard/pdv/recebimento' },
     ],
   },
@@ -129,7 +137,7 @@ const sidebarItems: SidebarItem[] = [
     children: [
       { name: 'Sugestão de Compras (MRP)', href: '/dashboard/compras/sugestao' },
       { name: 'Pedidos de Compra', href: '/dashboard/insumos/pedidos-compra' },
-      { name: 'Entrada de Notas', href: '/dashboard/insumos/lotes' },
+      { name: 'Estoque', href: '/dashboard/insumos/lotes' },
       { name: 'Monitor de Riscos', href: '/dashboard/insumos/alertas' },
       { name: 'Cadastro de Insumos', href: '/dashboard/insumos/cadastro' },
       { name: 'Categorias', href: '/dashboard/insumos/categorias' },
@@ -149,7 +157,11 @@ const sidebarItems: SidebarItem[] = [
       { name: 'Validade & Perdas', href: '/dashboard/relatorios/validade' },
       { name: 'Acompanhamento de Metas', href: '/dashboard/relatorios/metas' },
       { name: 'Histórico de Caixas', href: '/dashboard/relatorios/fechamentos' },
-      { id: 'relatorios_dre', name: 'DRE - Demonstrativo (Financeiro)', href: '/dashboard/relatorios/dre' },
+      {
+        id: 'relatorios_dre',
+        name: 'DRE - Demonstrativo (Financeiro)',
+        href: '/dashboard/relatorios/dre',
+      },
     ],
   },
   {
@@ -159,9 +171,21 @@ const sidebarItems: SidebarItem[] = [
     icon: <DollarSign className="h-5 w-5" />,
     allowedRoles: ['admin', 'master'],
     children: [
-    { id: 'financeiro_contas_pagar', name: 'Contas a Pagar', href: '/dashboard/financeiro/contas-pagar' },
-      { id: 'financeiro_conferencia', name: 'Conferência de Caixas', href: '/dashboard/financeiro/conferencia' },
-      { id: 'financeiro_relatorios', name: 'Relatórios Financeiros', href: '/dashboard/relatorios/dre' },
+      {
+        id: 'financeiro_contas_pagar',
+        name: 'Contas a Pagar',
+        href: '/dashboard/financeiro/contas-pagar',
+      },
+      {
+        id: 'financeiro_conferencia',
+        name: 'Conferência de Caixas',
+        href: '/dashboard/financeiro/conferencia',
+      },
+      {
+        id: 'financeiro_relatorios',
+        name: 'Relatórios Financeiros',
+        href: '/dashboard/relatorios/dre',
+      },
     ],
   },
   // Link adicional para mobile: garante acesso rápido em telas pequenas
@@ -179,14 +203,47 @@ const sidebarItems: SidebarItem[] = [
     icon: <Settings className="h-5 w-5" />,
     allowedRoles: ['admin', 'master'],
     children: [
-      { name: 'Sistema & Regras', id: 'configuracoes_sistema', href: '/dashboard/configuracoes/sistema' },
-      { name: 'Permissões', id: 'configuracoes_permissoes', href: '/dashboard/configuracoes/permissoes', allowedRoles: ['admin', 'master'] },
-      { name: 'Aparência & Tema', id: 'configuracoes_customizacao', href: '/dashboard/configuracoes/customizacao' },
-      { name: 'Cadastro de Lojas', id: 'configuracoes_lojas', href: '/dashboard/configuracoes/lojas' },
-      { name: 'Promoções & Combos', id: 'configuracoes_promocoes', href: '/dashboard/configuracoes/promocoes' },
-      { name: 'Equipe & Usuários', id: 'configuracoes_usuarios', href: '/dashboard/configuracoes/usuarios' },
-      { name: 'Gestão de Metas', id: 'configuracoes_metas', href: '/dashboard/configuracoes/metas' },
-      { name: 'Gestão de Fidelidade', id: 'configuracoes_fidelidade', href: '/dashboard/configuracoes/fidelidade' },
+      {
+        name: 'Sistema & Regras',
+        id: 'configuracoes_sistema',
+        href: '/dashboard/configuracoes/sistema',
+      },
+      {
+        name: 'Permissões',
+        id: 'configuracoes_permissoes',
+        href: '/dashboard/configuracoes/permissoes',
+        allowedRoles: ['admin', 'master'],
+      },
+      {
+        name: 'Aparência & Tema',
+        id: 'configuracoes_customizacao',
+        href: '/dashboard/configuracoes/customizacao',
+      },
+      {
+        name: 'Cadastro de Lojas',
+        id: 'configuracoes_lojas',
+        href: '/dashboard/configuracoes/lojas',
+      },
+      {
+        name: 'Promoções & Combos',
+        id: 'configuracoes_promocoes',
+        href: '/dashboard/configuracoes/promocoes',
+      },
+      {
+        name: 'Equipe & Usuários',
+        id: 'configuracoes_usuarios',
+        href: '/dashboard/configuracoes/usuarios',
+      },
+      {
+        name: 'Gestão de Metas',
+        id: 'configuracoes_metas',
+        href: '/dashboard/configuracoes/metas',
+      },
+      {
+        name: 'Gestão de Fidelidade',
+        id: 'configuracoes_fidelidade',
+        href: '/dashboard/configuracoes/fidelidade',
+      },
     ],
   },
   {
@@ -203,7 +260,11 @@ const sidebarItems: SidebarItem[] = [
     adminOnly: true,
     children: [
       { id: 'admin_novo_cliente', name: 'Novo Cliente', href: '/dashboard/admin/novo-cliente' },
-      { id: 'configuracoes_usuarios', name: 'Equipe & Usuários', href: '/dashboard/configuracoes/usuarios' },
+      {
+        id: 'configuracoes_usuarios',
+        name: 'Equipe & Usuários',
+        href: '/dashboard/configuracoes/usuarios',
+      },
     ],
   },
 ];
@@ -250,10 +311,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           let parsedOrg: Record<string, string[]> = {};
           try {
             if (globalData && globalData.valor) parsedGlobal = JSON.parse(globalData.valor);
-          } catch {}
+          } catch (e) {
+            void e;
+          }
           try {
             if (orgData && orgData.valor) parsedOrg = JSON.parse(orgData.valor);
-          } catch {}
+          } catch (e) {
+            void e;
+          }
 
           const merged = { ...DEFAULT_PERMISSOES, ...(parsedGlobal || {}), ...(parsedOrg || {}) };
           setPermissoes(merged as Record<string, string[]>);
@@ -342,14 +407,18 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     if (rolePerms.includes('all')) return true;
 
     // Determina id do módulo para checagem (prefere item.id, senão deriva do href)
-    const moduleId = (item as any).id ?? (() => {
-      try {
-        const parts = item.href.split('/').filter(Boolean);
-        if (parts.length === 0) return item.href;
-        // ex: /dashboard/producao -> 'producao' ou '/dashboard' -> 'dashboard'
-        return parts[parts.length - 1] === 'dashboard' ? 'dashboard' : parts[parts.length - 1];
-      } catch { return item.href; }
-    })();
+    const moduleId =
+      (item as any).id ??
+      (() => {
+        try {
+          const parts = item.href.split('/').filter(Boolean);
+          if (parts.length === 0) return item.href;
+          // ex: /dashboard/producao -> 'producao' ou '/dashboard' -> 'dashboard'
+          return parts[parts.length - 1] === 'dashboard' ? 'dashboard' : parts[parts.length - 1];
+        } catch {
+          return item.href;
+        }
+      })();
 
     return rolePerms.includes(moduleId);
   };
@@ -434,54 +503,54 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
           <div className={`space-y-1 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
             {pinnedPages.slice(0, isCollapsed ? 5 : 10).map((href) => {
-                const item =
-                  sidebarItems.find((si) => si.href === href) ||
-                  sidebarItems.find((si) => si.children?.some((c) => c.href === href));
-                if (!item) return null;
+              const item =
+                sidebarItems.find((si) => si.href === href) ||
+                sidebarItems.find((si) => si.children?.some((c) => c.href === href));
+              if (!item) return null;
 
-                // ocultar favoritos que o usuário não tem acesso
-                if (!hasAccess(item)) return null;
+              // ocultar favoritos que o usuário não tem acesso
+              if (!hasAccess(item)) return null;
 
-                const childItem = item.children?.find((c) => c.href === href);
-                // Se o sub-item tiver restrição de roles e o usuário não tiver, ocultar
-                if (
-                  childItem &&
-                  childItem.allowedRoles &&
-                  !childItem.allowedRoles.includes(profile?.role ?? '')
-                )
-                  return null;
-                const displayItem = childItem || item;
+              const childItem = item.children?.find((c) => c.href === href);
+              // Se o sub-item tiver restrição de roles e o usuário não tiver, ocultar
+              if (
+                childItem &&
+                childItem.allowedRoles &&
+                !childItem.allowedRoles.includes(profile?.role ?? '')
+              )
+                return null;
+              const displayItem = childItem || item;
 
-                return (
-                  <Link
-                    key={`fav-${displayItem.href}`}
-                    href={displayItem.href}
-                    onClick={handleNavClick}
-                    onMouseEnter={() => setHoveredItem(displayItem.href)}
-                    onMouseLeave={() => setHoveredItem(null)}
-                    className={`flex items-center rounded-md p-2 text-sm transition-colors text-slate-600 ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
-                    title={isCollapsed ? displayItem.name : undefined}
-                    style={
-                      hoveredItem === displayItem.href
-                        ? {
-                            backgroundColor: 'var(--sidebar-hover-bg)',
-                            color: 'var(--sidebar-active-text)',
-                            opacity: 0.92,
-                          }
-                        : undefined
-                    }
-                  >
-                    <span style={{ color: 'var(--sidebar-text)' }}>
-                      {childItem ? <ChevronRight size={14} /> : item.icon}
+              return (
+                <Link
+                  key={`fav-${displayItem.href}`}
+                  href={displayItem.href}
+                  onClick={handleNavClick}
+                  onMouseEnter={() => setHoveredItem(displayItem.href)}
+                  onMouseLeave={() => setHoveredItem(null)}
+                  className={`flex items-center rounded-md p-2 text-sm transition-colors text-slate-600 ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
+                  title={isCollapsed ? displayItem.name : undefined}
+                  style={
+                    hoveredItem === displayItem.href
+                      ? {
+                          backgroundColor: 'var(--sidebar-hover-bg)',
+                          color: 'var(--sidebar-active-text)',
+                          opacity: 0.92,
+                        }
+                      : undefined
+                  }
+                >
+                  <span style={{ color: 'var(--sidebar-text)' }}>
+                    {childItem ? <ChevronRight size={14} /> : item.icon}
+                  </span>
+                  {!isCollapsed && (
+                    <span className="truncate font-medium" style={{ color: 'var(--sidebar-text)' }}>
+                      {displayItem.name}
                     </span>
-                    {!isCollapsed && (
-                      <span className="truncate font-medium" style={{ color: 'var(--sidebar-text)' }}>
-                        {displayItem.name}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
+                  )}
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}
@@ -497,22 +566,30 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             // calcula subitens visíveis de acordo com permissões e allowedRoles
             const visibleChildren = (item.children || []).filter((child) => {
-              if (child.allowedRoles && !child.allowedRoles.includes(profile?.role ?? '')) return false;
+              if (child.allowedRoles && !child.allowedRoles.includes(profile?.role ?? ''))
+                return false;
               const hasConfig = Object.keys(permissoes).length > 0;
               if (hasConfig && profile?.role !== 'master') {
                 const role = profile?.role ?? '';
                 const rolePerms = permissoes[role] || DEFAULT_PERMISSOES[role] || [];
                 if (!rolePerms.includes('all')) {
-                  const childModuleId = (child as any).id ?? (() => {
-                    try {
-                      const parts = child.href.split('/').filter(Boolean);
-                      return parts[parts.length - 1];
-                    } catch {
-                      return child.href;
-                    }
-                  })();
+                  const childModuleId =
+                    (child as any).id ??
+                    (() => {
+                      try {
+                        const parts = child.href.split('/').filter(Boolean);
+                        return parts[parts.length - 1];
+                      } catch {
+                        return child.href;
+                      }
+                    })();
                   const parentModuleId = (item as any).id;
-                  if (!(rolePerms.includes(childModuleId) || (parentModuleId && rolePerms.includes(parentModuleId)))) {
+                  if (
+                    !(
+                      rolePerms.includes(childModuleId) ||
+                      (parentModuleId && rolePerms.includes(parentModuleId))
+                    )
+                  ) {
                     return false;
                   }
                 }
@@ -553,14 +630,24 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       onClick={handleNavClick}
                       className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
                     >
-                      <span style={{ color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)' }}>
+                      <span
+                        style={{
+                          color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+                        }}
+                      >
                         {item.icon}
                       </span>
                       {!isCollapsed && <span className="flex-1">{item.name}</span>}
                     </Link>
                   ) : (
-                    <div className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}>
-                      <span style={{ color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)' }}>
+                    <div
+                      className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
+                    >
+                      <span
+                        style={{
+                          color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+                        }}
+                      >
                         {item.icon}
                       </span>
                       {!isCollapsed && (
@@ -605,65 +692,68 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   )}
                 </div>
 
-                {!isCollapsed && visibleChildren && visibleChildren.length > 0 && openSubmenu === item.name && (
-                  <ul className="mt-1 ml-9 animate-fade-up space-y-1 border-l border-slate-200 pl-2">
-                    {visibleChildren.map((child) => {
-                      const childActive = isActive(child.href);
-                      const childIsHovered = hoveredItem === child.href;
-                      return (
-                        <li key={child.name}>
-                          <div className="group/sub flex items-center justify-between">
-                            <Link
-                              href={child.href}
-                              onMouseEnter={() => setHoveredItem(child.href)}
-                              onMouseLeave={() => setHoveredItem(null)}
-                              className={`flex-1 block rounded-md px-3 py-2 text-sm transition-colors`}
-                              style={
-                                childActive
-                                  ? {
-                                      backgroundColor:
-                                        'var(--sidebar-active-bg, rgba(59,130,246,0.08))',
-                                      color: 'var(--sidebar-active-text, #0f172a)',
-                                      boxShadow: 'inset 4px 0 0 var(--sidebar-accent, #f59e0b)',
-                                    }
-                                  : childIsHovered
+                {!isCollapsed &&
+                  visibleChildren &&
+                  visibleChildren.length > 0 &&
+                  openSubmenu === item.name && (
+                    <ul className="mt-1 ml-9 animate-fade-up space-y-1 border-l border-slate-200 pl-2">
+                      {visibleChildren.map((child) => {
+                        const childActive = isActive(child.href);
+                        const childIsHovered = hoveredItem === child.href;
+                        return (
+                          <li key={child.name}>
+                            <div className="group/sub flex items-center justify-between">
+                              <Link
+                                href={child.href}
+                                onMouseEnter={() => setHoveredItem(child.href)}
+                                onMouseLeave={() => setHoveredItem(null)}
+                                className={`flex-1 block rounded-md px-3 py-2 text-sm transition-colors`}
+                                style={
+                                  childActive
                                     ? {
                                         backgroundColor:
-                                          'var(--sidebar-hover-bg, rgba(15,23,42,0.06))',
+                                          'var(--sidebar-active-bg, rgba(59,130,246,0.08))',
                                         color: 'var(--sidebar-active-text, #0f172a)',
-                                        opacity: 0.98,
+                                        boxShadow: 'inset 4px 0 0 var(--sidebar-accent, #f59e0b)',
                                       }
-                                    : undefined
-                              }
-                            >
-                              {child.name}
-                            </Link>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                togglePinPage(child.href);
-                              }}
-                              className={`pr-2 opacity-60 transition-opacity group-hover/sub:opacity-100 ${isPagePinned(child.href) ? 'opacity-100' : ''}`}
-                              style={
-                                isPagePinned(child.href)
-                                  ? { color: 'var(--yellow-400, #f6c90a)' }
-                                  : { color: 'var(--sidebar-active-text)' }
-                              }
-                            >
-                              <Star
-                                size={12}
-                                fill={isPagePinned(child.href) ? 'currentColor' : 'none'}
-                                stroke={'var(--sidebar-active-text)'}
-                                strokeWidth={1.2}
-                              />
-                            </button>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+                                    : childIsHovered
+                                      ? {
+                                          backgroundColor:
+                                            'var(--sidebar-hover-bg, rgba(15,23,42,0.06))',
+                                          color: 'var(--sidebar-active-text, #0f172a)',
+                                          opacity: 0.98,
+                                        }
+                                      : undefined
+                                }
+                              >
+                                {child.name}
+                              </Link>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  togglePinPage(child.href);
+                                }}
+                                className={`pr-2 opacity-60 transition-opacity group-hover/sub:opacity-100 ${isPagePinned(child.href) ? 'opacity-100' : ''}`}
+                                style={
+                                  isPagePinned(child.href)
+                                    ? { color: 'var(--yellow-400, #f6c90a)' }
+                                    : { color: 'var(--sidebar-active-text)' }
+                                }
+                              >
+                                <Star
+                                  size={12}
+                                  fill={isPagePinned(child.href) ? 'currentColor' : 'none'}
+                                  stroke={'var(--sidebar-active-text)'}
+                                  strokeWidth={1.2}
+                                />
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
               </li>
             );
           })}

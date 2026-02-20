@@ -2,19 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth';
 import { Card } from '@/components/dashboard/Card'; // Importando seu novo Card
-import { 
-  DollarSign, 
-  TrendingUp, 
-  TrendingDown, 
-  ShoppingBag, 
+import {
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  ShoppingBag,
   CreditCard,
-  MoreHorizontal
+  MoreHorizontal,
 } from 'lucide-react';
 
 // Utilitário de formatação
-const formatMoney = (val: number) => 
+const formatMoney = (val: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
 interface FinancialData {
@@ -26,31 +25,56 @@ interface FinancialData {
   ticketMedioAnterior: number;
 }
 
-export default function AdminFinancialWidget() {
-  const { profile } = useAuth();
+interface WidgetProps {
+  filtros?: any;
+  auxFiltro?: any;
+  organizationId?: string;
+  profile?: any;
+}
+
+export default function AdminFinancialWidget({
+  filtros,
+  auxFiltro,
+  organizationId,
+  profile,
+}: WidgetProps) {
   const [data, setData] = useState<FinancialData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchFinancials() {
-      if (!profile?.organization_id) return;
+      if (!organizationId) return;
 
       try {
         const now = new Date();
-        
+
         // Datas Mês Atual
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+        const endOfMonth = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59
+        ).toISOString();
 
         // Datas Mês Anterior
         const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
-        const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString();
+        const endOfLastMonth = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          0,
+          23,
+          59,
+          59
+        ).toISOString();
 
         // 1. Buscar Vendas Mês Atual
         const { data: vendasAtual, error: errAtual } = await supabase
           .from('vendas')
           .select('total_venda')
-          .eq('organization_id', profile.organization_id)
+          .eq('organization_id', organizationId)
           .eq('status', 'concluida')
           .gte('created_at', startOfMonth)
           .lte('created_at', endOfMonth);
@@ -61,7 +85,7 @@ export default function AdminFinancialWidget() {
         const { data: vendasAnterior, error: errAnterior } = await supabase
           .from('vendas')
           .select('total_venda')
-          .eq('organization_id', profile.organization_id)
+          .eq('organization_id', organizationId)
           .eq('status', 'concluida')
           .gte('created_at', startOfLastMonth)
           .lte('created_at', endOfLastMonth);
@@ -69,11 +93,13 @@ export default function AdminFinancialWidget() {
         if (errAnterior) throw errAnterior;
 
         // Cálculos
-        const totalAtual = vendasAtual?.reduce((acc, curr) => acc + (curr.total_venda || 0), 0) || 0;
+        const totalAtual =
+          vendasAtual?.reduce((acc, curr) => acc + (curr.total_venda || 0), 0) || 0;
         const countAtual = vendasAtual?.length || 0;
         const ticketAtual = countAtual > 0 ? totalAtual / countAtual : 0;
 
-        const totalAnterior = vendasAnterior?.reduce((acc, curr) => acc + (curr.total_venda || 0), 0) || 0;
+        const totalAnterior =
+          vendasAnterior?.reduce((acc, curr) => acc + (curr.total_venda || 0), 0) || 0;
         const countAnterior = vendasAnterior?.length || 0;
         const ticketAnterior = countAnterior > 0 ? totalAnterior / countAnterior : 0;
 
@@ -83,9 +109,8 @@ export default function AdminFinancialWidget() {
           qtdVendas: countAtual,
           qtdVendasAnterior: countAnterior,
           ticketMedio: ticketAtual,
-          ticketMedioAnterior: ticketAnterior
+          ticketMedioAnterior: ticketAnterior,
         });
-
       } catch (error) {
         console.error('Erro financeiro:', error);
       } finally {
@@ -94,7 +119,7 @@ export default function AdminFinancialWidget() {
     }
 
     fetchFinancials();
-  }, [profile]);
+  }, [organizationId, filtros, auxFiltro, profile]);
 
   const getGrowth = (atual: number, anterior: number) => {
     if (anterior === 0) return atual > 0 ? 100 : 0;
@@ -105,9 +130,15 @@ export default function AdminFinancialWidget() {
   if (loading || !data) {
     return (
       <>
-        <Card title="Faturamento" loading={true} size="1x1">{null}</Card>
-        <Card title="Vendas" loading={true} size="1x1">{null}</Card>
-        <Card title="Ticket Médio" loading={true} size="1x1">{null}</Card>
+        <Card title="Faturamento" loading={true} size="1x1">
+          {null}
+        </Card>
+        <Card title="Vendas" loading={true} size="1x1">
+          {null}
+        </Card>
+        <Card title="Ticket Médio" loading={true} size="1x1">
+          {null}
+        </Card>
       </>
     );
   }
@@ -179,8 +210,14 @@ export default function AdminFinancialWidget() {
 function GrowthBadge({ value }: { value: number }) {
   const isPos = value >= 0;
   return (
-    <div className={`flex items-center text-xs font-bold px-2 py-1 rounded-full ${isPos ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-      {isPos ? <TrendingUp size={12} className="mr-1"/> : <TrendingDown size={12} className="mr-1"/>}
+    <div
+      className={`flex items-center text-xs font-bold px-2 py-1 rounded-full ${isPos ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+    >
+      {isPos ? (
+        <TrendingUp size={12} className="mr-1" />
+      ) : (
+        <TrendingDown size={12} className="mr-1" />
+      )}
       {Math.abs(value).toFixed(1)}%
     </div>
   );

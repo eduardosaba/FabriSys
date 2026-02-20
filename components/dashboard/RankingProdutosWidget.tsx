@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import safeSelect from '@/lib/supabaseSafeSelect';
-import { useAuth } from '@/lib/auth';
 import { Card } from '@/components/dashboard/Card';
 import { Trophy, TrendingUp, Package } from 'lucide-react';
 
@@ -15,15 +14,26 @@ interface ProdutoRanking {
   ticket_medio: number;
 }
 
-export default function RankingProdutosWidget() {
-  const { profile } = useAuth();
+interface WidgetProps {
+  filtros?: any;
+  auxFiltro?: any;
+  organizationId?: string;
+  profile?: any;
+}
+
+export default function RankingProdutosWidget({
+  filtros,
+  auxFiltro,
+  organizationId,
+  profile,
+}: WidgetProps) {
   const [items, setItems] = useState<ProdutoRanking[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchRanking() {
       try {
-        if (!profile?.organization_id) return;
+        if (!organizationId) return;
 
         const hoje = new Date();
         const trintaDiasAtras = new Date();
@@ -41,11 +51,12 @@ export default function RankingProdutosWidget() {
               supabase,
               'itens_venda',
               'produto_id, quantidade, valor_total, subtotal, preco_unitario, created_at',
-              (b: any) => b
-                .eq('organization_id', profile.organization_id)
-                .gte('created_at', trintaDiasAtras.toISOString())
-                .lte('created_at', hoje.toISOString())
-                .range(i, i + chunkSize - 1)
+              (b: any) =>
+                b
+                  .eq('organization_id', organizationId)
+                  .gte('created_at', trintaDiasAtras.toISOString())
+                  .lte('created_at', hoje.toISOString())
+                  .range(i, i + chunkSize - 1)
             );
             itensChunk = resp.data as any[] | null;
             itensErr = resp.error;
@@ -61,7 +72,7 @@ export default function RankingProdutosWidget() {
                 supabase,
                 'itens_venda',
                 'produto_id, quantidade, valor_total, subtotal, preco_unitario, created_at',
-                (b: any) => b.eq('organization_id', profile.organization_id).range(i, i + chunkSize - 1)
+                (b: any) => b.eq('organization_id', organizationId).range(i, i + chunkSize - 1)
               );
               itensChunk = fallback.data as any[] | null;
               itensErr = fallback.error;
@@ -74,7 +85,9 @@ export default function RankingProdutosWidget() {
           if (itensChunk.length < chunkSize) break;
         }
 
-        const produtoIds = Array.from(new Set(allItens.map((it) => String(it.produto_id)).filter(Boolean)));
+        const produtoIds = Array.from(
+          new Set(allItens.map((it) => String(it.produto_id)).filter(Boolean))
+        );
         const produtoMap: Record<string, { id: string; nome: string }> = {};
         if (produtoIds.length > 0) {
           for (let i = 0; i < produtoIds.length; i += chunkSize) {
@@ -117,7 +130,11 @@ export default function RankingProdutosWidget() {
           }
           agrupado[prodId].quantidade_total += Number(item.quantidade || 0);
           // compatibilidade: usar valor_total se existir, senão subtotal, senão preco_unitario * quantidade
-          const itemValor = Number(item.valor_total ?? item.subtotal ?? (item.preco_unitario ? item.preco_unitario * (item.quantidade || 0) : 0));
+          const itemValor = Number(
+            item.valor_total ??
+              item.subtotal ??
+              (item.preco_unitario ? item.preco_unitario * (item.quantidade || 0) : 0)
+          );
           agrupado[prodId].valor_total += itemValor;
         });
 
@@ -138,7 +155,7 @@ export default function RankingProdutosWidget() {
     }
 
     void fetchRanking();
-  }, [profile]);
+  }, [organizationId, filtros, auxFiltro, profile]);
 
   const getRankStyle = (index: number) => {
     switch (index) {
@@ -194,14 +211,22 @@ export default function RankingProdutosWidget() {
                     </span>
                     <span>•</span>
                     <span className="flex items-center gap-1">
-                      <TrendingUp size={10} /> Médio: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(prod.ticket_medio)}
+                      <TrendingUp size={10} /> Médio:{' '}
+                      {new Intl.NumberFormat('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                      }).format(prod.ticket_medio)}
                     </span>
                   </div>
                 </div>
 
                 <div className="text-right shrink-0">
                   <span className="block font-bold text-sm">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(prod.valor_total)}
+                    {new Intl.NumberFormat('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                      notation: 'compact',
+                    }).format(prod.valor_total)}
                   </span>
                 </div>
               </div>

@@ -11,6 +11,7 @@ import Card from '@/components/ui/Card';
 import Panel from '@/components/ui/Panel';
 import { maskCpfCnpj, onlyDigits } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
+import { Toaster, toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 
 const schema = z.object({
@@ -45,7 +46,7 @@ interface CategoriaOption {
 export default function CadastroFornecedorPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [categorias, setCategorias] = useState<CategoriaOption[]>([]);
   const {
     register,
@@ -56,12 +57,38 @@ export default function CadastroFornecedorPage() {
   async function onSubmit(values: FormData) {
     try {
       setSaving(true);
+      if (authLoading) {
+        toast.error('Aguardando autenticação. Tente novamente em instantes.');
+        return;
+      }
+      if (!profile?.organization_id) {
+        toast.error('Organização não encontrada. Não é possível cadastrar.');
+        return;
+      }
+
       const payload: Record<string, unknown> = { ...values };
       if (values.cnpj) payload.cnpj = onlyDigits(values.cnpj);
       else delete payload.cnpj;
       if (values.categoria_id) payload.categoria_id = Number(values.categoria_id);
-      const { error } = await supabase.from('fornecedores').insert(payload);
-      if (error) throw error;
+
+      // Prefer RPC insert_fornecedor (SECURITY DEFINER) to avoid RLS issues.
+      try {
+        const rpc = (await supabase.rpc('insert_fornecedor', {
+          p_nome: String(values.nome),
+          p_cnpj: payload.cnpj ?? null,
+          p_email: (values.email as string) ?? null,
+          p_telefone: (values.telefone as string) ?? null,
+          p_categoria_id: values.categoria_id ? String(values.categoria_id) : null,
+        })) as any;
+
+        if (rpc?.error) throw rpc.error;
+      } catch (rpcErr: any) {
+        // Fallback: tentar insert direto (pode falhar por RLS)
+        const { error } = await supabase
+          .from('fornecedores')
+          .insert({ ...payload, organization_id: profile.organization_id });
+        if (error) throw error;
+      }
       router.push('/dashboard/fornecedores');
     } catch (err) {
       console.error(err);
@@ -72,6 +99,9 @@ export default function CadastroFornecedorPage() {
   }
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!profile?.organization_id) return;
+
     let mounted = true;
     async function load() {
       try {
@@ -214,7 +244,7 @@ export default function CadastroFornecedorPage() {
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || authLoading || !profile?.organization_id}>
               {saving ? 'Salvando...' : 'Salvar'}
             </Button>
           </div>

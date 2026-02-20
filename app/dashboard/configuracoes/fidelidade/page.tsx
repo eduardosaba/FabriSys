@@ -9,12 +9,13 @@ import { Gift, Save, Search, User } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function FidelidadeConfigPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const [fatorPontos, setFatorPontos] = useState('0.05');
   const [fidelidadeAtiva, setFidelidadeAtiva] = useState(true);
   const [clientes, setClientes] = useState<any[]>([]);
   const [busca, setBusca] = useState('');
   const [loading, setLoading] = useState(false);
-  const { profile } = useAuth();
 
   useEffect(() => {
     void supabase
@@ -62,16 +63,18 @@ export default function FidelidadeConfigPage() {
         const payload = updates.map((u) => ({ ...u, updated_at: timestamp }));
 
         // Usar RPC para upsert seguro por chave
-        const results = await Promise.all(payload.map(async (p) => {
-          const rpcPayload = {
-            p_organization_id: profile?.organization_id || null,
-            p_chave: p.chave,
-            p_valor: p.valor,
-          };
-          const { error } = await supabase.rpc('rpc_upsert_configuracoes_sistema', rpcPayload);
-          if (error) throw error;
-          return true;
-        }));
+        const results = await Promise.all(
+          payload.map(async (p) => {
+            const rpcPayload = {
+              p_organization_id: profile?.organization_id || null,
+              p_chave: p.chave,
+              p_valor: p.valor,
+            };
+            const { error } = await supabase.rpc('rpc_upsert_configuracoes_sistema', rpcPayload);
+            if (error) throw error;
+            return true;
+          })
+        );
 
         return results.length > 0;
       })();

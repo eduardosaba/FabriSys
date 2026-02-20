@@ -1,8 +1,14 @@
- 'use client';
+'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
-import { FLOAT_BTN_SIZE, loadFloatingPosition, saveFloatingPosition, saveFloatingPositionServer, loadFloatingPositionServer } from './floatingPosition';
+import {
+  FLOAT_BTN_SIZE,
+  loadFloatingPosition,
+  saveFloatingPosition,
+  saveFloatingPositionServer,
+  loadFloatingPositionServer,
+} from './floatingPosition';
 import { Calculator, X, Minus, Maximize2, Delete } from 'lucide-react';
 
 export default function DraggableCalculator() {
@@ -111,7 +117,9 @@ export default function DraggableCalculator() {
       try {
         saveFloatingPosition('floating:calculator', position);
         void saveFloatingPositionServer(profile?.id, 'floating:calculator', position);
-      } catch (e) {}
+      } catch (e) {
+        void e;
+      }
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
@@ -145,7 +153,9 @@ export default function DraggableCalculator() {
       try {
         saveFloatingPosition('floating:calculator', position);
         void saveFloatingPositionServer(profile?.id, 'floating:calculator', position);
-      } catch (e) {}
+      } catch (e) {
+        void e;
+      }
       document.removeEventListener('touchmove', onMove as any);
       document.removeEventListener('touchend', onEnd as any);
     };
@@ -225,7 +235,11 @@ export default function DraggableCalculator() {
         onClick={() => setIsOpen(true)}
         className="fixed bg-slate-800 text-white p-3 rounded-full shadow-lg hover:bg-slate-700 hover:scale-110 transition-all z-50 flex items-center gap-2 group"
         title="Abrir Calculadora"
-        style={position ? { left: position.x, top: position.y } : { bottom: bottomOffset, right: rightOffset }}
+        style={
+          position
+            ? { left: position.x, top: position.y }
+            : { bottom: bottomOffset, right: rightOffset }
+        }
       >
         <Calculator size={24} />
         <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 whitespace-nowrap text-sm font-bold">
@@ -261,7 +275,7 @@ export default function DraggableCalculator() {
         handleMouseDown(e);
       }}
       onTouchStart={(e) => {
-        const tgt = (e.target as HTMLElement);
+        const tgt = e.target as HTMLElement;
         if (tgt.closest('button, input, a, textarea, select')) return;
         handleTouchStart(e);
       }}

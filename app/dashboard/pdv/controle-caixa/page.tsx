@@ -231,7 +231,10 @@ export default function ControleCaixaPage() {
 
   const parseCurrency = (formatted: string) => {
     if (!formatted) return 0;
-    const cleaned = String(formatted).replace(/\./g, '').replace(/,/g, '.').replace(/[^0-9.\-]/g, '');
+    const cleaned = String(formatted)
+      .replace(/\./g, '')
+      .replace(/,/g, '.')
+      .replace(/[^0-9.-]/g, '');
     const n = parseFloat(cleaned);
     return Number.isFinite(n) ? n : 0;
   };
@@ -245,7 +248,8 @@ export default function ControleCaixaPage() {
       return toast.error('Selecione uma loja para abrir o caixa.');
     }
 
-    if (!profile?.organization_id) return toast.error('Erro: Organização não identificada no seu perfil.');
+    if (!profile?.organization_id)
+      return toast.error('Erro: Organização não identificada no seu perfil.');
 
     try {
       // Checagem rápida: evita tentar abrir se já existe caixa aberto para este local
@@ -257,7 +261,10 @@ export default function ControleCaixaPage() {
           .eq('status', 'aberto')
           .maybeSingle();
         if (chkErr) console.warn('Erro ao checar caixa aberto existente', chkErr);
-        if (already) return toast.error('Já existe um caixa aberto para esta loja. Feche-o antes de abrir outro.');
+        if (already)
+          return toast.error(
+            'Já existe um caixa aberto para esta loja. Feche-o antes de abrir outro.'
+          );
       } catch (e) {
         console.warn('Falha na checagem de caixa aberto (ignorando):', e);
       }
@@ -593,7 +600,10 @@ export default function ControleCaixaPage() {
                     placeholder="0,00"
                     value={valoresFechamento.dinheiro}
                     onChange={(e) =>
-                      setValoresFechamento({ ...valoresFechamento, dinheiro: formatCurrencyInput(e.target.value) })
+                      setValoresFechamento({
+                        ...valoresFechamento,
+                        dinheiro: formatCurrencyInput(e.target.value),
+                      })
                     }
                   />
                 </div>
@@ -609,7 +619,10 @@ export default function ControleCaixaPage() {
                       placeholder="0,00"
                       value={valoresFechamento.pix}
                       onChange={(e) =>
-                        setValoresFechamento({ ...valoresFechamento, pix: formatCurrencyInput(e.target.value) })
+                        setValoresFechamento({
+                          ...valoresFechamento,
+                          pix: formatCurrencyInput(e.target.value),
+                        })
                       }
                     />
                   </div>
@@ -624,7 +637,10 @@ export default function ControleCaixaPage() {
                       placeholder="0,00"
                       value={valoresFechamento.cartao}
                       onChange={(e) =>
-                        setValoresFechamento({ ...valoresFechamento, cartao: formatCurrencyInput(e.target.value) })
+                        setValoresFechamento({
+                          ...valoresFechamento,
+                          cartao: formatCurrencyInput(e.target.value),
+                        })
                       }
                     />
                   </div>

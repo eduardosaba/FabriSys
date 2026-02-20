@@ -283,9 +283,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchScopedThemeColors = useCallback(
-    async (
-      options: { userId?: string; organizationId?: string }
-    ): Promise<Partial<ThemeColors> | null> => {
+    async (options: {
+      userId?: string;
+      organizationId?: string;
+    }): Promise<Partial<ThemeColors> | null> => {
       try {
         // Primeiro tenta buscar tema vinculado à organização (maior prioridade)
         if (options.organizationId) {
@@ -378,7 +379,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       if (organizationId) {
         const { data: sysRow } = await supabase
           .from('configuracoes_sistema')
-          .select('logo_url, company_logo_url, company_name, nome_empresa, theme, theme_mode, primary_color, colors_json, features')
+          .select(
+            'logo_url, company_logo_url, company_name, nome_empresa, theme, theme_mode, primary_color, colors_json, features'
+          )
           .eq('chave', 'system_settings')
           .eq('organization_id', organizationId)
           .limit(1)
@@ -389,12 +392,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       // Fallback to global
       const { data: globalRow } = await supabase
         .from('configuracoes_sistema')
-        .select('logo_url, company_logo_url, company_name, nome_empresa, theme, theme_mode, primary_color, colors_json, features')
+        .select(
+          'logo_url, company_logo_url, company_name, nome_empresa, theme, theme_mode, primary_color, colors_json, features'
+        )
         .eq('chave', 'system_settings')
         .is('organization_id', null)
         .limit(1)
         .maybeSingle();
-      return globalRow as any || null;
+      return (globalRow as any) || null;
     } catch (err) {
       console.error('Erro ao buscar system_settings:', err);
       return null;
@@ -402,10 +407,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const saveScopedThemeColors = useCallback(
-    async (
-      options: { userId?: string; organizationId?: string },
-      colors: Partial<ThemeColors>
-    ) => {
+    async (options: { userId?: string; organizationId?: string }, colors: Partial<ThemeColors>) => {
       try {
         // Proteção: evite tentar upserts quando não houver um usuário autenticado.
         // Chamadas anônimas chegarão ao Postgres sem auth.uid() e serão bloqueadas por RLS.
@@ -420,25 +422,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
           // Se estamos gravando por organização, confirme que o usuário pertence a ela
           if (options.organizationId) {
-            try {
-              const { data: profileData, error: profErr } = await supabase
-                .from('profiles')
-                .select('organization_id')
-                .eq('id', user.id)
-                .maybeSingle();
-              if (profErr) {
-                console.warn('Não foi possível verificar organization_id do perfil:', profErr);
-                throw new Error('Erro ao validar organização do usuário');
-              }
-              const userOrg = (profileData as any)?.organization_id;
-              if (!userOrg || String(userOrg) !== String(options.organizationId)) {
-                console.warn(
-                  'Usuário não pertence à organization_id fornecida — abortando upsert.'
-                );
-                throw new Error('Usuário não autorizado para essa organização');
-              }
-            } catch (e) {
-              throw e;
+            const { data: profileData, error: profErr } = await supabase
+              .from('profiles')
+              .select('organization_id')
+              .eq('id', user.id)
+              .maybeSingle();
+            if (profErr) {
+              console.warn('Não foi possível verificar organization_id do perfil:', profErr);
+              throw new Error('Erro ao validar organização do usuário');
+            }
+            const userOrg = (profileData as any)?.organization_id;
+            if (!userOrg || String(userOrg) !== String(options.organizationId)) {
+              console.warn('Usuário não pertence à organization_id fornecida — abortando upsert.');
+              throw new Error('Usuário não autorizado para essa organização');
             }
           }
         } catch (authErr) {
@@ -500,7 +496,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
                 const { error: updErr } = await supabase
                   .from('user_theme_colors')
                   .update(payload)
-                  .eq('id', (existing as any).id);
+                  .eq('id', existing.id);
                 if (updErr) throw updErr;
                 return;
               }
@@ -534,7 +530,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
                 const { error: updErr } = await supabase
                   .from('user_theme_colors')
                   .update(payload)
-                  .eq('id', (existing as any).id);
+                  .eq('id', existing.id);
                 if (updErr) throw updErr;
                 return;
               }
@@ -698,7 +694,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             // Além de salvar em `user_theme_colors`, também gravar/atualizar a linha consolidada
             try {
               const themeModeForPrimary: 'light' | 'dark' =
-                updatedTheme.theme_mode === 'system' ? resolvedTheme : ((updatedTheme.theme_mode as any) ?? 'light');
+                updatedTheme.theme_mode === 'system'
+                  ? resolvedTheme
+                  : ((updatedTheme.theme_mode as any) ?? 'light');
 
               const rpcPayload = {
                 p_organization_id: resolvedOrgId,
@@ -709,7 +707,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
                   company_name: updatedTheme.footer_company_name,
                   theme: { mode: updatedTheme.theme_mode, colors: colorsToSave },
                   theme_mode: updatedTheme.theme_mode,
-                  primary_color: colorsToSave.primary ?? updatedTheme.colors?.[themeModeForPrimary]?.primary,
+                  primary_color:
+                    colorsToSave.primary ?? updatedTheme.colors?.[themeModeForPrimary]?.primary,
                   colors_json: colorsToSave,
                 },
               } as any;
@@ -780,7 +779,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             const userColors = await fetchScopedThemeColors({ userId: user.id });
             if (userColors) {
               const themeMode: 'light' | 'dark' =
-                systemTheme.theme_mode === 'system' ? resolvedTheme : (systemTheme.theme_mode as 'light' | 'dark');
+                systemTheme.theme_mode === 'system' ? resolvedTheme : systemTheme.theme_mode;
               activeTheme = {
                 ...systemTheme,
                 logo_url: userColors.logo_url || systemTheme.logo_url,
@@ -809,9 +808,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
               if (sys) {
                 let themeMode: 'light' | 'dark' = activeTheme.theme_mode as 'light' | 'dark';
                 if (sys.theme_mode) {
-                  themeMode = sys.theme_mode === 'system' ? resolvedTheme : (sys.theme_mode as 'light' | 'dark');
+                  themeMode =
+                    sys.theme_mode === 'system'
+                      ? resolvedTheme
+                      : (sys.theme_mode as 'light' | 'dark');
                 }
-                const sysColors = (sys.colors_json as any) || (sys.theme as any) || {};
+                const sysColors = sys.colors_json || sys.theme || {};
                 activeTheme = {
                   ...activeTheme,
                   logo_url: sys.logo_url || activeTheme.logo_url,

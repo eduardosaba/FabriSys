@@ -1,5 +1,5 @@
 'use client';
-
+import { useAuth } from '@/lib/auth';
 import { useState } from 'react';
 import getImageUrl from '@/lib/getImageUrl';
 import { useRouter } from 'next/navigation';
@@ -12,6 +12,8 @@ import { toast } from 'react-hot-toast';
 import { useTheme } from '@/lib/theme';
 
 export default function ResetPasswordPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
@@ -85,7 +87,10 @@ export default function ResetPasswordPage() {
               <div style={{ transform: `scale(${theme.logo_scale || 1})` }}>
                 <Image
                   src={
-                    getImageUrl(theme.company_logo_url) || getImageUrl(theme.logo_url) || theme.company_logo_url || theme.logo_url
+                    getImageUrl(theme.company_logo_url) ||
+                    getImageUrl(theme.logo_url) ||
+                    theme.company_logo_url ||
+                    theme.logo_url
                   }
                   alt={theme.name || 'Confectio'}
                   fill

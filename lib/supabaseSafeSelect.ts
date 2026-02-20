@@ -2,7 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Tenta um select e, em caso de erro 42703 (coluna não existe), remove
 // a coluna do select e re-tenta até esgotar as colunas.
-export async function safeSelect(client: SupabaseClient, table: string, selectFields: string, apply?: (builder: any) => any) {
+export async function safeSelect(
+  client: SupabaseClient,
+  table: string,
+  selectFields: string,
+  apply?: (builder: any) => any
+) {
   let fields = selectFields;
   const tried = new Set<string>();
 
@@ -28,7 +33,7 @@ export async function safeSelect(client: SupabaseClient, table: string, selectFi
     const finalBuilder = apply ? apply(builder) : builder;
     const res = await finalBuilder;
     // supabase returns { data, error }
-    const { data, error } = res as any;
+    const { data, error } = res;
     if (!error) return { data, error: null };
 
     const missing = extractMissing(error.message || error.error || error.details);
@@ -38,8 +43,11 @@ export async function safeSelect(client: SupabaseClient, table: string, selectFi
     tried.add(missing);
 
     // Remove missing column from fields and retry
-    const arr = fields.split(',').map(s => s.trim()).filter(Boolean);
-    const filtered = arr.filter(f => {
+    const arr = fields
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const filtered = arr.filter((f) => {
       const short = f.includes('.') ? f.split('.').pop() : f;
       return short !== missing;
     });

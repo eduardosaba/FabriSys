@@ -68,7 +68,7 @@ const PERFIS = [
 ];
 
 export default function PermissoesTab() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [permissoes, setPermissoes] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -118,10 +118,14 @@ export default function PermissoesTab() {
         let parsedOrg: Record<string, string[]> = {};
         try {
           if (globalData && globalData.valor) parsedGlobal = JSON.parse(globalData.valor);
-        } catch {}
+        } catch (e) {
+          void e;
+        }
         try {
           if (orgData && orgData.valor) parsedOrg = JSON.parse(orgData.valor);
-        } catch {}
+        } catch (e) {
+          void e;
+        }
 
         const merged = { ...DEFAULT_PERMISSOES, ...(parsedGlobal || {}), ...(parsedOrg || {}) };
         setPermissoes(merged as Record<string, string[]>);
@@ -221,8 +225,20 @@ export default function PermissoesTab() {
 
         // Verificação de leitura para confirmar persistência
         const verifyQuery = profile?.organization_id
-          ? supabase.from('configuracoes_sistema').select('valor').eq('chave', payload.chave).eq('organization_id', profile.organization_id).limit(1).maybeSingle()
-          : supabase.from('configuracoes_sistema').select('valor').eq('chave', payload.chave).is('organization_id', null).limit(1).maybeSingle();
+          ? supabase
+              .from('configuracoes_sistema')
+              .select('valor')
+              .eq('chave', payload.chave)
+              .eq('organization_id', profile.organization_id)
+              .limit(1)
+              .maybeSingle()
+          : supabase
+              .from('configuracoes_sistema')
+              .select('valor')
+              .eq('chave', payload.chave)
+              .is('organization_id', null)
+              .limit(1)
+              .maybeSingle();
 
         const { data: verifyData, error: verifyErr } = await verifyQuery;
         if (verifyErr) throw verifyErr;
@@ -260,9 +276,8 @@ export default function PermissoesTab() {
         <h3 className="text-xl font-semibold mb-2">Acesso negado</h3>
         <p className="text-sm text-slate-600">
           Esta área é restrita. Apenas usuários com perfil <strong>master</strong> ou{' '}
-          <strong>admin</strong> podem gerenciar permissões. Se precisar delegar acesso, peça a
-          um administrador para adicionar o módulo <em>configurações</em> ao seu perfil nas
-          permissões.
+          <strong>admin</strong> podem gerenciar permissões. Se precisar delegar acesso, peça a um
+          administrador para adicionar o módulo <em>configurações</em> ao seu perfil nas permissões.
         </p>
       </div>
     );
@@ -306,7 +321,9 @@ export default function PermissoesTab() {
             <LayoutGrid size={16} />
             Widgets
           </button>
-          <div className="ml-auto text-xs text-slate-400 px-2 py-2">Gerencie visibilidade e ordem dos widgets por perfil</div>
+          <div className="ml-auto text-xs text-slate-400 px-2 py-2">
+            Gerencie visibilidade e ordem dos widgets por perfil
+          </div>
         </nav>
 
         {activeTab === 'permissoes' ? (
@@ -318,7 +335,10 @@ export default function PermissoesTab() {
                     <tr>
                       <th className="px-6 py-4 border-b">Módulo / Funcionalidade</th>
                       {PERFIS.map((perfil) => (
-                        <th key={perfil.id} className="px-4 py-4 text-center border-b min-w-[100px]">
+                        <th
+                          key={perfil.id}
+                          className="px-4 py-4 text-center border-b min-w-[100px]"
+                        >
                           <div className="flex flex-col items-center gap-1">
                             <span className={`${perfil.id === 'master' ? 'text-purple-600' : ''}`}>
                               {perfil.label}

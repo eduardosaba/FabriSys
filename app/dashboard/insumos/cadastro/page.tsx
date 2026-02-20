@@ -39,6 +39,8 @@ interface Insumo {
 }
 
 export default function ProdutosPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   function getErrorMessage(err: unknown) {
     if (!err) return 'Erro desconhecido';
     if (typeof err === 'string') return err;
@@ -56,7 +58,7 @@ export default function ProdutosPage() {
   }
 
   const confirmDialog = useConfirm();
-  const { profile } = useAuth();
+
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +66,8 @@ export default function ProdutosPage() {
   const [editingInsumo, setEditingInsumo] = useState<Insumo | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   // --- BUSCAR DADOS (Insumos + Categorias) ---
   const fetchDados = useCallback(async () => {
@@ -98,8 +102,10 @@ export default function ProdutosPage() {
   }, [profile?.organization_id]);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!profile?.organization_id) return;
     void fetchDados();
-  }, [fetchDados]);
+  }, [fetchDados, authLoading, profile]);
 
   // --- SALVAR (Insert ou Update) ---
   async function handleSave(formData: Partial<Insumo>): Promise<boolean> {
@@ -382,8 +388,19 @@ export default function ProdutosPage() {
     });
   }, [insumos, searchQuery, categoryFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredInsumos.length / pageSize));
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  const pagedInsumos = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredInsumos.slice(start, start + pageSize);
+  }, [filteredInsumos, currentPage, pageSize]);
+
   return (
-    <div className="space-y-6 animate-fade-up">
+    <div className="space-y-6 animate-fade-up pb-24">
       <Toaster position="top-right" />
 
       <PageHeader
@@ -459,7 +476,7 @@ export default function ProdutosPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredInsumos.map((item) => {
+                  pagedInsumos.map((item) => {
                     const estoque = item.estoque_atual || 0;
                     const minimo = item.estoque_minimo_alerta || 0;
                     let status = 'ok';
@@ -520,6 +537,52 @@ export default function ProdutosPage() {
                 )}
               </tbody>
             </table>
+            {/* Pagination Controls */}
+            {filteredInsumos.length > pageSize && (
+              <div className="flex items-center justify-between p-4 border-t bg-white">
+                <div className="text-sm text-slate-600">
+                  Mostrando {(currentPage - 1) * pageSize + 1} -{' '}
+                  {Math.min(currentPage * pageSize, filteredInsumos.length)} de{' '}
+                  {filteredInsumos.length}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={String(pageSize)}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="rounded border px-2 py-1 text-sm"
+                  >
+                    <option value="10">10 / pág</option>
+                    <option value="20">20 / pág</option>
+                    <option value="50">50 / pág</option>
+                    <option value="100">100 / pág</option>
+                  </select>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 rounded border bg-white disabled:opacity-50 text-sm"
+                    >
+                      ‹
+                    </button>
+                    <div className="px-2 text-sm">
+                      {currentPage} / {totalPages}
+                    </div>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1 rounded border bg-white disabled:opacity-50 text-sm"
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

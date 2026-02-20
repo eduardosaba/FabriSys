@@ -1,5 +1,5 @@
 'use client';
-
+import { useAuth } from '@/lib/auth';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -30,6 +30,8 @@ function normalizeFichaNome(ficha: FichaTecnica) {
 }
 
 export default function FichasTecnicasPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const confirmDialog = useConfirm();
   const router = useRouter();
   const [fichas, setFichas] = useState<FichaTecnica[]>([]);
@@ -54,17 +56,25 @@ export default function FichasTecnicasPage() {
 
       // Transformar os dados para o formato correto
       const rows = Array.isArray(data) ? data : [];
-      const produtoIds = Array.from(new Set(rows.map((r: any) => String(r.produto_final_id)).filter(Boolean)));
+      const produtoIds = Array.from(
+        new Set(rows.map((r: any) => String(r.produto_final_id)).filter(Boolean))
+      );
       const produtoMap: Record<string, { nome?: string }> = {};
       if (produtoIds.length > 0) {
-        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
+        const { data: produtos } = await supabase
+          .from('produtos_finais')
+          .select('id, nome')
+          .in('id', produtoIds);
         (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
       }
 
-      const fichasFormatadas = rows.map((row: any) => ({
-        ...row,
-        produto_final: produtoMap[String(row.produto_final_id)] || { nome: '' },
-      } as FichaTecnica));
+      const fichasFormatadas = rows.map(
+        (row: any) =>
+          ({
+            ...row,
+            produto_final: produtoMap[String(row.produto_final_id)] || { nome: '' },
+          }) as FichaTecnica
+      );
 
       setFichas(fichasFormatadas);
     } catch (err) {

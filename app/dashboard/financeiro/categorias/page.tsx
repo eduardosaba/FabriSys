@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/shared';
 import { Plus, Save, Edit3, Trash2, Loader2 } from 'lucide-react';
 
 export default function CategoriasFinanceirasPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [categorias, setCategorias] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -33,7 +33,10 @@ export default function CategoriasFinanceirasPage() {
   async function load() {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('fin_categorias_despesa').select('*').order('nome');
+      const { data, error } = await supabase
+        .from('fin_categorias_despesa')
+        .select('*')
+        .order('nome');
       if (error) throw error;
       setCategorias(data || []);
     } catch (err) {
@@ -50,9 +53,9 @@ export default function CategoriasFinanceirasPage() {
     if (!name.trim()) return toast.error('Nome da categoria é obrigatório');
     setSaving(true);
     try {
-      const { error } = await supabase.from('fin_categorias_despesa').insert([
-        { nome: name.trim(), organization_id: profile.organization_id },
-      ]);
+      const { error } = await supabase
+        .from('fin_categorias_despesa')
+        .insert([{ nome: name.trim(), organization_id: profile.organization_id }]);
       if (error) throw error;
       toast.success('Categoria criada');
       setName('');
@@ -70,7 +73,11 @@ export default function CategoriasFinanceirasPage() {
     <div className="p-6 space-y-6 animate-fade-up">
       <Toaster position="top-right" />
 
-      <PageHeader title="Financeiro: Categorias" description="Gerencie categorias de despesas." icon={Plus}>
+      <PageHeader
+        title="Financeiro: Categorias"
+        description="Gerencie categorias de despesas."
+        icon={Plus}
+      >
         <div className="flex gap-2">
           <Button onClick={() => setModalOpen(true)} icon={Plus}>
             Nova Categoria
@@ -129,16 +136,37 @@ export default function CategoriasFinanceirasPage() {
         <div className="flex items-center justify-between mt-3">
           <div className="flex items-center gap-2">
             <label className="text-sm text-slate-500">Linhas:</label>
-            <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }} className="border rounded px-2 py-1">
+            <select
+              value={perPage}
+              onChange={(e) => {
+                setPerPage(Number(e.target.value));
+                setPage(1);
+              }}
+              className="border rounded px-2 py-1"
+            >
               <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={20}>20</option>
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <button className="px-3 py-1 border rounded" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Anterior</button>
-            <div className="text-sm text-slate-600">{page} / {Math.max(1, Math.ceil(categorias.length / perPage))}</div>
-            <button className="px-3 py-1 border rounded" disabled={page >= Math.ceil(categorias.length / perPage)} onClick={() => setPage((p) => p + 1)}>Próximo</button>
+            <button
+              className="px-3 py-1 border rounded"
+              disabled={page === 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Anterior
+            </button>
+            <div className="text-sm text-slate-600">
+              {page} / {Math.max(1, Math.ceil(categorias.length / perPage))}
+            </div>
+            <button
+              className="px-3 py-1 border rounded"
+              disabled={page >= Math.ceil(categorias.length / perPage)}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Próximo
+            </button>
           </div>
         </div>
       )}
@@ -150,7 +178,12 @@ export default function CategoriasFinanceirasPage() {
             <form onSubmit={handleSave} className="space-y-4">
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase">Nome</label>
-                <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className="w-full border rounded-lg p-2 mt-1" />
+                <input
+                  autoFocus
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full border rounded-lg p-2 mt-1"
+                />
               </div>
 
               <div className="flex gap-2 justify-end">
@@ -176,7 +209,10 @@ export default function CategoriasFinanceirasPage() {
                 if (!editId) return;
                 if (!editName.trim()) return toast.error('Nome é obrigatório');
                 try {
-                  const { error } = await supabase.from('fin_categorias_despesa').update({ nome: editName.trim() }).eq('id', editId);
+                  const { error } = await supabase
+                    .from('fin_categorias_despesa')
+                    .update({ nome: editName.trim() })
+                    .eq('id', editId);
                   if (error) throw error;
                   toast.success('Categoria atualizada');
                   setEditModalOpen(false);
@@ -192,7 +228,12 @@ export default function CategoriasFinanceirasPage() {
             >
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase">Nome</label>
-                <input autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full border rounded-lg p-2 mt-1" />
+                <input
+                  autoFocus
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full border rounded-lg p-2 mt-1"
+                />
               </div>
 
               <div className="flex gap-2 justify-end">
@@ -212,9 +253,19 @@ export default function CategoriasFinanceirasPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-lg">
             <h3 className="text-lg font-bold mb-2 text-red-600">Confirmar exclusão</h3>
-            <p className="text-sm text-slate-600">Tem certeza que deseja excluir a categoria <strong>{deleteTargetName}</strong>? Esta ação não pode ser desfeita.</p>
+            <p className="text-sm text-slate-600">
+              Tem certeza que deseja excluir a categoria <strong>{deleteTargetName}</strong>? Esta
+              ação não pode ser desfeita.
+            </p>
             <div className="flex gap-2 justify-end mt-4">
-              <Button variant="secondary" onClick={() => { setDeleteModalOpen(false); setDeleteTargetId(null); setDeleteTargetName(null); }}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setDeleteTargetId(null);
+                  setDeleteTargetName(null);
+                }}
+              >
                 Cancelar
               </Button>
               <Button
@@ -223,7 +274,10 @@ export default function CategoriasFinanceirasPage() {
                   if (!deleteTargetId) return;
                   setDeletingId(deleteTargetId);
                   try {
-                    const { error } = await supabase.from('fin_categorias_despesa').delete().eq('id', deleteTargetId);
+                    const { error } = await supabase
+                      .from('fin_categorias_despesa')
+                      .delete()
+                      .eq('id', deleteTargetId);
                     if (error) throw error;
                     toast.success('Categoria removida');
                     const remaining = categorias.length - 1;

@@ -315,14 +315,14 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
                 className="mx-auto h-12 md:h-[83.2px] object-contain mb-4"
               />
             ) : null}
-            <p className="text-gray-500 font-medium">Bem-vindo de volta</p>
+            <p className="text-gray-500 font-medium">Bem-vindo de volta 👋</p>
           </div>
 
           {/* Acesso Rápido removido a pedido — botões de teste eliminados */}
 
           <form onSubmit={handleLogin} className="space-y-5">
             <InputField
-              label="Email"
+              label="📧 Email "
               type="email"
               placeholder="seu@email.com"
               value={email}
@@ -331,7 +331,7 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
             />
             <div>
               <div className="flex justify-between mb-1.5">
-                <label className="text-sm font-medium text-gray-700">Senha</label>
+                <label className="text-sm font-medium text-gray-700">🔑 Senha</label>
                 <button
                   type="button"
                   onClick={() => setShowForgotModal(true)}

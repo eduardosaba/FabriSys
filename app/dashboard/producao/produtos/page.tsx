@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useAuth } from '@/lib/auth';
 import { Plus, Box } from 'lucide-react';
 import Button from '@/components/Button';
 import PageHeader from '@/components/ui/PageHeader';
@@ -15,6 +16,7 @@ export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<ProdutoFinal[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { loading: authLoading } = useAuth();
 
   const loadProdutos = async () => {
     try {
@@ -39,8 +41,11 @@ export default function ProdutosPage() {
   };
 
   useEffect(() => {
-    void loadProdutos();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // Aguarda resolução do auth antes de fazer queries que dependem de RLS/sessão
+    if (!authLoading) {
+      void loadProdutos();
+    }
+  }, [authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const router = useRouter();
   if (loading)

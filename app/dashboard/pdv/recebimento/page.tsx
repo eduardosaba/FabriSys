@@ -12,6 +12,8 @@ import Button from '@/components/Button';
 import { useAuth } from '@/lib/auth';
 
 export default function RecebimentoPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const [cargas, setCargas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [localId, setLocalId] = useState<string | null>(null);
@@ -23,7 +25,6 @@ export default function RecebimentoPage() {
   const [obsRecebimento, setObsRecebimento] = useState<string>('');
   const [pdvOptions, setPdvOptions] = useState<Array<{ id: string; nome: string }>>([]);
   const [selectedPdv, setSelectedPdv] = useState<string | null>(null);
-  const { profile } = useAuth();
 
   // 1. Identificar a Loja Atual (prefere caixa aberto do usuário)
   const carregarLocal = useCallback(async () => {
@@ -63,7 +64,11 @@ export default function RecebimentoPage() {
   // Carregar lista de PDVs (para admins/ver todos)
   const carregarPdvs = useCallback(async () => {
     try {
-      const { data } = await supabase.from('locais').select('id, nome').eq('tipo', 'pdv').order('nome');
+      const { data } = await supabase
+        .from('locais')
+        .select('id, nome')
+        .eq('tipo', 'pdv')
+        .order('nome');
       setPdvOptions((data || []).map((d: any) => ({ id: d.id, nome: d.nome })));
       if (!selectedPdv && data && data.length > 0) setSelectedPdv(data[0].id);
     } catch (err) {
@@ -92,10 +97,15 @@ export default function RecebimentoPage() {
 
       // Normalização dos dados e busca dos nomes dos produtos
       const norm = (data || []) as any[];
-      const produtoIds = Array.from(new Set(norm.map((c) => String(c.ordem?.produto_final_id)).filter(Boolean)));
+      const produtoIds = Array.from(
+        new Set(norm.map((c) => String(c.ordem?.produto_final_id)).filter(Boolean))
+      );
       const produtoMap: Record<string, { nome?: string }> = {};
       if (produtoIds.length > 0) {
-        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
+        const { data: produtos } = await supabase
+          .from('produtos_finais')
+          .select('id, nome')
+          .in('id', produtoIds);
         (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
       }
 
@@ -131,6 +141,7 @@ export default function RecebimentoPage() {
 
   useEffect(() => {
     const init = async () => {
+      if (authLoading) return; // aguarda auth pronto
       const id = await carregarLocal();
       await carregarPdvs();
       const pdvToLoad = selectedPdv ?? id;
@@ -142,15 +153,25 @@ export default function RecebimentoPage() {
       }
     };
     void init();
-  }, [carregarLocal, carregarCargas]);
+  }, [carregarLocal, carregarCargas, authLoading]);
 
-  const confirmarRecebimento = async (id: string, quantidadeParam?: number, observacaoParam?: string) => {
+  const confirmarRecebimento = async (
+    id: string,
+    quantidadeParam?: number,
+    observacaoParam?: string
+  ) => {
     if (!localId) return;
     try {
       setLoading(true);
-      const p_quant = typeof quantidadeParam === 'number' ? quantidadeParam : Number(quantidades[id] ?? 0);
-      const p_obs = typeof observacaoParam === 'string' ? observacaoParam : (observacoes[id] ?? null);
-      const { data, error } = await supabase.rpc('confirmar_recebimento_pdv', { p_distribuicao_id: id, p_quantidade: p_quant, p_observacao: p_obs }) as any;
+      const p_quant =
+        typeof quantidadeParam === 'number' ? quantidadeParam : Number(quantidades[id] ?? 0);
+      const p_obs =
+        typeof observacaoParam === 'string' ? observacaoParam : (observacoes[id] ?? null);
+      const { data, error } = (await supabase.rpc('confirmar_recebimento_pdv', {
+        p_distribuicao_id: id,
+        p_quantidade: p_quant,
+        p_observacao: p_obs,
+      })) as any;
       if (error) throw error;
 
       toast.success('Estoque atualizado com sucesso!');
@@ -176,11 +197,11 @@ export default function RecebimentoPage() {
     if (!cargaSelecionada) return;
     try {
       setLoading(true);
-      const { data, error } = await supabase.rpc('confirmar_recebimento_pdv', {
+      const { data, error } = (await supabase.rpc('confirmar_recebimento_pdv', {
         p_distribuicao_id: cargaSelecionada.id,
         p_quantidade: qtdRecebida,
         p_observacao: obsRecebimento || null,
-      }) as any;
+      })) as any;
       if (error) throw error;
 
       toast.success('Entrada de estoque confirmada!');
@@ -209,7 +230,9 @@ export default function RecebimentoPage() {
 
       {pdvOptions.length > 0 && profile?.role === 'admin' && (
         <div className="max-w-5xl mx-auto mt-2">
-          <label className="text-xs text-slate-500 uppercase font-bold">Visualizar PDV (apenas admins)</label>
+          <label className="text-xs text-slate-500 uppercase font-bold">
+            Visualizar PDV (apenas admins)
+          </label>
           <select
             className="w-full p-2 border rounded mt-1"
             value={selectedPdv ?? ''}
@@ -222,7 +245,9 @@ export default function RecebimentoPage() {
           >
             <option value="">Selecionar PDV (apenas admins)</option>
             {pdvOptions.map((p) => (
-              <option key={p.id} value={p.id}>{p.nome}</option>
+              <option key={p.id} value={p.id}>
+                {p.nome}
+              </option>
             ))}
           </select>
         </div>
@@ -260,14 +285,18 @@ export default function RecebimentoPage() {
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-lg mb-4 border border-slate-100">
-                  <label className="block text-xs text-slate-500 uppercase mb-1">Quantidade Recebida</label>
+                  <label className="block text-xs text-slate-500 uppercase mb-1">
+                    Quantidade Recebida
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     className="w-full p-3 rounded-lg text-2xl font-bold text-slate-800 text-center bg-white border"
                     value={quantidades[carga.id] ?? carga.quantidade_solicitada}
-                    onChange={(e) => setQuantidades(prev => ({ ...prev, [carga.id]: Number(e.target.value) }))}
+                    onChange={(e) =>
+                      setQuantidades((prev) => ({ ...prev, [carga.id]: Number(e.target.value) }))
+                    }
                   />
                 </div>
 
@@ -278,7 +307,9 @@ export default function RecebimentoPage() {
                     rows={3}
                     placeholder="Observações sobre a entrega (faltas, avarias, etc.)"
                     value={observacoes[carga.id] ?? ''}
-                    onChange={(e) => setObservacoes(prev => ({ ...prev, [carga.id]: e.target.value }))}
+                    onChange={(e) =>
+                      setObservacoes((prev) => ({ ...prev, [carga.id]: e.target.value }))
+                    }
                   />
                 </div>
               </div>
@@ -303,7 +334,10 @@ export default function RecebimentoPage() {
                 <CheckCircle className="text-emerald-500" size={20} />
                 Confirmar Recebimento
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
                 <X size={20} />
               </button>
             </div>
@@ -312,7 +346,9 @@ export default function RecebimentoPage() {
               <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
                 <p className="text-[10px] font-black text-blue-600 uppercase">Produto</p>
                 <p className="font-bold text-blue-900">{cargaSelecionada?.ordem?.produto?.nome}</p>
-                <p className="text-xs text-blue-700">Enviado pela Fábrica: {cargaSelecionada?.quantidade_solicitada} un</p>
+                <p className="text-xs text-blue-700">
+                  Enviado pela Fábrica: {cargaSelecionada?.quantidade_solicitada} un
+                </p>
               </div>
 
               <div>
@@ -333,7 +369,9 @@ export default function RecebimentoPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Observação (Opcional)</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                  Observação (Opcional)
+                </label>
                 <textarea
                   className="w-full p-3 border rounded-xl text-sm focus:ring-2 focus:ring-emerald-100 outline-none"
                   rows={2}

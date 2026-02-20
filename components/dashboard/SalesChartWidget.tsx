@@ -2,30 +2,35 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth';
 import { Card } from '@/components/dashboard/Card';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer 
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
 } from 'recharts';
 import { format, subDays, startOfDay, endOfDay, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { RefreshCw, TrendingUp } from 'lucide-react';
 
 interface ChartData {
-  date: string;     // Data legível '15/02'
+  date: string; // Data legível '15/02'
   fullDate: string; // Data completa para tooltip
-  value: number;    // Valor total venda
-  count: number;    // Quantidade de vendas
+  value: number; // Valor total venda
+  count: number; // Quantidade de vendas
 }
 
-export default function SalesChartWidget() {
-  const { profile } = useAuth();
+interface WidgetProps {
+  filtros?: { dataInicial?: string; dataFinal?: string; periodo?: string };
+  auxFiltro?: any;
+  organizationId?: string;
+  profile?: any;
+}
+
+export default function SalesChartWidget({ filtros, auxFiltro, organizationId }: WidgetProps) {
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalPeriodo, setTotalPeriodo] = useState(0);
@@ -36,16 +41,29 @@ export default function SalesChartWidget() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      if (!profile?.organization_id) return;
+      if (!organizationId) return;
 
       const hoje = new Date();
-      const dataInicio = subDays(hoje, DAYS_TO_SHOW - 1); // -1 para incluir hoje
+      let dataInicio = subDays(hoje, DAYS_TO_SHOW - 1); // default
 
+      // If filtros present, use explicit date range
+      if (filtros?.dataInicial && filtros?.dataFinal) {
+        try {
+          const di = new Date(filtros.dataInicial);
+          const df = new Date(filtros.dataFinal);
+          // override range
+          dataInicio = di;
+          // set hoje to df for the loop
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (e) {
+          // fallback to default
+        }
+      }
       // 1. Buscar vendas do período
       const { data: vendas, error } = await supabase
         .from('vendas')
         .select('created_at, total_venda')
-        .eq('organization_id', profile.organization_id)
+        .eq('organization_id', organizationId)
         .eq('status', 'concluida')
         .gte('created_at', startOfDay(dataInicio).toISOString())
         .lte('created_at', endOfDay(hoje).toISOString())
@@ -58,10 +76,10 @@ export default function SalesChartWidget() {
       let acumuladoTotal = 0;
 
       for (let i = 0; i < DAYS_TO_SHOW; i++) {
-        const diaAtual = subDays(hoje, (DAYS_TO_SHOW - 1) - i);
-        
+        const diaAtual = subDays(hoje, DAYS_TO_SHOW - 1 - i);
+
         // Filtra vendas deste dia específico (protegendo created_at nulo/inválido)
-        const vendasDoDia = (vendas || []).filter(v => {
+        const vendasDoDia = (vendas || []).filter((v) => {
           try {
             if (!v?.created_at) return false;
             return isSameDay(parseISO(String(v.created_at)), diaAtual);
@@ -77,13 +95,12 @@ export default function SalesChartWidget() {
           date: format(diaAtual, 'dd/MM'),
           fullDate: format(diaAtual, "d 'de' MMMM", { locale: ptBR }),
           value: totalDia,
-          count: vendasDoDia.length
+          count: vendasDoDia.length,
         });
       }
 
       setData(processedData);
       setTotalPeriodo(acumuladoTotal);
-
     } catch (err) {
       console.error('Erro gráfico vendas:', err);
     } finally {
@@ -93,11 +110,11 @@ export default function SalesChartWidget() {
 
   useEffect(() => {
     void fetchData();
-  }, [profile]);
+  }, [filtros, auxFiltro, organizationId]);
 
   // Ação de Atualizar
   const ActionButton = (
-    <button 
+    <button
       onClick={(e) => {
         e.stopPropagation();
         void fetchData();
@@ -105,20 +122,19 @@ export default function SalesChartWidget() {
       className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-blue-600 transition-colors"
       title="Atualizar dados"
     >
-      <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+      <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
     </button>
   );
 
   return (
-    <Card 
-      title="Evolução de Vendas (7 Dias)" 
-      size="2x1" 
+    <Card
+      title="Evolução de Vendas (7 Dias)"
+      size="2x1"
       loading={loading}
       action={ActionButton}
       className="flex flex-col"
     >
       <div className="flex flex-col h-full">
-        
         {/* Cabeçalho com Totalizador */}
         <div className="flex items-center gap-3 mb-4 px-1">
           <div className="p-2 bg-emerald-50 rounded-full text-emerald-600">
@@ -127,7 +143,9 @@ export default function SalesChartWidget() {
           <div>
             <p className="text-xs text-slate-500 font-medium uppercase">Total no Período</p>
             <h3 className="text-2xl font-bold text-slate-800 tracking-tight">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalPeriodo)}
+              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                totalPeriodo
+              )}
             </h3>
           </div>
         </div>
@@ -138,40 +156,46 @@ export default function SalesChartWidget() {
             <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              
+
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              
-              <XAxis 
-                dataKey="date" 
-                axisLine={false} 
-                tickLine={false} 
+
+              <XAxis
+                dataKey="date"
+                axisLine={false}
+                tickLine={false}
                 tick={{ fill: '#94a3b8', fontSize: 12 }}
                 dy={10}
               />
-              
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
+
+              <YAxis
+                axisLine={false}
+                tickLine={false}
                 tick={{ fill: '#94a3b8', fontSize: 11 }}
-                tickFormatter={(value) => 
-                  new Intl.NumberFormat('pt-BR', { notation: "compact", compactDisplay: "short" }).format(value)
+                tickFormatter={(value) =>
+                  new Intl.NumberFormat('pt-BR', {
+                    notation: 'compact',
+                    compactDisplay: 'short',
+                  }).format(value)
                 }
               />
-              
-              <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#10b981', strokeWidth: 1, strokeDasharray: '4 4' }} />
-              
-              <Area 
-                type="monotone" 
-                dataKey="value" 
-                stroke="#10b981" 
+
+              <Tooltip
+                content={<CustomTooltip />}
+                cursor={{ stroke: '#10b981', strokeWidth: 1, strokeDasharray: '4 4' }}
+              />
+
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="#10b981"
                 strokeWidth={2}
-                fillOpacity={1} 
-                fill="url(#colorVendas)" 
-                activeDot={{ r: 6, fill: "#059669", stroke: "#fff", strokeWidth: 2 }}
+                fillOpacity={1}
+                fill="url(#colorVendas)"
+                activeDot={{ r: 6, fill: '#059669', stroke: '#fff', strokeWidth: 2 }}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -192,7 +216,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
           <span className="text-slate-500">Vendas:</span>
           <span className="font-bold text-emerald-600">
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.value)}
+            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+              data.value
+            )}
           </span>
         </div>
         <div className="flex items-center gap-2 mt-1">

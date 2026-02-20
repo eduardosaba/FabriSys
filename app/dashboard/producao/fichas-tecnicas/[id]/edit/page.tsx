@@ -1,5 +1,5 @@
 'use client';
-
+import { useAuth } from '@/lib/auth';
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/useToast';
@@ -14,6 +14,8 @@ interface FichaRaw {
 }
 
 export default function EditFichaTecnicaPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
@@ -22,6 +24,9 @@ export default function EditFichaTecnicaPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!profile?.organization_id) return;
+
     async function fetchFicha() {
       setLoading(true);
       const resp = await supabase.from('fichas_tecnicas').select('*').eq('slug', id).single();

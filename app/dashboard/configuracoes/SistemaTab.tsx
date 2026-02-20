@@ -1,5 +1,5 @@
 'use client';
-
+import { useAuth } from '@/lib/auth';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
@@ -13,6 +13,8 @@ interface ConfigItem {
 }
 
 export default function SistemaTab() {
+  const { profile, loading: authLoading } = useAuth();
+
   const [configs, setConfigs] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -119,7 +121,9 @@ export default function SistemaTab() {
             const payload: any = { chave, valor, updated_at };
             if (resolvedOrgId) payload.organization_id = resolvedOrgId;
 
-            const { error: insertErr } = await supabase.from('configuracoes_sistema').insert(payload);
+            const { error: insertErr } = await supabase
+              .from('configuracoes_sistema')
+              .insert(payload);
             if (insertErr) {
               if ((insertErr as any).code === '23505') {
                 const { error: conflictUpdateErr } = await supabase
@@ -142,7 +146,8 @@ export default function SistemaTab() {
 
       const result = await toast.promise(savePromise as unknown as Promise<any>, {
         loading: 'Salvando configurações...',
-        success: (anyChanged) => (anyChanged ? 'Regras do sistema atualizadas!' : 'Nenhuma alteração necessária'),
+        success: (anyChanged) =>
+          anyChanged ? 'Regras do sistema atualizadas!' : 'Nenhuma alteração necessária',
         error: (err) => `Erro ao salvar configurações: ${err?.message || ''}`,
       });
 

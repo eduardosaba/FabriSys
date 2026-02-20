@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth';
 import { Card } from '@/components/dashboard/Card';
 import {
   PieChart,
@@ -10,7 +9,7 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
-  Legend
+  Legend,
 } from 'recharts';
 import { AlertTriangle, Trash2, TrendingDown, PackageX } from 'lucide-react';
 import { startOfMonth, endOfMonth } from 'date-fns';
@@ -29,16 +28,22 @@ interface TopOffender {
 }
 
 const COLORS: Record<string, string> = {
-  'validade': '#ef4444',
-  'quebra': '#f97316',
-  'producao': '#eab308',
-  'degustacao': '#3b82f6',
-  'roubo': '#1e293b',
-  'outros': '#94a3b8'
+  validade: '#ef4444',
+  quebra: '#f97316',
+  producao: '#eab308',
+  degustacao: '#3b82f6',
+  roubo: '#1e293b',
+  outros: '#94a3b8',
 };
 
-export default function LossesWidget() {
-  const { profile } = useAuth();
+interface WidgetProps {
+  filtros?: any;
+  auxFiltro?: any;
+  organizationId?: string;
+  profile?: any;
+}
+
+export default function LossesWidget({ filtros, auxFiltro, organizationId, profile }: WidgetProps) {
   const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState<any[]>([]);
   const [totalPrejuizo, setTotalPrejuizo] = useState(0);
@@ -46,7 +51,7 @@ export default function LossesWidget() {
 
   useEffect(() => {
     async function fetchLosses() {
-      if (!profile?.organization_id) return;
+      if (!organizationId) return;
       try {
         const hoje = new Date();
         const inicio = startOfMonth(hoje).toISOString();
@@ -55,28 +60,39 @@ export default function LossesWidget() {
         const { data, error } = await supabase
           .from('registro_perdas')
           .select('motivo, quantidade, produto_id, local:locais!inner (organization_id)')
-          .eq('local.organization_id', profile.organization_id)
+          .eq('local.organization_id', organizationId)
           .gte('created_at', inicio)
           .lte('created_at', fim);
 
         if (error) throw error;
 
         const rows = data || [];
-        const produtoIds = Array.from(new Set(rows.map((r: any) => String(r.produto_id)).filter(Boolean)));
+        const produtoIds = Array.from(
+          new Set(rows.map((r: any) => String(r.produto_id)).filter(Boolean))
+        );
         const produtoMap: Record<string, { nome?: string; preco_custo?: number }> = {};
         if (produtoIds.length > 0) {
           // tentar buscar preco_custo; se não existir, buscar sem e usar 0
           let produtos: any[] | null = null;
           try {
-            const res = await supabase.from('produtos_finais').select('id, nome, preco_custo').in('id', produtoIds);
+            const res = await supabase
+              .from('produtos_finais')
+              .select('id, nome, preco_custo')
+              .in('id', produtoIds);
             if ((res as any).error) throw (res as any).error;
             produtos = (res as any).data || null;
           } catch (errSelect) {
             console.warn('preco_custo não disponível, usando fallback:', errSelect);
-            const res2 = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
+            const res2 = await supabase
+              .from('produtos_finais')
+              .select('id, nome')
+              .in('id', produtoIds);
             produtos = (res2 as any).data || null;
           }
-          (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome, preco_custo: Number(p.preco_custo || 0) }));
+          (produtos || []).forEach(
+            (p: any) =>
+              (produtoMap[String(p.id)] = { nome: p.nome, preco_custo: Number(p.preco_custo || 0) })
+          );
         }
 
         const porMotivo: Record<string, number> = {};
@@ -99,15 +115,17 @@ export default function LossesWidget() {
           porItem[nomeProd].qtd += qtd;
         });
 
-        const formattedChart = Object.keys(porMotivo).map((key) => ({
-          motivo: key,
-          name: key.charAt(0).toUpperCase() + key.slice(1),
-          valor: porMotivo[key],
-          quantidade: 0
-        })).filter(d => d.valor > 0);
+        const formattedChart = Object.keys(porMotivo)
+          .map((key) => ({
+            motivo: key,
+            name: key.charAt(0).toUpperCase() + key.slice(1),
+            valor: porMotivo[key],
+            quantidade: 0,
+          }))
+          .filter((d) => d.valor > 0);
 
         const formattedTop = Object.keys(porItem)
-          .map(key => ({ nome: key, valor: porItem[key].valor, quantidade: porItem[key].qtd }))
+          .map((key) => ({ nome: key, valor: porItem[key].valor, quantidade: porItem[key].qtd }))
           .sort((a, b) => b.valor - a.valor)
           .slice(0, 3);
 
@@ -122,11 +140,11 @@ export default function LossesWidget() {
     }
 
     void fetchLosses();
-  }, [profile]);
+  }, [organizationId, filtros, auxFiltro, profile]);
 
   const getColor = (motivo: string) => {
     const key = motivo.toLowerCase();
-    const match = Object.keys(COLORS).find(k => key.includes(k));
+    const match = Object.keys(COLORS).find((k) => key.includes(k));
     return match ? COLORS[match] : COLORS['outros'];
   };
 
@@ -142,7 +160,9 @@ export default function LossesWidget() {
               <span className="text-xs font-bold text-slate-500 uppercase">Prejuízo Estimado</span>
             </div>
             <h3 className="text-2xl font-bold text-red-600 tracking-tight truncate">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalPrejuizo)}
+              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                totalPrejuizo
+              )}
             </h3>
             <p className="text-[10px] text-slate-400 mt-1">Baseado no preço de custo</p>
           </div>
@@ -154,14 +174,23 @@ export default function LossesWidget() {
             {topItems.length > 0 ? (
               <ul className="space-y-2 overflow-y-auto max-h-[100px] pr-1 custom-scrollbar">
                 {topItems.map((item, idx) => (
-                  <li key={idx} className="flex justify-between items-center text-xs border-b border-slate-50 pb-1 last:border-0">
+                  <li
+                    key={idx}
+                    className="flex justify-between items-center text-xs border-b border-slate-50 pb-1 last:border-0"
+                  >
                     <div className="flex items-center gap-2 min-w-0">
                       <PackageX size={12} className="text-slate-400 shrink-0" />
-                      <span className="text-slate-600 truncate max-w-[100px]" title={item.nome}>{item.nome}</span>
+                      <span className="text-slate-600 truncate max-w-[100px]" title={item.nome}>
+                        {item.nome}
+                      </span>
                     </div>
                     <div className="text-right shrink-0">
                       <span className="block font-medium text-red-500">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(item.valor)}
+                        {new Intl.NumberFormat('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                          notation: 'compact',
+                        }).format(item.valor)}
                       </span>
                       <span className="text-[9px] text-slate-400">{item.quantidade} un</span>
                     </div>
@@ -178,13 +207,38 @@ export default function LossesWidget() {
           {totalPrejuizo > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={chartData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} paddingAngle={5} dataKey="valor">
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={35}
+                  outerRadius={55}
+                  paddingAngle={5}
+                  dataKey="valor"
+                >
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={getColor(entry.motivo)} />
                   ))}
                 </Pie>
-                <RechartsTooltip formatter={(value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)} contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', fontSize: '11px', border: '1px solid #e2e8f0' }} />
-                <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px' }} />
+                <RechartsTooltip
+                  formatter={(value: number) =>
+                    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                      value
+                    )
+                  }
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                    border: '1px solid #e2e8f0',
+                  }}
+                />
+                <Legend
+                  layout="vertical"
+                  verticalAlign="middle"
+                  align="right"
+                  wrapperStyle={{ fontSize: '10px' }}
+                />
               </PieChart>
             </ResponsiveContainer>
           ) : (

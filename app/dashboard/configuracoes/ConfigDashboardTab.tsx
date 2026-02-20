@@ -1,18 +1,16 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-  DropResult,
-} from '@hello-pangea/dnd';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { GripVertical } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
 import Loading from '@/components/ui/Loading';
-import { WIDGET_REGISTRY as WIDGETS, DEFAULT_LAYOUT_BY_ROLE as DEFAULT_BY_ROLE } from '@/components/dashboard';
+import {
+  WIDGET_REGISTRY as WIDGETS,
+  DEFAULT_LAYOUT_BY_ROLE as DEFAULT_BY_ROLE,
+} from '@/components/dashboard';
 import { toast } from 'react-hot-toast';
 
 const ROLES = Object.keys(DEFAULT_BY_ROLE);
@@ -31,7 +29,7 @@ const defaultSizeToCols = (size: string | undefined) => {
 };
 
 export default function ConfigDashboardTab() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // config: ordered list of widget ids per role
@@ -61,7 +59,11 @@ export default function ConfigDashboardTab() {
 
         let parsed: any = {};
         if (data?.valor) {
-          try { parsed = JSON.parse(data.valor); } catch {}
+          try {
+            parsed = JSON.parse(data.valor);
+          } catch (e) {
+            void e;
+          }
         }
 
         // support two formats: legacy { role: [ids] } or new { roles: { role: [ids] }, meta: { role: { id: { cols }}} }
@@ -147,7 +149,7 @@ export default function ConfigDashboardTab() {
   const handleSave = async () => {
     // Bloqueia se já estiver salvando ou se ainda não carregou
     if (saving || !isLoaded.current) return;
-    
+
     setSaving(true);
     try {
       const payloadObj = { roles: config, meta: widgetMeta };
@@ -171,7 +173,7 @@ export default function ConfigDashboardTab() {
       lastSaved.current = serialized;
       console.log('Configuração salva automaticamente (RPC)');
     } catch (err: any) {
-      console.error("Erro no autosave:", err.message);
+      console.error('Erro no autosave:', err.message);
     } finally {
       setSaving(false);
     }
@@ -197,7 +199,9 @@ export default function ConfigDashboardTab() {
   return (
     <div className="space-y-6">
       <h3 className="text-lg font-bold">Configuração do Dashboard</h3>
-      <p className="text-sm text-slate-500">Escolha quais widgets aparecem para cada tipo de usuário.</p>
+      <p className="text-sm text-slate-500">
+        Escolha quais widgets aparecem para cada tipo de usuário.
+      </p>
 
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -205,7 +209,9 @@ export default function ConfigDashboardTab() {
           <div className="bg-white p-4 rounded-lg border">
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-semibold">Todos os widgets</h4>
-              <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold">{Object.keys(WIDGETS).length}</span>
+              <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold">
+                {Object.keys(WIDGETS).length}
+              </span>
             </div>
             <Droppable droppableId={`droppable-palette`}>
               {(provided, snapshot) => (
@@ -219,9 +225,17 @@ export default function ConfigDashboardTab() {
                     return (
                       <Draggable key={wid} draggableId={`palette-${wid}`} index={idx}>
                         {(prov) => (
-                          <div ref={prov.innerRef} {...prov.draggableProps} className="flex items-center justify-between gap-2 p-2 rounded hover:bg-slate-50">
+                          <div
+                            ref={prov.innerRef}
+                            {...prov.draggableProps}
+                            className="flex items-center justify-between gap-2 p-2 rounded hover:bg-slate-50"
+                          >
                             <div className="flex items-center gap-2">
-                              <div {...prov.dragHandleProps} className="cursor-grab p-1" title="Arraste para adicionar a um perfil">
+                              <div
+                                {...prov.dragHandleProps}
+                                className="cursor-grab p-1"
+                                title="Arraste para adicionar a um perfil"
+                              >
                                 <GripVertical size={16} />
                               </div>
                               <span className="text-sm">{meta?.title || wid}</span>
@@ -236,28 +250,43 @@ export default function ConfigDashboardTab() {
                 </div>
               )}
             </Droppable>
-            <div className="mt-3 text-xs text-slate-500">Arraste um widget para um perfil para adicioná-lo.</div>
+            <div className="mt-3 text-xs text-slate-500">
+              Arraste um widget para um perfil para adicioná-lo.
+            </div>
           </div>
 
           {ROLES.map((role) => (
             <div key={role} className="bg-white p-4 rounded-lg border">
               <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold">{role}</h4>
-                    <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold">{(config[role] || []).length}</span>
+                <h4 className="font-semibold">{role}</h4>
+                <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold">
+                  {(config[role] || []).length}
+                </span>
+              </div>
+              {/* Indica quais widgets ainda não foram adicionados a este perfil */}
+              {(() => {
+                const missingWidgets = Object.keys(WIDGETS).filter(
+                  (w) => !(config[role] || []).includes(w)
+                );
+                if (missingWidgets.length === 0) return null;
+                const preview = missingWidgets
+                  .slice(0, 3)
+                  .map((w) => WIDGETS[w]?.title || w)
+                  .join(', ');
+                const more = missingWidgets.length > 3 ? ` +${missingWidgets.length - 3}` : '';
+                return (
+                  <div className="mt-1 flex items-center gap-2">
+                    <button
+                      onClick={() => setMissingModalRole(role)}
+                      className="text-xs text-rose-600 underline"
+                    >
+                      Faltando: {preview}
+                      {more}
+                    </button>
+                    <span className="text-xs text-slate-400">({missingWidgets.length})</span>
                   </div>
-                  {/* Indica quais widgets ainda não foram adicionados a este perfil */}
-                  {(() => {
-                    const missingWidgets = Object.keys(WIDGETS).filter((w) => !(config[role] || []).includes(w));
-                    if (missingWidgets.length === 0) return null;
-                    const preview = missingWidgets.slice(0, 3).map((w) => (WIDGETS[w]?.title || w)).join(', ');
-                    const more = missingWidgets.length > 3 ? ` +${missingWidgets.length - 3}` : '';
-                    return (
-                      <div className="mt-1 flex items-center gap-2">
-                        <button onClick={() => setMissingModalRole(role)} className="text-xs text-rose-600 underline">Faltando: {preview}{more}</button>
-                        <span className="text-xs text-slate-400">({missingWidgets.length})</span>
-                      </div>
-                    );
-                  })()}
+                );
+              })()}
               <Droppable droppableId={`droppable-${role}`}>
                 {(provided, snapshot) => (
                   <div
@@ -266,28 +295,48 @@ export default function ConfigDashboardTab() {
                     className={`space-y-2 min-h-[56px] max-h-64 overflow-auto transition-all ${snapshot.isDraggingOver ? 'border-2 border-dashed border-indigo-300 bg-indigo-50' : ''}`}
                   >
                     {(config[role] || []).length === 0 && (
-                      <div className={`py-4 text-center text-sm rounded transition-all ${snapshot.isDraggingOver ? 'text-indigo-700' : 'text-slate-400'} ${snapshot.isDraggingOver ? 'border border-dashed border-indigo-200' : 'border border-dashed border-slate-100'}`}>
+                      <div
+                        className={`py-4 text-center text-sm rounded transition-all ${snapshot.isDraggingOver ? 'text-indigo-700' : 'text-slate-400'} ${snapshot.isDraggingOver ? 'border border-dashed border-indigo-200' : 'border border-dashed border-slate-100'}`}
+                      >
                         Solte widgets aqui
                       </div>
                     )}
 
                     {(config[role] || []).map((wid, idx) => {
                       const meta = WIDGETS[wid];
-                      const defaultCols = meta?.defaultSize ? defaultSizeToCols(meta.defaultSize) : 1;
+                      const defaultCols = meta?.defaultSize
+                        ? defaultSizeToCols(meta.defaultSize)
+                        : 1;
                       const colsVal = widgetMeta[role]?.[wid] ?? defaultCols;
                       return (
                         <Draggable key={wid} draggableId={`${role}-${wid}`} index={idx}>
                           {(prov) => (
-                            <div ref={prov.innerRef} {...prov.draggableProps} className="flex items-center justify-between gap-2 p-2 rounded hover:bg-slate-50">
+                            <div
+                              ref={prov.innerRef}
+                              {...prov.draggableProps}
+                              className="flex items-center justify-between gap-2 p-2 rounded hover:bg-slate-50"
+                            >
                               <div className="flex items-center gap-2">
-                                <div {...prov.dragHandleProps} className="cursor-grab p-1" title="Arraste para reordenar">
+                                <div
+                                  {...prov.dragHandleProps}
+                                  className="cursor-grab p-1"
+                                  title="Arraste para reordenar"
+                                >
                                   <GripVertical size={16} />
                                 </div>
-                                <input type="checkbox" checked={true} onChange={() => toggleWidget(role, wid)} />
+                                <input
+                                  type="checkbox"
+                                  checked={true}
+                                  onChange={() => toggleWidget(role, wid)}
+                                />
                                 <span className="text-sm">{meta?.title || wid}</span>
                               </div>
                               <div className="flex items-center gap-2">
-                                <select value={String(colsVal)} onChange={(e) => setWidgetCols(role, wid, Number(e.target.value))} className="text-xs border rounded p-1 bg-white">
+                                <select
+                                  value={String(colsVal)}
+                                  onChange={(e) => setWidgetCols(role, wid, Number(e.target.value))}
+                                  className="text-xs border rounded p-1 bg-white"
+                                >
                                   <option value="1">1</option>
                                   <option value="2">2</option>
                                   <option value="3">3</option>
@@ -303,41 +352,65 @@ export default function ConfigDashboardTab() {
                   </div>
                 )}
               </Droppable>
-              <div className="mt-3 text-xs text-slate-500">Arraste para reordenar a visualização deste role. Use as checkboxes para ativar/desativar.</div>
+              <div className="mt-3 text-xs text-slate-500">
+                Arraste para reordenar a visualização deste role. Use as checkboxes para
+                ativar/desativar.
+              </div>
             </div>
           ))}
         </div>
       </DragDropContext>
 
       <div className="pt-4 border-t border-slate-200 flex justify-end">
-        <Button onClick={handleSave} loading={saving}>Salvar Configuração</Button>
+        <Button onClick={handleSave} loading={saving}>
+          Salvar Configuração
+        </Button>
       </div>
       {/* Modal de widgets faltando */}
-      {missingModalRole && (() => {
-        const missingWidgets = Object.keys(WIDGETS).filter((w) => !(config[missingModalRole] || []).includes(w));
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black opacity-50" onClick={() => setMissingModalRole(null)} />
-            <div className="bg-white p-4 rounded shadow-lg max-w-lg w-full z-10">
-              <div className="flex justify-between items-center mb-2">
-                <h4 className="font-semibold">Widgets faltando — {missingModalRole}</h4>
-                <button onClick={() => setMissingModalRole(null)} className="text-sm text-slate-500">Fechar</button>
+      {missingModalRole &&
+        (() => {
+          const missingWidgets = Object.keys(WIDGETS).filter(
+            (w) => !(config[missingModalRole] || []).includes(w)
+          );
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div
+                className="absolute inset-0 bg-black opacity-50"
+                onClick={() => setMissingModalRole(null)}
+              />
+              <div className="bg-white p-4 rounded shadow-lg max-w-lg w-full z-10">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-semibold">Widgets faltando — {missingModalRole}</h4>
+                  <button
+                    onClick={() => setMissingModalRole(null)}
+                    className="text-sm text-slate-500"
+                  >
+                    Fechar
+                  </button>
+                </div>
+                <ul className="space-y-2 max-h-64 overflow-auto">
+                  {missingWidgets.map((w) => (
+                    <li key={w} className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{WIDGETS[w]?.title || w}</div>
+                        <div className="text-xs text-slate-400">{w}</div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          toggleWidget(missingModalRole, w);
+                          setMissingModalRole(null);
+                        }}
+                        className="text-xs text-blue-600"
+                      >
+                        Adicionar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="space-y-2 max-h-64 overflow-auto">
-                {missingWidgets.map((w) => (
-                  <li key={w} className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{WIDGETS[w]?.title || w}</div>
-                      <div className="text-xs text-slate-400">{w}</div>
-                    </div>
-                    <button onClick={() => { toggleWidget(missingModalRole, w); setMissingModalRole(null); }} className="text-xs text-blue-600">Adicionar</button>
-                  </li>
-                ))}
-              </ul>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
     </div>
   );
 }

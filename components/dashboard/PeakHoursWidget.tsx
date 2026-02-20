@@ -1,8 +1,7 @@
-"use client";
+'use client';
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth';
 import { Card } from '@/components/dashboard/Card';
 import {
   BarChart,
@@ -12,18 +11,29 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell
+  Cell,
 } from 'recharts';
 import { Clock } from 'lucide-react';
 
-export default function PeakHoursWidget() {
-  const { profile } = useAuth();
+interface WidgetProps {
+  filtros?: any;
+  auxFiltro?: any;
+  organizationId?: string;
+  profile?: any;
+}
+
+export default function PeakHoursWidget({
+  filtros,
+  auxFiltro,
+  organizationId,
+  profile,
+}: WidgetProps) {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchPeakHours() {
-      if (!profile?.organization_id) return;
+      if (!organizationId) return;
       setLoading(true);
 
       try {
@@ -35,7 +45,7 @@ export default function PeakHoursWidget() {
         const { data: vendas, error } = await supabase
           .from('vendas')
           .select('created_at, total_venda')
-          .eq('organization_id', profile.organization_id)
+          .eq('organization_id', organizationId)
           .eq('status', 'concluida')
           .gte('created_at', inicio.toISOString());
 
@@ -51,12 +61,14 @@ export default function PeakHoursWidget() {
           contagemMap[hora] += 1;
         });
 
-        const chartData = horasMap.map((total, hora) => ({
-          hora: `${hora}h`,
-          horaInt: hora,
-          total: total,
-          pedidos: contagemMap[hora]
-        })).filter(d => d.horaInt >= 8 && d.horaInt <= 22);
+        const chartData = horasMap
+          .map((total, hora) => ({
+            hora: `${hora}h`,
+            horaInt: hora,
+            total: total,
+            pedidos: contagemMap[hora],
+          }))
+          .filter((d) => d.horaInt >= 8 && d.horaInt <= 22);
 
         setData(chartData);
       } catch (err) {
@@ -67,9 +79,9 @@ export default function PeakHoursWidget() {
     }
 
     void fetchPeakHours();
-  }, [profile]);
+  }, [organizationId, filtros, auxFiltro, profile]);
 
-  const maxVal = Math.max(...data.map(d => d.total), 0);
+  const maxVal = Math.max(...data.map((d) => d.total), 0);
 
   return (
     <Card title="Horários de Pico (7d)" size="2x1" loading={loading}>
@@ -103,7 +115,15 @@ export default function PeakHoursWidget() {
                     return (
                       <div className="bg-white p-2 border border-slate-100 shadow-lg rounded text-xs z-50">
                         <p className="font-bold mb-1">{d.hora}</p>
-                        <p>Vendas: <strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(d.total)}</strong></p>
+                        <p>
+                          Vendas:{' '}
+                          <strong>
+                            {new Intl.NumberFormat('pt-BR', {
+                              style: 'currency',
+                              currency: 'BRL',
+                            }).format(d.total)}
+                          </strong>
+                        </p>
                         <p className="text-slate-500">{d.pedidos} pedidos</p>
                       </div>
                     );

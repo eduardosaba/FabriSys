@@ -3,21 +3,36 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import safeSelect from '@/lib/supabaseSafeSelect';
-import { useAuth } from '@/lib/auth';
 import { Card } from '@/components/dashboard/Card';
 import { Coins } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
-export default function InventoryValueWidget() {
-  const { profile } = useAuth();
+interface WidgetProps {
+  filtros?: any;
+  auxFiltro?: any;
+  organizationId?: string;
+  profile?: any;
+}
+
+export default function InventoryValueWidget({
+  filtros,
+  auxFiltro,
+  organizationId,
+  profile,
+}: WidgetProps) {
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [breakdown, setBreakdown] = useState<any[]>([]);
 
   useEffect(() => {
     async function fetchValue() {
-        try {
-        const { data: insumos, error } = await safeSelect(supabase, 'insumos', 'estoque_atual, custo_por_ue, nome', (b: any) => b.gt('estoque_atual', 0));
+      try {
+        const { data: insumos, error } = await safeSelect(
+          supabase,
+          'insumos',
+          'estoque_atual, custo_por_ue, nome',
+          (b: any) => b.gt('estoque_atual', 0)
+        );
 
         if (error) throw error;
 
@@ -38,7 +53,7 @@ export default function InventoryValueWidget() {
     }
 
     void fetchValue();
-  }, [profile]);
+  }, [organizationId, filtros, auxFiltro, profile]);
 
   return (
     <Card title="Valor em Estoque (Custo)" size="1x1" loading={loading}>
@@ -58,12 +73,28 @@ export default function InventoryValueWidget() {
         <div className="mt-4 h-24 w-full flex items-center" style={{ minWidth: 0, minHeight: 96 }}>
           <ResponsiveContainer width="100%" height={96}>
             <PieChart>
-              <Pie data={breakdown} innerRadius={30} outerRadius={45} paddingAngle={5} dataKey="value" startAngle={90} endAngle={-270}>
+              <Pie
+                data={breakdown}
+                innerRadius={30}
+                outerRadius={45}
+                paddingAngle={5}
+                dataKey="value"
+                startAngle={90}
+                endAngle={-270}
+              >
                 {breakdown.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(val)} />
+              <Tooltip
+                formatter={(val: number) =>
+                  new Intl.NumberFormat('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL',
+                    notation: 'compact',
+                  }).format(val)
+                }
+              />
             </PieChart>
           </ResponsiveContainer>
 

@@ -19,27 +19,42 @@ import {
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import KPIsMetas from '@/components/dashboard/KPIsMetas';
-import { WIDGET_REGISTRY as WIDGETS, DEFAULT_LAYOUT_BY_ROLE as DEFAULT_BY_ROLE } from '@/components/dashboard';
+import {
+  WIDGET_REGISTRY as WIDGETS,
+  DEFAULT_LAYOUT_BY_ROLE as DEFAULT_BY_ROLE,
+} from '@/components/dashboard';
 import dynamic from 'next/dynamic';
 import WidgetSkeleton from '@/components/dashboard/WidgetSkeleton';
 
 // dynamic wrappers for specific widgets used in role-specific branches
-const CaixaStatusWidget = dynamic(() => import('@/components/dashboard/CaixaStatusWidget').then((m) => m.default), {
-  ssr: false,
-  loading: () => <WidgetSkeleton />,
-});
-const SalesChartWidget = dynamic(() => import('@/components/dashboard/SalesChartWidget').then((m) => m.default), {
-  ssr: false,
-  loading: () => <WidgetSkeleton />,
-});
-const LowStockWidget = dynamic(() => import('@/components/dashboard/LowStockWidget').then((m) => m.default), {
-  ssr: false,
-  loading: () => <WidgetSkeleton />,
-});
-const ProductionQueueWidget = dynamic(() => import('@/components/dashboard/ProductionQueueWidget').then((m) => m.default), {
-  ssr: false,
-  loading: () => <WidgetSkeleton />,
-});
+const CaixaStatusWidget = dynamic(
+  () => import('@/components/dashboard/CaixaStatusWidget').then((m) => m.default),
+  {
+    ssr: false,
+    loading: () => <WidgetSkeleton />,
+  }
+);
+const SalesChartWidget = dynamic(
+  () => import('@/components/dashboard/SalesChartWidget').then((m) => m.default),
+  {
+    ssr: false,
+    loading: () => <WidgetSkeleton />,
+  }
+);
+const LowStockWidget = dynamic(
+  () => import('@/components/dashboard/LowStockWidget').then((m) => m.default),
+  {
+    ssr: false,
+    loading: () => <WidgetSkeleton />,
+  }
+);
+const ProductionQueueWidget = dynamic(
+  () => import('@/components/dashboard/ProductionQueueWidget').then((m) => m.default),
+  {
+    ssr: false,
+    loading: () => <WidgetSkeleton />,
+  }
+);
 
 interface ProdutoRanking {
   nome: string;
@@ -49,7 +64,7 @@ interface ProdutoRanking {
 
 export default function DashboardPage() {
   const router = useRouter(); // Hook de navegação
-  const { profile, loading } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   // NOTE: não redirecionar automaticamente PDV; mostramos um botão para ir ao caixa
 
   // --- ESTADOS DE FILTRO ---
@@ -256,7 +271,9 @@ export default function DashboardPage() {
       const ordens = ordensRaw || [];
 
       // Buscar dados dos produtos referenciados
-      const produtoIds = Array.from(new Set(ordens.map((o: any) => String(o.produto_final_id)).filter(Boolean)));
+      const produtoIds = Array.from(
+        new Set(ordens.map((o: any) => String(o.produto_final_id)).filter(Boolean))
+      );
       const produtoMap: Record<string, { nome: string; preco_venda: number }> = {};
       if (produtoIds.length > 0) {
         const chunkSize = 50;
@@ -268,7 +285,10 @@ export default function DashboardPage() {
             .in('id', chunk);
           if (prodErr) throw prodErr;
           (produtos || []).forEach((p: any) => {
-            produtoMap[String(p.id)] = { nome: p.nome || 'Desconhecido', preco_venda: Number(p.preco_venda || 0) };
+            produtoMap[String(p.id)] = {
+              nome: p.nome || 'Desconhecido',
+              preco_venda: Number(p.preco_venda || 0),
+            };
           });
         }
       }
@@ -338,8 +358,20 @@ export default function DashboardPage() {
   }, [carregarDados]);
 
   const role = profile?.role;
+  const firstName =
+    (profile?.nome && String(profile.nome).split(' ')[0]) ||
+    (profile?.email && String(profile.email).split('@')[0]) ||
+    '';
+  const displayName =
+    profile?.nome ||
+    (profile as any)?.full_name ||
+    (profile as any)?.username ||
+    firstName ||
+    'Usuário';
   const [dashboardConfig, setDashboardConfig] = useState<string[] | null>(null);
-  const [dashboardMeta, setDashboardMeta] = useState<Record<string, Record<string, number>> | null>(null);
+  const [dashboardMeta, setDashboardMeta] = useState<Record<string, Record<string, number>> | null>(
+    null
+  );
   const [editing, setEditing] = useState(false);
   const [draftConfig, setDraftConfig] = useState<string[] | null>(null);
   const [draftMeta, setDraftMeta] = useState<Record<string, number> | null>(null);
@@ -363,7 +395,9 @@ export default function DashboardPage() {
           if (orgData?.valor) {
             try {
               parsed = JSON.parse(orgData.valor);
-            } catch {}
+            } catch (e) {
+              void e;
+            }
           }
         }
 
@@ -378,14 +412,19 @@ export default function DashboardPage() {
           if (globalData?.valor) {
             try {
               parsed = JSON.parse(globalData.valor);
-            } catch {}
+            } catch (e) {
+              void e;
+            }
           }
         }
 
         if (parsed) {
           const rolesPart = parsed.roles || parsed;
           const metaPart = parsed.meta || {};
-          const chosenRaw = (rolesPart && ((role && rolesPart[role]) || rolesPart.default)) || (role ? DEFAULT_BY_ROLE[role] : null) || null;
+          const chosenRaw =
+            (rolesPart && ((role && rolesPart[role]) || rolesPart.default)) ||
+            (role ? DEFAULT_BY_ROLE[role] : null) ||
+            null;
           const chosen = Array.isArray(chosenRaw) ? Array.from(new Set(chosenRaw)) : chosenRaw;
           setDashboardConfig(chosen);
           setDashboardMeta(metaPart || {});
@@ -407,11 +446,11 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!editing) {
       setDraftConfig(dashboardConfig ? Array.from(dashboardConfig) : null);
-      setDraftMeta(dashboardMeta?.[role || ''] ? { ...(dashboardMeta?.[role || ''] as Record<string, number>) } : {});
+      setDraftMeta(dashboardMeta?.[role || ''] ? { ...dashboardMeta?.[role || ''] } : {});
     } else {
       // entering edit mode: initialize draft from current
       setDraftConfig(dashboardConfig ? Array.from(dashboardConfig) : []);
-      setDraftMeta(dashboardMeta?.[role || ''] ? { ...(dashboardMeta?.[role || ''] as Record<string, number>) } : {});
+      setDraftMeta(dashboardMeta?.[role || ''] ? { ...dashboardMeta?.[role || ''] } : {});
     }
   }, [dashboardConfig, editing]);
 
@@ -432,17 +471,23 @@ export default function DashboardPage() {
       const payload = {
         chave: 'dashboard_widgets',
         organization_id: profile?.organization_id ?? null,
-        valor: JSON.stringify({ roles: { [(role as string) || 'default']: draftConfig }, meta: { [(role as string) || 'default']: metaToSave } }),
+        valor: JSON.stringify({
+          roles: { [(role as string) || 'default']: draftConfig },
+          meta: { [(role as string) || 'default']: metaToSave },
+        }),
       } as any;
 
       // Use RPC to perform upsert securely (rpc_upsert_configuracoes_sistema)
       const rpcPayload = {
         p_organization_id: profile?.organization_id ?? null,
         p_chave: 'dashboard_widgets',
-        p_valor: JSON.stringify({ roles: { [(role as string) || 'default']: draftConfig }, meta: { [(role as string) || 'default']: metaToSave } }),
+        p_valor: JSON.stringify({
+          roles: { [(role as string) || 'default']: draftConfig },
+          meta: { [(role as string) || 'default']: metaToSave },
+        }),
       } as any;
 
-      const { error: rpcErr } = await supabase.rpc('rpc_upsert_configuracoes_sistema', rpcPayload as any);
+      const { error: rpcErr } = await supabase.rpc('rpc_upsert_configuracoes_sistema', rpcPayload);
       if (rpcErr) throw rpcErr;
       setDashboardConfig(Array.from(draftConfig));
       setEditing(false);
@@ -513,7 +558,12 @@ export default function DashboardPage() {
       {/* Filtros e Header */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Visão Geral</h1>
+          <h1 className="text-2xl sm:text-3xl font-black text-[var(--primary)] mb-1">
+            Olá, {displayName} 🍭🍫🍪👋🚀
+          </h1>
+          <p className="text-2xl sm:text-3xl font-black text-[var(--secondary)] dark:text-white tracking-tight">
+            📈 Dashboard{' '}
+          </p>
           <p className="text-slate-500 text-sm">
             {new Date(filtros.dataInicial).toLocaleDateString('pt-BR')} até{' '}
             {new Date(filtros.dataFinal).toLocaleDateString('pt-BR')}
@@ -606,11 +656,17 @@ export default function DashboardPage() {
           )}
 
           {editing && (
-            <p className="text-sm text-slate-500">Modo de edição: arraste e solte os widgets para reordenar. Clique em Salvar para aplicar.</p>
+            <p className="text-sm text-slate-500">
+              Modo de edição: arraste e solte os widgets para reordenar. Clique em Salvar para
+              aplicar.
+            </p>
           )}
 
-            <div ref={containerRef} className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-6">
-              {Array.from(new Set(configToRender)).map((wid, idx) => {
+          <div
+            ref={containerRef}
+            className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-6"
+          >
+            {Array.from(new Set(configToRender)).map((wid, idx) => {
               const entry = WIDGETS[wid];
               if (!entry) return null;
               const Comp = entry.component;
@@ -628,7 +684,8 @@ export default function DashboardPage() {
                     return 1;
                 }
               };
-              const rawCols = metaCols ?? (entry.defaultSize ? defaultSizeToCols(entry.defaultSize) : 1);
+              const rawCols =
+                metaCols ?? (entry.defaultSize ? defaultSizeToCols(entry.defaultSize) : 1);
               const mdSpan = Math.max(1, Math.min(12, rawCols * 4));
               const spanClass = `col-span-12 md:col-span-${mdSpan}`;
 
@@ -636,7 +693,10 @@ export default function DashboardPage() {
                 itemRefs.current[idx] = el;
               };
 
-              const sizeForWidget = (draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1);
+              const sizeForWidget =
+                (draftMeta && draftMeta[wid]) ||
+                (dashboardMeta?.[role || '']?.[wid] as number) ||
+                (entry.defaultSize === '4x1' ? 3 : 1);
               const spanClassWithSize = `col-span-12 md:col-span-${Math.max(1, Math.min(12, (sizeForWidget || 1) * 4))}`;
 
               return (
@@ -650,21 +710,43 @@ export default function DashboardPage() {
                   onDrop={(e) => editing && onDrop(e, idx)}
                   onDragEnd={() => setDropIndex(null)}
                 >
-                  <div className={`bg-white p-6 rounded-xl border border-slate-200 shadow-sm ${editing && dropIndex === idx ? 'border-dashed border-2 border-indigo-300' : ''}`}>
+                  <div
+                    className={`bg-white p-6 rounded-xl border border-slate-200 shadow-sm ${editing && dropIndex === idx ? 'border-dashed border-2 border-indigo-300' : ''}`}
+                  >
                     <h3 className="font-bold text-slate-800 mb-3 flex items-center justify-between">
                       <span>{entry.title || wid}</span>
                       <div className="flex items-center gap-2">
                         {editing && (
                           <div className="flex items-center gap-1">
-                            <button onClick={() => changeSize(wid, 1)} className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 1 ? 'bg-slate-200' : 'bg-white'}`}>1</button>
-                            <button onClick={() => changeSize(wid, 2)} className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 2 ? 'bg-slate-200' : 'bg-white'}`}>2</button>
-                            <button onClick={() => changeSize(wid, 3)} className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 3 ? 'bg-slate-200' : 'bg-white'}`}>3</button>
+                            <button
+                              onClick={() => changeSize(wid, 1)}
+                              className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 1 ? 'bg-slate-200' : 'bg-white'}`}
+                            >
+                              1
+                            </button>
+                            <button
+                              onClick={() => changeSize(wid, 2)}
+                              className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 2 ? 'bg-slate-200' : 'bg-white'}`}
+                            >
+                              2
+                            </button>
+                            <button
+                              onClick={() => changeSize(wid, 3)}
+                              className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 3 ? 'bg-slate-200' : 'bg-white'}`}
+                            >
+                              3
+                            </button>
                           </div>
                         )}
                         {editing && <span className="text-xs text-slate-400">Arraste</span>}
                       </div>
                     </h3>
-                    <Comp />
+                    <Comp
+                      filtros={filtros}
+                      auxFiltro={auxFiltro}
+                      organizationId={profile?.organization_id}
+                      profile={profile}
+                    />
                   </div>
                 </div>
               );
@@ -673,23 +755,49 @@ export default function DashboardPage() {
         </div>
       ) : role === 'admin' || role === 'master' ? (
         <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-sm text-slate-500">Personalize seu dashboard adicionando widgets em Configuração do Dashboard.</p>
+          <p className="text-sm text-slate-500">
+            Personalize seu dashboard adicionando widgets em Configuração do Dashboard.
+          </p>
         </div>
       ) : role === 'gerente' ? (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CaixaStatusWidget />
-            <SalesChartWidget />
+            <CaixaStatusWidget
+              filtros={filtros}
+              auxFiltro={auxFiltro}
+              organizationId={profile?.organization_id}
+              profile={profile}
+            />
+            <SalesChartWidget
+              filtros={filtros}
+              auxFiltro={auxFiltro}
+              organizationId={profile?.organization_id}
+              profile={profile}
+            />
           </div>
-          <LowStockWidget />
+          <LowStockWidget
+            filtros={filtros}
+            auxFiltro={auxFiltro}
+            organizationId={profile?.organization_id}
+            profile={profile}
+          />
         </div>
       ) : role === 'compras' ? (
         <div className="space-y-6">
-          <LowStockWidget />
+          <LowStockWidget
+            filtros={filtros}
+            auxFiltro={auxFiltro}
+            organizationId={profile?.organization_id}
+          />
         </div>
       ) : role === 'fabrica' ? (
         <div className="space-y-6">
-          <ProductionQueueWidget />
+          <ProductionQueueWidget
+            filtros={filtros}
+            auxFiltro={auxFiltro}
+            organizationId={profile?.organization_id}
+            profile={profile}
+          />
         </div>
       ) : (
         <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-sm">

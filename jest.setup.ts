@@ -71,22 +71,22 @@ if (typeof window !== 'undefined' && !window.localStorage) {
   } as Storage;
 
   // assign in test env
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
+
+  // assign mock localStorage in test env
   window.localStorage = localStorageMock;
 
   // Provide an async-compatible storage adapter that some libs (eg. @supabase/auth-js)
   // may try to use (expects getItem/setItem possibly async).
   // Expose as global `storage` to be safe.
   // global for tests
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  globalThis.storage = {
+
+  // provide async-compatible storage adapter for tests
+  (globalThis as any).storage = {
     async getItem(key: string) {
       return localStorageMock.getItem(key);
     },
     async setItem(key: string, value: string) {
-      return localStorageMock.setItem(key, value as string);
+      return localStorageMock.setItem(key, value);
     },
     async removeItem(key: string) {
       return localStorageMock.removeItem(key);

@@ -1,4 +1,4 @@
- 'use client';
+'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getOperationalContext } from '@/lib/operationalLocal';
@@ -28,7 +28,13 @@ import { formatCurrency } from '@/lib/utils/format';
 import RegistroPerdaModal from '@/components/logistica/RegistroPerdaModal';
 import DraggableCalculator from '@/components/pdv/DraggableCalculator';
 import SolicitacaoReposicao from '@/components/pdv/SolicitacaoReposicao';
-import { FLOAT_BTN_SIZE, loadFloatingPosition, saveFloatingPosition, saveFloatingPositionServer, loadFloatingPositionServer } from '@/components/pdv/floatingPosition';
+import {
+  FLOAT_BTN_SIZE,
+  loadFloatingPosition,
+  saveFloatingPosition,
+  saveFloatingPositionServer,
+  loadFloatingPositionServer,
+} from '@/components/pdv/floatingPosition';
 import KPIsMetas from '@/components/dashboard/KPIsMetas';
 import MetaDoDiaWidget from '@/components/pdv/MetaDoDiaWidget';
 import ClienteFidelidade from '@/components/pdv/ClienteFidelidade';
@@ -52,7 +58,9 @@ interface ItemVenda {
   quantidade: number;
 }
 
- export default function CaixaPDVPage() {
+export default function CaixaPDVPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const [produtos, setProdutos] = useState<ProdutoPDV[]>([]);
   const [promocoesPDV, setPromocoesPDV] = useState<ProdutoPDV[]>([]);
   const [isPerdaOpen, setIsPerdaOpen] = useState(false);
@@ -62,7 +70,6 @@ interface ItemVenda {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
 
-  const { profile, loading: authLoading } = useAuth();
   const [localId, setLocalId] = useState<string | null>(null);
   const [caixaAberto, setCaixaAberto] = useState<boolean>(false);
   const [caixaIdAtual, setCaixaIdAtual] = useState<string | null>(null);
@@ -79,12 +86,14 @@ interface ItemVenda {
   const perdaDraggingRef = useRef(false);
   const perdaDragStartRef = useRef({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
   const perdaMovedRef = useRef(0);
-  
-  const [selectedPayment, setSelectedPayment] = useState<'dinheiro' | 'pix' | 'cartao_credito' | null>(null);
-  
+
+  const [selectedPayment, setSelectedPayment] = useState<
+    'dinheiro' | 'pix' | 'cartao_credito' | null
+  >(null);
+
   const [showCaixaErroModal, setShowCaixaErroModal] = useState(false);
   const [pdvUsarFidelidade, setPdvUsarFidelidade] = useState(false);
-  
+
   const [ultimasVendas, setUltimasVendas] = useState<any[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
@@ -210,11 +219,13 @@ interface ItemVenda {
       }
 
       const vendasWithItems = vendas.map((v: any) => {
-        const itens = (itensData || []).filter((it: any) => it.venda_id === v.id).map((it: any) => ({
-          produto_id: it.produto_id,
-          quantidade: it.quantidade,
-          nome: produtosMap[it.produto_id] ?? String(it.produto_id),
-        }));
+        const itens = (itensData || [])
+          .filter((it: any) => it.venda_id === v.id)
+          .map((it: any) => ({
+            produto_id: it.produto_id,
+            quantidade: it.quantidade,
+            nome: produtosMap[it.produto_id] ?? String(it.produto_id),
+          }));
         return { ...v, items: itens };
       });
 
@@ -225,10 +236,12 @@ interface ItemVenda {
   }, []);
   useEffect(() => {
     async function initPDV() {
-      try {
-        setLoading(true);
+      if (authLoading) return;
+      if (!profile?.organization_id) return;
+      setLoading(true);
 
-        // 0. Carregar Configuração (priorizar organization-specific quando houver)
+      try {
+        // Ler configuração modo_pdv (org-specific primeiro, depois global)
         let config: any = null;
         try {
           if ((profile as any)?.organization_id) {
@@ -242,7 +255,7 @@ interface ItemVenda {
             config = cfgOrg;
           }
 
-            if (!config) {
+          if (!config) {
             const { data: cfgGlobal, error: cfgGlobalErr } = await supabase
               .from('configuracoes_sistema')
               .select('valor')
@@ -290,8 +303,12 @@ interface ItemVenda {
 
         // 1. Descobrir qual loja é essa (prefere contexto operacional: caixa aberto do usuário ou seleção ativa do Admin)
         const opCtx = await getOperationalContext(profile);
-        // Prioridade: operational local (persistido) -> caixa aberto (opCtx.caixa) -> perfil.local_id -> activeLocal() -> buscar primeira PDV
-        let meuLocalId = opCtx.localId ?? opCtx.caixa?.local_id ?? (profile as any)?.local_id ?? getActiveLocal() ?? null;
+        let meuLocalId =
+          opCtx.localId ??
+          opCtx.caixa?.local_id ??
+          (profile as any)?.local_id ??
+          getActiveLocal() ??
+          null;
         if (!meuLocalId) {
           const { data: locais } = await supabase
             .from('locais')
@@ -302,7 +319,6 @@ interface ItemVenda {
 
           if (!meuLocal) {
             toast.error('Nenhuma loja configurada!');
-            setLoading(false);
             return;
           }
           meuLocalId = meuLocal.id;
@@ -314,6 +330,7 @@ interface ItemVenda {
           setCaixaAberto(true);
           setCaixaIdAtual(opCtx.caixa.id);
           void fetchUltimasVendas(opCtx.caixa.id);
+
           // Carregar produtos e estoques desta loja
           const { data: prods, error } = await supabase
             .from('produtos_finais')
@@ -323,14 +340,13 @@ interface ItemVenda {
                 estoque:estoque_produtos(quantidade, local_id)
               `
             )
-              .eq('ativo', true)
-              .eq('tipo', 'final')
+            .eq('ativo', true)
+            .eq('tipo', 'final')
             .order('nome');
 
           if (error) throw error;
 
-          const produtosFormatados = prods.map((p: any) => {
-            // Encontrar o estoque específico desta loja no array de estoques
+          const produtosFormatados = (prods || []).map((p: any) => {
             const est = p.estoque?.find((e: any) => e.local_id === meuLocalId);
             return {
               id: p.id,
@@ -341,11 +357,14 @@ interface ItemVenda {
             };
           });
           setProdutos(produtosFormatados);
+
           // Buscar promoções ativas da organização e formatar como cards PDV separados
           try {
             const { data: promosData, error: promosErr } = await supabase
               .from('promocoes')
-              .select('id, nome, preco_total, imagem_url, itens:promocao_itens(produto_id, quantidade, valor_referencia_unitario)')
+              .select(
+                'id, nome, preco_total, imagem_url, itens:promocao_itens(produto_id, quantidade, valor_referencia_unitario)'
+              )
               .eq('organization_id', (profile as any).organization_id)
               .eq('ativo', true)
               .order('created_at', { ascending: false });
@@ -360,9 +379,7 @@ interface ItemVenda {
                 itens_combo: p.itens || [],
               }));
               setPromocoesPDV(promosFormatted);
-              // Também expor as promoções no catálogo principal para facilitar busca/adicionar
               setProdutos((prev) => {
-                // Evitar duplicatas pelo id
                 const existingIds = new Set(prev.map((r) => r.id));
                 const newOnes = promosFormatted.filter((p: any) => !existingIds.has(p.id));
                 return [...prev, ...newOnes];
@@ -389,6 +406,7 @@ interface ItemVenda {
             setCaixaAberto(true);
             setCaixaIdAtual(caixa.id);
             void fetchUltimasVendas(caixa.id);
+
             // 3. Se aberto, carregar produtos e estoques desta loja
             const { data: prods, error } = await supabase
               .from('produtos_finais')
@@ -398,13 +416,13 @@ interface ItemVenda {
                   estoque:estoque_produtos(quantidade, local_id)
                 `
               )
-                .eq('ativo', true)
-                .eq('tipo', 'final')
+              .eq('ativo', true)
+              .eq('tipo', 'final')
               .order('nome');
 
             if (error) throw error;
 
-            const produtosFormatados = prods.map((p: any) => {
+            const produtosFormatados = (prods || []).map((p: any) => {
               const est = p.estoque?.find((e: any) => e.local_id === meuLocalId);
               return {
                 id: p.id,
@@ -415,11 +433,13 @@ interface ItemVenda {
               };
             });
             setProdutos(produtosFormatados);
-            // Buscar promoções ativas da organização e formatar como cards PDV separados
+
             try {
               const { data: promosData, error: promosErr } = await supabase
                 .from('promocoes')
-                .select('id, nome, preco_total, imagem_url, itens:promocao_itens(produto_id, quantidade, valor_referencia_unitario)')
+                .select(
+                  'id, nome, preco_total, imagem_url, itens:promocao_itens(produto_id, quantidade, valor_referencia_unitario)'
+                )
                 .eq('organization_id', (profile as any).organization_id)
                 .eq('ativo', true)
                 .order('created_at', { ascending: false });
@@ -454,6 +474,7 @@ interface ItemVenda {
         setLoading(false);
       }
     }
+
     if (authLoading) return;
     void initPDV();
 
@@ -462,7 +483,12 @@ interface ItemVenda {
       .channel('public:configuracoes_sistema:modo_pdv')
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'configuracoes_sistema', filter: "chave=eq.modo_pdv" },
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'configuracoes_sistema',
+          filter: 'chave=eq.modo_pdv',
+        },
         (payload) => {
           try {
             const novo = (payload.new as any)?.valor;
@@ -488,14 +514,14 @@ interface ItemVenda {
       } catch (e) {
         // fallback: try to remove channel from client
         try {
-          // @ts-ignore
+          // optional chaining: `removeChannel` may not exist on older clients
           supabase.removeChannel?.(channel);
         } catch (err) {
           // noop
         }
       }
     };
-  }, [authLoading, profile]);
+  }, [authLoading, profile, fetchUltimasVendas]);
 
   useEffect(() => {
     if (caixaIdAtual) void fetchUltimasVendas(caixaIdAtual);
@@ -504,38 +530,46 @@ interface ItemVenda {
   // Subscribe to realtime changes on `caixa_sessao` for this `localId` so UI updates
   // immediately when a caixa is opened/closed elsewhere.
   useEffect(() => {
+    if (typeof authLoading !== 'undefined' && authLoading) return;
+    if (typeof profile === 'undefined' || !profile?.organization_id) return;
+
     if (!localId) return;
 
     const channel = supabase
       .channel('public:caixa_sessao_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'caixa_sessao' }, (payload) => {
-        try {
-          const novo = (payload.new as any) ?? null;
-          const velho = (payload.old as any) ?? null;
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'caixa_sessao' },
+        (payload) => {
+          try {
+            const novo = (payload.new as any) ?? null;
+            const velho = (payload.old as any) ?? null;
 
-          // Se o evento estiver relacionado ao nosso `localId`, reagir
-          const relatedToLocal = (novo && novo.local_id === localId) || (velho && velho.local_id === localId);
-          if (!relatedToLocal) return;
+            // Se o evento estiver relacionado ao nosso `localId`, reagir
+            const relatedToLocal =
+              (novo && novo.local_id === localId) || (velho && velho.local_id === localId);
+            if (!relatedToLocal) return;
 
-          // Se foi inserido/atualizado para status aberto, marcar caixaAberto
-          if (novo && novo.status === 'aberto') {
-            // se for admin/master não filtrar por usuário
-            if ((profile as any)?.role === 'admin' || (profile as any)?.role === 'master') {
-              setCaixaAberto(true);
-            } else if (novo.usuario_abertura === (profile as any)?.id) {
-              setCaixaAberto(true);
+            // Se foi inserido/atualizado para status aberto, marcar caixaAberto
+            if (novo && novo.status === 'aberto') {
+              // se for admin/master não filtrar por usuário
+              if ((profile as any)?.role === 'admin' || (profile as any)?.role === 'master') {
+                setCaixaAberto(true);
+              } else if (novo.usuario_abertura === (profile as any)?.id) {
+                setCaixaAberto(true);
+              }
             }
-          }
 
-          // Se foi atualizado para fechado, ou removido, desativar PDV
-          if ((novo && novo.status === 'fechado') || (velho && !novo)) {
-            // Se for fechamento para nosso local, fechar
-            setCaixaAberto(false);
+            // Se foi atualizado para fechado, ou removido, desativar PDV
+            if ((novo && novo.status === 'fechado') || (velho && !novo)) {
+              // Se for fechamento para nosso local, fechar
+              setCaixaAberto(false);
+            }
+          } catch (e) {
+            console.warn('Erro ao processar evento realtime caixa_sessao:', e);
           }
-        } catch (e) {
-          console.warn('Erro ao processar evento realtime caixa_sessao:', e);
         }
-      })
+      )
       .subscribe();
 
     return () => {
@@ -563,10 +597,14 @@ interface ItemVenda {
   // --- AÇÕES DO CARRINHO ---
   const addAoCarrinho = (produto: ProdutoPDV) => {
     setCarrinho((prev) => {
-      const existe = prev.find((i) => i.produto.id === produto.id && i.produto.tipo_item === produto.tipo_item);
+      const existe = prev.find(
+        (i) => i.produto.id === produto.id && i.produto.tipo_item === produto.tipo_item
+      );
       if (existe) {
         return prev.map((i) =>
-          i.produto.id === produto.id && i.produto.tipo_item === produto.tipo_item ? { ...i, quantidade: i.quantidade + 1 } : i
+          i.produto.id === produto.id && i.produto.tipo_item === produto.tipo_item
+            ? { ...i, quantidade: i.quantidade + 1 }
+            : i
         );
       }
       // Para promoções, registramos o objeto promocional no campo produto (contendo itens_combo)
@@ -633,8 +671,8 @@ interface ItemVenda {
     const extractErrorMessage = (err: any) => {
       if (!err) return 'Erro desconhecido';
       if (typeof err === 'string') return err;
-      if ((err as any).message) return (err as any).message;
-      if ((err as any).error) return (err as any).error;
+      if (err.message) return err.message;
+      if (err.error) return err.error;
       try {
         return JSON.stringify(err);
       } catch (e) {
@@ -687,7 +725,8 @@ interface ItemVenda {
           .eq('id', caixa.id)
           .eq('status', 'aberto')
           .maybeSingle();
-        if (!caixaExiste) throw new Error('Caixa não encontrado ou fechado antes da conclusão da venda.');
+        if (!caixaExiste)
+          throw new Error('Caixa não encontrado ou fechado antes da conclusão da venda.');
       } catch (e) {
         throw new Error(extractErrorMessage(e));
       }
@@ -728,10 +767,17 @@ interface ItemVenda {
         }
 
         // Se for violação de FK na coluna caixa_id, revalidar caixa e tentar uma vez
-        if (errMsg && (errMsg.includes('vendas_caixa_id_fkey') || errMsg.toLowerCase().includes('foreign key'))) {
+        if (
+          errMsg &&
+          (errMsg.includes('vendas_caixa_id_fkey') || errMsg.toLowerCase().includes('foreign key'))
+        ) {
           // Rebuscar caixa aberto para este local/usuário
           try {
-            let caixaQueryRef: any = supabase.from('caixa_sessao').select('id').eq('local_id', localId).eq('status', 'aberto');
+            let caixaQueryRef: any = supabase
+              .from('caixa_sessao')
+              .select('id')
+              .eq('local_id', localId)
+              .eq('status', 'aberto');
             if ((profile as any)?.role !== 'admin' && (profile as any)?.role !== 'master') {
               caixaQueryRef = caixaQueryRef.eq('usuario_abertura', (profile as any)?.id);
             }
@@ -777,7 +823,10 @@ interface ItemVenda {
       if (errVenda) {
         const em = extractErrorMessage(errVenda) || 'Erro desconhecido';
         // Mensagem amigável para violação de FK no caixa
-        if (em && (em.includes('vendas_caixa_id_fkey') || em.toLowerCase().includes('foreign key'))) {
+        if (
+          em &&
+          (em.includes('vendas_caixa_id_fkey') || em.toLowerCase().includes('foreign key'))
+        ) {
           // Mostrar modal orientando reabrir o caixa antes de propagar o erro
           try {
             setShowCaixaErroModal(true);
@@ -794,12 +843,17 @@ interface ItemVenda {
         console.error('Resposta inválida do servidor ao criar venda', {
           lastInsertResponse,
           vendaPayload,
-          profile: { id: (profile as any)?.id ?? null, organization_id: (profile as any)?.organization_id ?? null },
+          profile: {
+            id: (profile as any)?.id ?? null,
+            organization_id: (profile as any)?.organization_id ?? null,
+          },
           caixa,
           errVenda,
         });
         const dump = JSON.stringify(lastInsertResponse || { vendaData, errVenda });
-        throw new Error('Resposta inválida do servidor ao criar venda (id ausente). Detalhes: ' + dump);
+        throw new Error(
+          'Resposta inválida do servidor ao criar venda (id ausente). Detalhes: ' + dump
+        );
       }
 
       const itensInsert: any[] = [];
@@ -812,7 +866,10 @@ interface ItemVenda {
               produto_id: subItem.produto_id,
               quantidade: item.quantidade * (subItem.quantidade || 1),
               preco_unitario: subItem.valor_referencia_unitario ?? 0,
-              subtotal: (item.quantidade * (subItem.quantidade || 1)) * (subItem.valor_referencia_unitario ?? 0),
+              subtotal:
+                item.quantidade *
+                (subItem.quantidade || 1) *
+                (subItem.valor_referencia_unitario ?? 0),
               organization_id: (profile as any)?.organization_id ?? null,
               promocao_id: item.produto.id,
             });
@@ -832,7 +889,10 @@ interface ItemVenda {
       const { error: errItens } = await supabase.from('itens_venda').insert(itensInsert);
       if (errItens) {
         // RLS pode impedir o insert; mostrar mensagem útil e registrar para auditoria
-        console.error('Falha ao inserir itens_venda (possível RLS):', errItens, { itensInsert, vendaData });
+        console.error('Falha ao inserir itens_venda (possível RLS):', errItens, {
+          itensInsert,
+          vendaData,
+        });
         toast.error('Falha ao registrar itens da venda: verifique permissões.');
         throw new Error(extractErrorMessage(errItens));
       }
@@ -851,7 +911,9 @@ interface ItemVenda {
             });
             if (rpcErr) {
               console.warn('RPC decrementar_estoque_loja_numeric retornou erro:', rpcErr);
-              toast('Estoque insuficiente para alguns itens; venda continuará sem atualizar estoque.');
+              toast(
+                'Estoque insuficiente para alguns itens; venda continuará sem atualizar estoque.'
+              );
               // continuar sem lançar erro
             }
           } catch (rpcEx) {
@@ -950,7 +1012,7 @@ interface ItemVenda {
     <>
       <div className="flex flex-col h-[calc(100vh-6rem)] bg-slate-100 animate-fade-up pb-24">
         <DraggableCalculator />
-        
+
         {localId && <SolicitacaoReposicao localId={localId} />}
         {/* Registrar Perda - mobile fixed, desktop arrastável com persistência */}
         {isDesktop ? (
@@ -970,18 +1032,24 @@ interface ItemVenda {
                 const dy = ev.clientY - perdaDragStartRef.current.y;
                 const newX = perdaDragStartRef.current.offsetX + dx;
                 const newY = perdaDragStartRef.current.offsetY + dy;
-                const clampedX = Math.max(8, Math.min(newX, window.innerWidth - FLOAT_BTN_SIZE - 8));
-                const clampedY = Math.max(8, Math.min(newY, window.innerHeight - FLOAT_BTN_SIZE - 8));
+                const clampedX = Math.max(
+                  8,
+                  Math.min(newX, window.innerWidth - FLOAT_BTN_SIZE - 8)
+                );
+                const clampedY = Math.max(
+                  8,
+                  Math.min(newY, window.innerHeight - FLOAT_BTN_SIZE - 8)
+                );
                 setPerdaPosition({ x: clampedX, y: clampedY });
                 perdaMovedRef.current = Math.hypot(dx, dy);
               };
-                const onUp = () => {
-                  perdaDraggingRef.current = false;
-                  saveFloatingPosition('floating:perda', perdaPosition);
-                  void saveFloatingPositionServer(profile?.id, 'floating:perda', perdaPosition);
-                  document.removeEventListener('mousemove', onMove);
-                  document.removeEventListener('mouseup', onUp);
-                };
+              const onUp = () => {
+                perdaDraggingRef.current = false;
+                saveFloatingPosition('floating:perda', perdaPosition);
+                void saveFloatingPositionServer(profile?.id, 'floating:perda', perdaPosition);
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
               document.addEventListener('mousemove', onMove);
               document.addEventListener('mouseup', onUp);
             }}
@@ -1002,18 +1070,24 @@ interface ItemVenda {
                 const dy = touch.clientY - perdaDragStartRef.current.y;
                 const newX = perdaDragStartRef.current.offsetX + dx;
                 const newY = perdaDragStartRef.current.offsetY + dy;
-                const clampedX = Math.max(8, Math.min(newX, window.innerWidth - FLOAT_BTN_SIZE - 8));
-                const clampedY = Math.max(8, Math.min(newY, window.innerHeight - FLOAT_BTN_SIZE - 8));
+                const clampedX = Math.max(
+                  8,
+                  Math.min(newX, window.innerWidth - FLOAT_BTN_SIZE - 8)
+                );
+                const clampedY = Math.max(
+                  8,
+                  Math.min(newY, window.innerHeight - FLOAT_BTN_SIZE - 8)
+                );
                 setPerdaPosition({ x: clampedX, y: clampedY });
                 perdaMovedRef.current = Math.hypot(dx, dy);
               };
-                const onEnd = () => {
-                  perdaDraggingRef.current = false;
-                  saveFloatingPosition('floating:perda', perdaPosition);
-                  void saveFloatingPositionServer(profile?.id, 'floating:perda', perdaPosition);
-                  document.removeEventListener('touchmove', onMove);
-                  document.removeEventListener('touchend', onEnd);
-                };
+              const onEnd = () => {
+                perdaDraggingRef.current = false;
+                saveFloatingPosition('floating:perda', perdaPosition);
+                void saveFloatingPositionServer(profile?.id, 'floating:perda', perdaPosition);
+                document.removeEventListener('touchmove', onMove);
+                document.removeEventListener('touchend', onEnd);
+              };
               document.addEventListener('touchmove', onMove, { passive: false });
               document.addEventListener('touchend', onEnd);
             }}
@@ -1024,7 +1098,11 @@ interface ItemVenda {
               }
               setIsPerdaOpen(true);
             }}
-            style={perdaPosition ? { left: perdaPosition.x, top: perdaPosition.y } : { right: 16, bottom: 80 }}
+            style={
+              perdaPosition
+                ? { left: perdaPosition.x, top: perdaPosition.y }
+                : { right: 16, bottom: 80 }
+            }
             className="fixed z-50 bg-red-600 text-white p-3 rounded-full shadow-lg hover:bg-red-700 transition-all z-50 flex items-center gap-2 group"
             title="Registrar Perda"
           >
@@ -1073,8 +1151,6 @@ interface ItemVenda {
                 autoFocus
               />
             </div>
-
-            
 
             {/* Grid de Produtos */}
             <div className="flex-1 overflow-y-auto pr-2">
@@ -1156,14 +1232,22 @@ interface ItemVenda {
                       <div className="w-full">
                         {promo.imagem_url ? (
                           <div className="mb-2 flex items-center justify-center overflow-hidden">
-                            <img src={promo.imagem_url} alt={promo.nome} className="h-20 w-auto object-contain rounded-md" />
+                            <img
+                              src={promo.imagem_url}
+                              alt={promo.nome}
+                              className="h-20 w-auto object-contain rounded-md"
+                            />
                           </div>
                         ) : null}
                         <h3 className="font-bold text-slate-800 line-clamp-2">{promo.nome}</h3>
-                        <p className="text-xs mt-1 text-slate-500">Combo — {promo.itens_combo?.length || 0} itens</p>
+                        <p className="text-xs mt-1 text-slate-500">
+                          Combo — {promo.itens_combo?.length || 0} itens
+                        </p>
                       </div>
                       <div className="text-right">
-                        <span className="text-lg font-bold text-purple-700">R$ {promo.preco_venda.toFixed(2)}</span>
+                        <span className="text-lg font-bold text-purple-700">
+                          R$ {promo.preco_venda.toFixed(2)}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -1173,34 +1257,53 @@ interface ItemVenda {
             {/* Histórico de Vendas (Sessão Atual) - movido para o final */}
             {ultimasVendas && ultimasVendas.length > 0 && (
               <div className="p-3 mt-4 bg-white rounded-xl border border-slate-200">
-                <h3 className="font-semibold text-sm text-slate-700 mb-2">Últimas Vendas (Sessão Atual)</h3>
-                    <div className={`text-xs text-slate-500 space-y-2 overflow-auto ${historyExpanded ? 'max-h-96' : 'max-h-48'}`}>
-                      {ultimasVendas.map((v) => (
-                        <div key={v.id} className="py-2 border-b border-slate-100">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="text-slate-700 text-sm">{new Date(v.created_at).toLocaleString()}</div>
-                              <div className="text-xs text-slate-400">{v.metodo_pagamento ?? '—'} • {v.status}</div>
-                              {/* itens vendidos (pequeno) */}
-                              {v.items && v.items.length > 0 && (
-                                <div className="mt-1 text-xs text-slate-600">
-                                  {v.items.slice(0, 3).map((it: any, idx: number) => (
-                                    <span key={idx} className="inline-block mr-2">{it.quantidade}x {it.nome}</span>
-                                  ))}
-                                  {v.items.length > 3 && <span className="text-slate-400">(+{v.items.length - 3} outros)</span>}
-                                </div>
+                <h3 className="font-semibold text-sm text-slate-700 mb-2">
+                  Últimas Vendas (Sessão Atual)
+                </h3>
+                <div
+                  className={`text-xs text-slate-500 space-y-2 overflow-auto ${historyExpanded ? 'max-h-96' : 'max-h-48'}`}
+                >
+                  {ultimasVendas.map((v) => (
+                    <div key={v.id} className="py-2 border-b border-slate-100">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="text-slate-700 text-sm">
+                            {new Date(v.created_at).toLocaleString()}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {v.metodo_pagamento ?? '—'} • {v.status}
+                          </div>
+                          {/* itens vendidos (pequeno) */}
+                          {v.items && v.items.length > 0 && (
+                            <div className="mt-1 text-xs text-slate-600">
+                              {v.items.slice(0, 3).map((it: any, idx: number) => (
+                                <span key={idx} className="inline-block mr-2">
+                                  {it.quantidade}x {it.nome}
+                                </span>
+                              ))}
+                              {v.items.length > 3 && (
+                                <span className="text-slate-400">
+                                  (+{v.items.length - 3} outros)
+                                </span>
                               )}
                             </div>
-                            <div className="font-bold text-slate-800 ml-3">{formatCurrency(v.total_venda ?? 0)}</div>
-                          </div>
+                          )}
                         </div>
-                      ))}
-                      <div className="mt-2 text-right">
-                        <button onClick={() => setHistoryExpanded((s) => !s)} className="text-xs text-slate-500 hover:text-slate-700">
-                          {historyExpanded ? 'Reduzir' : 'Ampliar'}
-                        </button>
+                        <div className="font-bold text-slate-800 ml-3">
+                          {formatCurrency(v.total_venda ?? 0)}
+                        </div>
                       </div>
                     </div>
+                  ))}
+                  <div className="mt-2 text-right">
+                    <button
+                      onClick={() => setHistoryExpanded((s) => !s)}
+                      className="text-xs text-slate-500 hover:text-slate-700"
+                    >
+                      {historyExpanded ? 'Reduzir' : 'Ampliar'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -1328,14 +1431,20 @@ interface ItemVenda {
               </div>
               <div className="mt-3">
                 {modoPdv === 'inventario' && (
-                  <p className="text-xs text-orange-600 mb-2">Modo Inventário: a venda será registrada sem baixar estoque.</p>
+                  <p className="text-xs text-orange-600 mb-2">
+                    Modo Inventário: a venda será registrada sem baixar estoque.
+                  </p>
                 )}
                 <button
                   onClick={() => void finalizarVenda()}
                   disabled={carrinho.length === 0 || !selectedPayment}
                   className="w-full px-4 py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  {modoPdv === 'inventario' ? 'Registrar Venda (Inventário)' : (selectedPayment ? 'Confirmar e Finalizar' : 'Selecione Pagamento')}
+                  {modoPdv === 'inventario'
+                    ? 'Registrar Venda (Inventário)'
+                    : selectedPayment
+                      ? 'Confirmar e Finalizar'
+                      : 'Selecione Pagamento'}
                 </button>
               </div>
             </div>
@@ -1522,13 +1631,20 @@ interface ItemVenda {
       {/* Histórico de vendas (modal para mobile) */}
       {showHistoryModal && (
         <div className="fixed inset-0 z-70 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowHistoryModal(false)} />
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowHistoryModal(false)}
+          />
           <div className="relative bg-white max-w-lg w-full p-4 rounded-lg shadow-lg z-80">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold">Últimas Vendas (Sessão Atual)</h3>
-              <button onClick={() => setShowHistoryModal(false)} className="text-slate-600">Fechar</button>
+              <button onClick={() => setShowHistoryModal(false)} className="text-slate-600">
+                Fechar
+              </button>
             </div>
-            <div className={`space-y-3 overflow-auto text-sm text-slate-700 ${historyExpanded ? 'max-h-96' : 'max-h-72'}`}>
+            <div
+              className={`space-y-3 overflow-auto text-sm text-slate-700 ${historyExpanded ? 'max-h-96' : 'max-h-72'}`}
+            >
               {ultimasVendas.length === 0 ? (
                 <div className="text-slate-400">Nenhuma venda registrada nesta sessão.</div>
               ) : (
@@ -1537,13 +1653,19 @@ interface ItemVenda {
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="font-medium">{new Date(v.created_at).toLocaleString()}</div>
-                        <div className="text-xs text-slate-400">{v.metodo_pagamento ?? '—'} • {v.status}</div>
+                        <div className="text-xs text-slate-400">
+                          {v.metodo_pagamento ?? '—'} • {v.status}
+                        </div>
                         {v.items && v.items.length > 0 && (
                           <div className="mt-1 text-xs text-slate-600">
                             {v.items.slice(0, 3).map((it: any, idx: number) => (
-                              <span key={idx} className="inline-block mr-2">{it.quantidade}x {it.nome}</span>
+                              <span key={idx} className="inline-block mr-2">
+                                {it.quantidade}x {it.nome}
+                              </span>
                             ))}
-                            {v.items.length > 3 && <span className="text-slate-400">(+{v.items.length - 3} outros)</span>}
+                            {v.items.length > 3 && (
+                              <span className="text-slate-400">(+{v.items.length - 3} outros)</span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1553,7 +1675,10 @@ interface ItemVenda {
                 ))
               )}
               <div className="mt-2 text-right">
-                <button onClick={() => setHistoryExpanded((s) => !s)} className="text-xs text-slate-500 hover:text-slate-700">
+                <button
+                  onClick={() => setHistoryExpanded((s) => !s)}
+                  className="text-xs text-slate-500 hover:text-slate-700"
+                >
                   {historyExpanded ? 'Reduzir' : 'Ampliar'}
                 </button>
               </div>
@@ -1579,7 +1704,9 @@ interface ItemVenda {
                 Fechar
               </button>
               <Link href="/dashboard/pdv/controle-caixa">
-                <button className="px-4 py-2 rounded-lg bg-emerald-600 text-white">Ir para Abertura de Caixa</button>
+                <button className="px-4 py-2 rounded-lg bg-emerald-600 text-white">
+                  Ir para Abertura de Caixa
+                </button>
               </Link>
             </div>
           </div>

@@ -10,7 +10,7 @@ import { toast, Toaster } from 'react-hot-toast';
 import { useAuth } from '@/lib/auth';
 
 export default function ExpedicaoPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [lojas, setLojas] = useState<any[]>([]);
   const [ordensFinalizadas, setOrdensFinalizadas] = useState<any[]>([]);
   const [fabrica, setFabrica] = useState<{ id: string; nome?: string } | null>(null);
@@ -24,19 +24,22 @@ export default function ExpedicaoPage() {
   const [produtoId, setProdutoId] = useState('');
   const [saldoOrigem, setSaldoOrigem] = useState<number>(0);
   const [distribuicoes, setDistribuicoes] = useState<any[]>([]);
-  const [locaisMap, setLocaisMap] = useState<Record<string,string>>({});
-  const [produtosMap, setProdutosMap] = useState<Record<string,string>>({});
+  const [locaisMap, setLocaisMap] = useState<Record<string, string>>({});
+  const [produtosMap, setProdutosMap] = useState<Record<string, string>>({});
   const [ordensHasDataExpedicao, setOrdensHasDataExpedicao] = useState(false);
   const [ordensHasStatusLogistica, setOrdensHasStatusLogistica] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyDistribId, setHistoryDistribId] = useState<string | null>(null);
+  const [plannedByPdv, setPlannedByPdv] = useState<any[]>([]);
+  const [selectedPdvs, setSelectedPdvs] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     async function carregarDados() {
+      if (authLoading) return; // aguarda autenticação
       if (!profile?.organization_id) return;
-      
+
       try {
         setLoading(true);
 
@@ -47,7 +50,7 @@ export default function ExpedicaoPage() {
           .eq('organization_id', profile?.organization_id)
           .eq('tipo', 'fabrica')
           .maybeSingle();
-        
+
         if (fab) setFabrica(fab);
 
         // 2. Buscar Ordens que estão no estágio 'concluido' no Kanban
@@ -55,13 +58,15 @@ export default function ExpedicaoPage() {
         const createBaseQuery = () =>
           supabase
             .from('ordens_producao')
-            .select(`
+            .select(
+              `
             id, 
             numero_op, 
             quantidade_prevista, 
             produto_final_id,
             produtos_finais!inner (nome, tipo)
-          `)
+          `
+            )
             .eq('organization_id', profile?.organization_id)
             .in('estagio_atual', ['concluido', 'expedicao'])
             .eq('produtos_finais.tipo', 'final')
@@ -97,33 +102,45 @@ export default function ExpedicaoPage() {
           if (fab?.id) {
             const { data: distribs } = await supabase
               .from('distribuicao_pedidos')
-              .select('id, produto_id, quantidade_solicitada, local_origem_id, local_destino_id, status, created_at, observacao, quantidade_recebida, ordem:ordens_producao(numero_op, produto_final_id)')
+              .select(
+                'id, produto_id, quantidade_solicitada, local_origem_id, local_destino_id, status, created_at, observacao, quantidade_recebida, ordem:ordens_producao(numero_op, produto_final_id)'
+              )
               .eq('local_origem_id', fab.id)
               .order('created_at', { ascending: false })
               .limit(200);
 
             list = distribs || [];
-            setDistribuicoes(list as any[]);
+            setDistribuicoes(list);
           } else {
             list = [];
             setDistribuicoes([]);
           }
 
           // Preload nomes de produtos e locais usados
-          const produtoIds = Array.from(new Set((list as any[]).map(d => (d.produto_id || (d.ordem?.produto_final_id))).filter(Boolean)));
-          const localIds = Array.from(new Set((list as any[]).flatMap(d => [d.local_origem_id, d.local_destino_id]).filter(Boolean)));
+          const produtoIds = Array.from(
+            new Set(list.map((d) => d.produto_id || d.ordem?.produto_final_id).filter(Boolean))
+          );
+          const localIds = Array.from(
+            new Set(list.flatMap((d) => [d.local_origem_id, d.local_destino_id]).filter(Boolean))
+          );
 
           if (produtoIds.length) {
-            const { data: produtos } = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
-            const map: Record<string,string> = {};
-            (produtos || []).forEach((p: any) => map[p.id] = p.nome);
+            const { data: produtos } = await supabase
+              .from('produtos_finais')
+              .select('id, nome')
+              .in('id', produtoIds);
+            const map: Record<string, string> = {};
+            (produtos || []).forEach((p: any) => (map[p.id] = p.nome));
             setProdutosMap(map);
           }
 
           if (localIds.length) {
-            const { data: locaisList } = await supabase.from('locais').select('id, nome').in('id', localIds);
-            const map: Record<string,string> = {};
-            (locaisList || []).forEach((l: any) => map[l.id] = l.nome);
+            const { data: locaisList } = await supabase
+              .from('locais')
+              .select('id, nome')
+              .in('id', localIds);
+            const map: Record<string, string> = {};
+            (locaisList || []).forEach((l: any) => (map[l.id] = l.nome));
             setLocaisMap(map);
           }
         } catch (err) {
@@ -132,13 +149,22 @@ export default function ExpedicaoPage() {
 
         // Verificar colunas de ordens_producao via RPC `has_column` (info_schema bloqueado pelo PostgREST)
         try {
-          const { data: hasDataExp } = await supabase.rpc('has_column', { p_table_name: 'ordens_producao', p_column_name: 'data_expedicao' }) as any;
-          const { data: hasStatusLog } = await supabase.rpc('has_column', { p_table_name: 'ordens_producao', p_column_name: 'status_logistica' }) as any;
+          const { data: hasDataExp } = (await supabase.rpc('has_column', {
+            p_table_name: 'ordens_producao',
+            p_column_name: 'data_expedicao',
+          })) as any;
+          const { data: hasStatusLog } = (await supabase.rpc('has_column', {
+            p_table_name: 'ordens_producao',
+            p_column_name: 'status_logistica',
+          })) as any;
 
           setOrdensHasDataExpedicao(Boolean(hasDataExp));
           setOrdensHasStatusLogistica(Boolean(hasStatusLog));
         } catch (err) {
-          console.warn('Não foi possível verificar colunas de ordens_producao via RPC has_column:', err);
+          console.warn(
+            'Não foi possível verificar colunas de ordens_producao via RPC has_column:',
+            err
+          );
           setOrdensHasDataExpedicao(false);
           setOrdensHasStatusLogistica(false);
         }
@@ -151,11 +177,11 @@ export default function ExpedicaoPage() {
     }
 
     carregarDados();
-  }, [profile]);
+  }, [profile?.organization_id, authLoading]);
 
   // Ao selecionar uma OP, preenchemos automaticamente o produto e a quantidade sugerida
   const handleSelectOP = async (id: string) => {
-    const op = ordensFinalizadas.find(o => o.id === id);
+    const op = ordensFinalizadas.find((o) => o.id === id);
     if (op) {
       setOrdemSelecionada(id);
       setProdutoId(op.produto_final_id);
@@ -202,6 +228,128 @@ export default function ExpedicaoPage() {
         console.warn('Não foi possível buscar saldo da fábrica:', err);
         setSaldoOrigem(0);
       }
+
+      // Buscar distribuições planejadas para esta OP (se existirem)
+      try {
+        const { data: planned } = await supabase
+          .from('distribuicao_pedidos')
+          .select(
+            'id, produto_id, quantidade_solicitada, local_destino_id, local_origem_id, status'
+          )
+          .eq('ordem_producao_id', id)
+          .order('local_destino_id');
+
+        const plannedList = planned || [];
+        if (plannedList.length) {
+          // agrupar por local_destino_id (PDV)
+          const groups: Record<string, any> = {};
+          const produtoIds: string[] = [];
+          const localIds: string[] = [];
+
+          plannedList.forEach((p: any) => {
+            const key = p.local_destino_id || 'unknown';
+            produtoIds.push(p.produto_id);
+            localIds.push(p.local_destino_id);
+            if (!groups[key]) groups[key] = { pdvId: p.local_destino_id, items: [] };
+            groups[key].items.push(p);
+          });
+
+          const grouped = Object.values(groups);
+          setPlannedByPdv(grouped);
+          // marcar todos selecionados por padrão
+          const sel: Record<string, boolean> = {};
+          grouped.forEach((g: any) => {
+            sel[g.pdvId] = true;
+          });
+          setSelectedPdvs(sel);
+
+          // preload nomes
+          if (produtoIds.length) {
+            const { data: produtos } = await supabase
+              .from('produtos_finais')
+              .select('id, nome')
+              .in('id', produtoIds);
+            const map: Record<string, string> = {};
+            (produtos || []).forEach((p: any) => (map[p.id] = p.nome));
+            setProdutosMap((prev) => ({ ...prev, ...map }));
+          }
+          if (localIds.length) {
+            const { data: locaisList } = await supabase
+              .from('locais')
+              .select('id, nome')
+              .in('id', localIds);
+            const map: Record<string, string> = {};
+            (locaisList || []).forEach((l: any) => (map[l.id] = l.nome));
+            setLocaisMap((prev) => ({ ...prev, ...map }));
+          }
+        } else {
+          setPlannedByPdv([]);
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar distribuições planejadas:', err);
+        setPlannedByPdv([]);
+      }
+    }
+  };
+
+  const handleTogglePdv = (pdvId: string) => {
+    setSelectedPdvs((prev) => ({ ...prev, [pdvId]: !prev[pdvId] }));
+  };
+
+  const handleDispatchPlanned = async () => {
+    if (!ordemSelecionada) return toast.error('Selecione uma OP');
+    if (!fabrica?.id) return toast.error('Fábrica não carregada');
+
+    const groupsToSend = plannedByPdv.filter((g) => selectedPdvs[g.pdvId]);
+    if (!groupsToSend.length) return toast.error('Nenhuma PDV selecionada para envio');
+
+    try {
+      setEnviando(true);
+      for (const g of groupsToSend) {
+        for (const item of g.items) {
+          const payload = {
+            p_produto_id: item.produto_id,
+            p_quantidade: item.quantidade_solicitada,
+            p_local_origem_id: fabrica.id,
+            p_local_destino_id: g.pdvId,
+            p_ordem_producao_id: ordemSelecionada,
+          } as any;
+
+          const rpc = (await supabase.rpc('enviar_carga_loja', payload)) as any;
+          if (rpc?.error) throw rpc.error;
+        }
+      }
+
+      // Atualizar OP como finalizada/enviado
+      const updates: any = {
+        status: 'finalizada',
+        quantidade_produzida: Number(quantidadeReal) || undefined,
+      };
+      if (ordensHasStatusLogistica) updates.status_logistica = 'enviado';
+      if (ordensHasDataExpedicao) updates.data_expedicao = new Date().toISOString();
+
+      const { error: updateError } = await supabase
+        .from('ordens_producao')
+        .update(updates)
+        .eq('id', ordemSelecionada);
+
+      if (updateError) throw updateError;
+
+      toast.success('Despacho planejado confirmado e enviado para os PDVs.', { icon: '🚚' });
+
+      // Remover OP da lista e limpar estados
+      const selectedId = ordemSelecionada;
+      setOrdensFinalizadas((prev) => prev.filter((o) => o.id !== selectedId));
+      setOrdemSelecionada('');
+      setPlannedByPdv([]);
+      setSelectedPdvs({});
+      setQuantidadeReal('');
+      setLojaDestino('');
+    } catch (err: any) {
+      console.error('Erro ao despachar planejado:', err);
+      toast.error('Erro ao despachar planejado: ' + (err?.message ?? String(err)));
+    } finally {
+      setEnviando(false);
     }
   };
 
@@ -216,7 +364,8 @@ export default function ExpedicaoPage() {
     const selectedId = ordemSelecionada;
     const qtd = Number(parseFloat(quantidadeReal));
     if (!isFinite(qtd) || qtd <= 0) return toast.error('Quantidade inválida');
-    if (saldoOrigem < qtd) return toast.error(`Saldo insuficiente na fábrica! Disponível: ${saldoOrigem}`);
+    if (saldoOrigem < qtd)
+      return toast.error(`Saldo insuficiente na fábrica! Disponível: ${saldoOrigem}`);
 
     try {
       setEnviando(true);
@@ -232,17 +381,17 @@ export default function ExpedicaoPage() {
       console.debug('Chamando RPC enviar_carga_loja com', payload);
 
       // 1. Chamada para a RPC que transfere o estoque da fábrica para o PDV
-      const rpc = await supabase.rpc('enviar_carga_loja', payload) as any;
+      const rpc = (await supabase.rpc('enviar_carga_loja', payload)) as any;
       if (rpc?.error) throw rpc.error;
       const rpcData = rpc.data ?? rpc;
 
       // 2. Atualizar a OP para tirá-la do fluxo de expedição e concluir o processo
       const updates: any = {
         status: 'finalizada',
-        quantidade_produzida: parseFloat(quantidadeReal)
+        quantidade_produzida: parseFloat(quantidadeReal),
       };
 
-      if (ordensHasStatusLogistica) updates.status_logistica = 'entregue';
+      if (ordensHasStatusLogistica) updates.status_logistica = 'enviado';
       if (ordensHasDataExpedicao) updates.data_expedicao = new Date().toISOString();
 
       const { error: updateError } = await supabase
@@ -254,15 +403,14 @@ export default function ExpedicaoPage() {
 
       toast.success('Produto despachado! Estoque do PDV atualizado.', {
         duration: 5000,
-        icon: '🚚'
+        icon: '🚚',
       });
 
       // Limpar formulário e atualizar lista (usar selectedId antes de limpar estados)
-      setOrdensFinalizadas(prev => prev.filter(o => o.id !== selectedId));
+      setOrdensFinalizadas((prev) => prev.filter((o) => o.id !== selectedId));
       setOrdemSelecionada('');
       setLojaDestino('');
       setQuantidadeReal('');
-
     } catch (err: any) {
       console.error(err);
       toast.error('Erro no despacho: ' + (err?.message ?? String(err)));
@@ -277,13 +425,13 @@ export default function ExpedicaoPage() {
   const disabledReason = !fabrica
     ? 'Fábrica de origem não encontrada.'
     : saldoOrigem <= 0
-    ? `Saldo insuficiente na fábrica. Disponível: ${saldoOrigem}`
-    : '';
+      ? `Saldo insuficiente na fábrica. Disponível: ${saldoOrigem}`
+      : '';
 
   return (
     <div className="flex flex-col gap-6 p-6 animate-fade-up max-w-5xl mx-auto">
       <Toaster position="top-right" />
-      
+
       <PageHeader
         title="Expedição & Logística"
         description="Envie o que foi produzido para as prateleiras dos PDVs."
@@ -291,18 +439,19 @@ export default function ExpedicaoPage() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         {/* LADO ESQUERDO: LISTA DE OPs PRONTAS (VINDAS DO KANBAN) */}
         <div className="lg:col-span-1 space-y-4">
           <h3 className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
             <CheckCircle2 size={16} /> Prontos para Envio
           </h3>
-          
+
           <div className="space-y-2 overflow-y-auto max-h-[600px] pr-2">
             {ordensFinalizadas.length === 0 && (
               <div className="p-8 text-center bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
                 <Package className="mx-auto text-slate-300 mb-2" size={32} />
-                <p className="text-xs text-slate-500 font-medium">Nenhuma ordem concluída no Kanban.</p>
+                <p className="text-xs text-slate-500 font-medium">
+                  Nenhuma ordem concluída no Kanban.
+                </p>
               </div>
             )}
 
@@ -311,19 +460,27 @@ export default function ExpedicaoPage() {
                 key={op.id}
                 onClick={() => handleSelectOP(op.id)}
                 className={`w-full text-left p-4 rounded-xl border transition-all ${
-                  ordemSelecionada === op.id 
-                  ? 'bg-blue-50 border-blue-500 shadow-md ring-2 ring-blue-100' 
-                  : 'bg-white border-slate-200 hover:border-blue-300'
+                  ordemSelecionada === op.id
+                    ? 'bg-blue-50 border-blue-500 shadow-md ring-2 ring-blue-100'
+                    : 'bg-white border-slate-200 hover:border-blue-300'
                 }`}
               >
                 <div className="flex justify-between items-start">
                   <span className="text-[10px] font-black bg-slate-100 px-2 py-0.5 rounded text-slate-600">
                     OP #{op.numero_op}
                   </span>
-                  <ArrowRight size={14} className={ordemSelecionada === op.id ? 'text-blue-500' : 'text-slate-300'} />
+                  <ArrowRight
+                    size={14}
+                    className={ordemSelecionada === op.id ? 'text-blue-500' : 'text-slate-300'}
+                  />
                 </div>
-                <h4 className="font-bold text-slate-800 mt-2 line-clamp-1">{op.produtos_finais?.nome}</h4>
-                <p className="text-xs text-slate-500 mt-1">Qtd. Pronta: <span className="font-bold text-slate-700">{op.quantidade_prevista} un</span></p>
+                <h4 className="font-bold text-slate-800 mt-2 line-clamp-1">
+                  {op.produtos_finais?.nome}
+                </h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  Qtd. Pronta:{' '}
+                  <span className="font-bold text-slate-700">{op.quantidade_prevista} un</span>
+                </p>
               </button>
             ))}
           </div>
@@ -334,19 +491,27 @@ export default function ExpedicaoPage() {
           <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-xl sticky top-6">
             <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-50">
               <div className="text-center group">
-                <Warehouse size={40} className="mx-auto text-slate-400 group-hover:text-blue-500 transition-colors" />
-                <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Origem: Fábrica</p>
+                <Warehouse
+                  size={40}
+                  className="mx-auto text-slate-400 group-hover:text-blue-500 transition-colors"
+                />
+                <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">
+                  Origem: Fábrica
+                </p>
               </div>
               <div className="flex-1 px-8">
                 <div className="h-0.5 bg-slate-100 w-full relative">
-                  <Truck 
-                    size={24} 
-                    className={`absolute -top-3 text-blue-600 transition-all duration-1000 ${ordemSelecionada ? 'left-full -translate-x-full' : 'left-0'}`} 
+                  <Truck
+                    size={24}
+                    className={`absolute -top-3 text-blue-600 transition-all duration-1000 ${ordemSelecionada ? 'left-full -translate-x-full' : 'left-0'}`}
                   />
                 </div>
               </div>
               <div className="text-center group">
-                <Truck size={40} className="mx-auto text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                <Truck
+                  size={40}
+                  className="mx-auto text-slate-400 group-hover:text-emerald-500 transition-colors"
+                />
                 <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Destino: PDV</p>
               </div>
             </div>
@@ -354,19 +519,28 @@ export default function ExpedicaoPage() {
             <div className="space-y-6">
               {!ordemSelecionada ? (
                 <div className="py-12 text-center">
-                  <p className="text-slate-400 font-medium">Selecione uma ordem na lista ao lado para iniciar o despacho.</p>
+                  <p className="text-slate-400 font-medium">
+                    Selecione uma ordem na lista ao lado para iniciar o despacho.
+                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
                   <div className="md:col-span-2 p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                    <p className="text-xs font-bold text-blue-600 uppercase mb-1">Produto a ser enviado</p>
+                    <p className="text-xs font-bold text-blue-600 uppercase mb-1">
+                      Produto a ser enviado
+                    </p>
                     <p className="text-lg font-black text-blue-900">
-                      {ordensFinalizadas.find(o => o.id === ordemSelecionada)?.produtos_finais?.nome}
+                      {
+                        ordensFinalizadas.find((o) => o.id === ordemSelecionada)?.produtos_finais
+                          ?.nome
+                      }
                     </p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-black text-slate-500 uppercase mb-2">Loja de Destino (PDV)</label>
+                    <label className="block text-xs font-black text-slate-500 uppercase mb-2">
+                      Loja de Destino (PDV)
+                    </label>
                     <select
                       className="w-full p-3 border-2 border-slate-100 rounded-xl bg-slate-50 focus:border-blue-500 outline-none transition-all font-bold text-slate-700"
                       value={lojaDestino}
@@ -374,13 +548,17 @@ export default function ExpedicaoPage() {
                     >
                       <option value="">Selecione o PDV...</option>
                       {lojas.map((loja) => (
-                        <option key={loja.id} value={loja.id}>{loja.nome}</option>
+                        <option key={loja.id} value={loja.id}>
+                          {loja.nome}
+                        </option>
                       ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-black text-slate-500 uppercase mb-2">Quantidade Real Produzida</label>
+                    <label className="block text-xs font-black text-slate-500 uppercase mb-2">
+                      Quantidade Real Produzida
+                    </label>
                     <input
                       type="number"
                       className="w-full p-3 border-2 border-slate-100 rounded-xl bg-slate-50 focus:border-blue-500 outline-none transition-all font-bold text-blue-600 text-lg"
@@ -388,22 +566,78 @@ export default function ExpedicaoPage() {
                       value={quantidadeReal}
                       onChange={(e) => setQuantidadeReal(e.target.value)}
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">* Ajuste se houve perda na produção.</p>
-                    <p className="text-[10px] mt-1 text-blue-600 font-bold uppercase">Disponível na Fábrica: {saldoOrigem} un</p>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      * Ajuste se houve perda na produção.
+                    </p>
+                    <p className="text-[10px] mt-1 text-blue-600 font-bold uppercase">
+                      Disponível na Fábrica: {saldoOrigem} un
+                    </p>
                   </div>
 
                   <div className="md:col-span-2 pt-4">
-                    <div title={!canDispatch ? disabledReason : ''}>
-                      <Button
-                        onClick={canDispatch ? handleEnviar : undefined}
-                        loading={enviando}
-                        disabled={!canDispatch}
-                        className="w-full py-5 text-xl bg-blue-600 hover:bg-blue-700 shadow-blue-200 shadow-2xl rounded-2xl"
-                        icon={Package}
-                      >
-                        Despachar para Loja
-                      </Button>
-                    </div>
+                    {plannedByPdv.length > 0 ? (
+                      <div className="space-y-4">
+                        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                          <p className="text-sm font-bold text-slate-600 mb-2">
+                            Envios planejados por PDV
+                          </p>
+                          <div className="space-y-3">
+                            {plannedByPdv.map((g) => (
+                              <div
+                                key={g.pdvId}
+                                className="flex items-start gap-3 p-3 rounded-lg bg-white border"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(selectedPdvs[g.pdvId])}
+                                  onChange={() => handleTogglePdv(g.pdvId)}
+                                />
+                                <div className="flex-1">
+                                  <div className="flex justify-between items-center">
+                                    <div className="font-bold">{locaisMap[g.pdvId] || g.pdvId}</div>
+                                    <div className="text-xs text-slate-500">
+                                      Itens: {g.items.length}
+                                    </div>
+                                  </div>
+                                  <div className="text-xs text-slate-500 mt-2">
+                                    {g.items.map((it: any) => (
+                                      <div key={it.id} className="flex justify-between">
+                                        <div>{produtosMap[it.produto_id] || it.produto_id}</div>
+                                        <div className="font-bold">{it.quantidade_solicitada}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div title={!canDispatch ? disabledReason : ''}>
+                          <Button
+                            onClick={canDispatch ? handleDispatchPlanned : undefined}
+                            loading={enviando}
+                            disabled={!canDispatch}
+                            className="w-full py-5 text-xl bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 shadow-2xl rounded-2xl"
+                            icon={Truck}
+                          >
+                            Confirmar saída planejada
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div title={!canDispatch ? disabledReason : ''}>
+                        <Button
+                          onClick={canDispatch ? handleEnviar : undefined}
+                          loading={enviando}
+                          disabled={!canDispatch}
+                          className="w-full py-5 text-xl bg-blue-600 hover:bg-blue-700 shadow-blue-200 shadow-2xl rounded-2xl"
+                          icon={Package}
+                        >
+                          Despachar para Loja
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -434,20 +668,39 @@ export default function ExpedicaoPage() {
               <tbody>
                 {distribuicoes.map((d) => (
                   <tr key={d.id} className="border-t border-slate-100 text-sm">
-                    <td className="px-3 py-3">{produtosMap[d.produto_id || (d.ordem?.produto_final_id)] || d.produto_id || (d.ordem?.produto_final_id)}</td>
+                    <td className="px-3 py-3">
+                      {produtosMap[d.produto_id || d.ordem?.produto_final_id] ||
+                        d.produto_id ||
+                        d.ordem?.produto_final_id}
+                    </td>
                     <td className="px-3 py-3 text-xs font-bold">{d.ordem?.numero_op || '—'}</td>
                     <td className="px-3 py-3">{d.quantidade_solicitada}</td>
-                    <td className="px-3 py-3">{locaisMap[d.local_origem_id] || d.local_origem_id}</td>
-                    <td className="px-3 py-3">{locaisMap[d.local_destino_id] || d.local_destino_id}</td>
+                    <td className="px-3 py-3">
+                      {locaisMap[d.local_origem_id] || d.local_origem_id}
+                    </td>
+                    <td className="px-3 py-3">
+                      {locaisMap[d.local_destino_id] || d.local_destino_id}
+                    </td>
                     <td className="px-3 py-3">
                       {d.status === 'enviado' ? (
-                        <span className="inline-block px-2 py-1 rounded-full bg-yellow-50 text-yellow-700 text-xs font-semibold">Pendente</span>
+                        <span className="inline-block px-2 py-1 rounded-full bg-yellow-50 text-yellow-700 text-xs font-semibold">
+                          Pendente
+                        </span>
                       ) : (
-                        <span className="inline-block px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">Confirmada</span>
+                        <span className="inline-block px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">
+                          Confirmada
+                        </span>
                       )}
                     </td>
-                    <td className="px-3 py-3 max-w-xl text-xs text-slate-600">{d.observacao || (d.quantidade_recebida && d.quantidade_recebida != d.quantidade_solicitada ? `Recebido: ${d.quantidade_recebida}` : '—')}</td>
-                    <td className="px-3 py-3 text-xs text-slate-400">{new Date(d.created_at).toLocaleString()}</td>
+                    <td className="px-3 py-3 max-w-xl text-xs text-slate-600">
+                      {d.observacao ||
+                        (d.quantidade_recebida && d.quantidade_recebida != d.quantidade_solicitada
+                          ? `Recebido: ${d.quantidade_recebida}`
+                          : '—')}
+                    </td>
+                    <td className="px-3 py-3 text-xs text-slate-400">
+                      {new Date(d.created_at).toLocaleString()}
+                    </td>
                     <td className="px-3 py-3 text-right">
                       <Button
                         size="sm"
@@ -459,7 +712,9 @@ export default function ExpedicaoPage() {
                             setHistoryOpen(true);
                             const { data } = await supabase
                               .from('movimentacao_estoque')
-                              .select('id, produto_id, quantidade, tipo_movimento, origem, destino, observacao, referencia_id, created_at')
+                              .select(
+                                'id, produto_id, quantidade, tipo_movimento, origem, destino, observacao, referencia_id, created_at'
+                              )
                               .eq('referencia_id', d.id)
                               .order('created_at', { ascending: false });
                             setHistoryRecords(data || []);
@@ -478,7 +733,9 @@ export default function ExpedicaoPage() {
                 ))}
                 {distribuicoes.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-3 py-6 text-center text-slate-400">Nenhuma distribuição encontrada.</td>
+                    <td colSpan={9} className="px-3 py-6 text-center text-slate-400">
+                      Nenhuma distribuição encontrada.
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -494,7 +751,17 @@ export default function ExpedicaoPage() {
               <h4 className="font-bold">Histórico de Movimentações</h4>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500">Distribuição: {historyDistribId}</span>
-                <Button size="sm" variant="cancel" onClick={() => { setHistoryOpen(false); setHistoryRecords([]); setHistoryDistribId(null); }}>Fechar</Button>
+                <Button
+                  size="sm"
+                  variant="cancel"
+                  onClick={() => {
+                    setHistoryOpen(false);
+                    setHistoryRecords([]);
+                    setHistoryDistribId(null);
+                  }}
+                >
+                  Fechar
+                </Button>
               </div>
             </div>
 
@@ -518,7 +785,9 @@ export default function ExpedicaoPage() {
                   <tbody>
                     {historyRecords.map((h) => (
                       <tr key={h.id} className="border-t">
-                        <td className="px-2 py-2 text-xs text-slate-500">{new Date(h.created_at).toLocaleString()}</td>
+                        <td className="px-2 py-2 text-xs text-slate-500">
+                          {new Date(h.created_at).toLocaleString()}
+                        </td>
                         <td className="px-2 py-2 text-sm">{h.tipo_movimento || h.tipo}</td>
                         <td className="px-2 py-2 text-sm">{h.quantidade}</td>
                         <td className="px-2 py-2 text-sm">{h.origem}</td>

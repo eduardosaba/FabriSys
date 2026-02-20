@@ -258,7 +258,13 @@ export default function ControleEstoquePage() {
           quantidade: item.qtd,
           observacoes: headerEntrada.nf || null,
           data_movimento: headerEntrada.data || new Date().toISOString(),
+          // Envia o `insumo_id` tal como vem (UUID/string) para não gerar NULLs
           insumo_id: item.insumo_id || null,
+          // Não enviar `produto_id` pois a FK aponta para `produtos_finais` (não corresponde ao insumo)
+          produto_id: null,
+          created_by: profile?.id || null,
+          organization_id: profile?.organization_id || null,
+          referencia_id: null,
           fornecedor_id: headerEntrada.fornecedorId || null,
           fornecedor: fornecedorNome || null,
           lote: item.lote || null,
@@ -427,67 +433,82 @@ export default function ControleEstoquePage() {
                   </td>
                 </tr>
               )}
-              {movimentacoes.map((mov) => (
-                <tr key={mov.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 text-slate-500 font-mono text-xs">
-                    {new Date(mov.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4">
-                    {mov.tipo === 'entrada' ? (
-                      <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-1 rounded-full text-xs font-bold">
-                        <ArrowDownToLine size={12} /> Entrada
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-orange-700 bg-orange-50 px-2 py-1 rounded-full text-xs font-bold">
-                        <ArrowUpRight size={12} /> Saída
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-slate-500 text-xs">
-                    {mov.fornecedor ? `${mov.fornecedor} ${mov.nf ? `(NF: ${mov.nf})` : ''}` : '-'}
-                  </td>
-                  <td className="px-6 py-4 font-bold text-slate-800">
-                    {mov.insumo?.nome || 'Insumo excluído'}
-                  </td>
-                  <td
-                    className={`px-6 py-4 text-right font-bold ${mov.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}`}
-                  >
-                    {mov.tipo === 'entrada' ? '+' : '-'}
-                    {mov.quantidade} {mov.insumo?.unidade_estoque}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {canManageMovimentacoes ? (
-                        <button
-                          onClick={() => {
-                            setEditingMovimentacao(mov);
-                            setEditNF(mov.nf || '');
-                            setEditQuantidade(String(mov.quantidade || 0));
-                            const matched = fornecedores.find(
-                              (f) => f.label === (mov.fornecedor || '')
-                            );
-                            setEditFornecedorId(matched ? matched.value : '');
-                            setIsEditModalOpen(true);
-                          }}
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                          title="Editar"
-                        >
-                          <Edit size={18} />
-                        </button>
-                      ) : null}
-                      {canManageMovimentacoes ? (
-                        <button
-                          onClick={() => setDeletePendingMov(mov)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                          title="Excluir"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {movimentacoes.map((mov) => {
+                // A view `historico_estoque` pode retornar `insumo` como string (nome)
+                // ou como objeto { nome, unidade_estoque }. Tratamos ambos os casos.
+                const nomeDaView =
+                  typeof mov.insumo === 'string' ? mov.insumo : (mov.insumo as any)?.nome;
+                const insumoLocal = insumos.find(
+                  (i) => String(i.id) === String((mov as any).insumo_id)
+                );
+                const insumoName =
+                  nomeDaView ||
+                  insumoLocal?.nome ||
+                  (mov as any).insumo_id ||
+                  'Insumo não identificado';
+
+                return (
+                  <tr key={mov.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 text-slate-500 font-mono text-xs">
+                      {new Date(mov.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      {mov.tipo === 'entrada' ? (
+                        <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-1 rounded-full text-xs font-bold">
+                          <ArrowDownToLine size={12} /> Entrada
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-orange-700 bg-orange-50 px-2 py-1 rounded-full text-xs font-bold">
+                          <ArrowUpRight size={12} /> Saída
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 text-xs">
+                      {mov.fornecedor
+                        ? `${mov.fornecedor} ${mov.nf ? `(NF: ${mov.nf})` : ''}`
+                        : '-'}
+                    </td>
+                    <td className="px-6 py-4 font-bold text-slate-800">{insumoName}</td>
+                    <td
+                      className={`px-6 py-4 text-right font-bold ${mov.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}`}
+                    >
+                      {mov.tipo === 'entrada' ? '+' : '-'}
+                      {mov.quantidade} {mov.insumo?.unidade_estoque}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {canManageMovimentacoes ? (
+                          <button
+                            onClick={() => {
+                              setEditingMovimentacao(mov);
+                              setEditNF(mov.nf || '');
+                              setEditQuantidade(String(mov.quantidade || 0));
+                              const matched = fornecedores.find(
+                                (f) => f.label === (mov.fornecedor || '')
+                              );
+                              setEditFornecedorId(matched ? matched.value : '');
+                              setIsEditModalOpen(true);
+                            }}
+                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                            title="Editar"
+                          >
+                            <Edit size={18} />
+                          </button>
+                        ) : null}
+                        {canManageMovimentacoes ? (
+                          <button
+                            onClick={() => setDeletePendingMov(mov)}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="Excluir"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

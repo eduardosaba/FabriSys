@@ -150,7 +150,7 @@ export default function RelatorioValidadePage() {
             {/* Logo */}
             <img
               src={
-                getImageUrl(theme?.company_logo_url as string | undefined) ||
+                getImageUrl(theme?.company_logo_url) ||
                 getImageUrl(theme?.logo_url as string | undefined) ||
                 '/logo.png'
               }

@@ -7,6 +7,7 @@ import { Plus, Eye, Edit, Trash2, Loader2, ClipboardList } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
 import Modal from '@/components/Modal';
 import { useToast } from '@/hooks/useToast';
+import { useAuth } from '@/lib/auth';
 import { useTableFilters } from '@/hooks/useTableFilters';
 import TableControls from '@/components/ui/TableControls';
 import EmptyState from '@/components/ui/EmptyState';
@@ -38,6 +39,8 @@ interface OrdemProducaoRaw {
 }
 
 export default function OrdensProducaoPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const [ordens, setOrdens] = useState<OrdemProducao[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteModal, setDeleteModal] = useState(false);
@@ -48,17 +51,27 @@ export default function OrdensProducaoPage() {
     try {
       const { data, error } = await supabase
         .from('ordens_producao')
-        .select('id, numero_op, quantidade_prevista, status, data_prevista, custo_previsto, created_at, produto_final_id')
+        .select(
+          'id, numero_op, quantidade_prevista, status, data_prevista, custo_previsto, created_at, produto_final_id'
+        )
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       const rows = (data || []) as any[];
-      const produtoIds = Array.from(new Set(rows.map((r) => String(r.produto_final_id)).filter(Boolean)));
+      const produtoIds = Array.from(
+        new Set(rows.map((r) => String(r.produto_final_id)).filter(Boolean))
+      );
       const produtoMap: Record<string, { nome?: string; preco_venda?: number }> = {};
       if (produtoIds.length > 0) {
-        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome, preco_venda').in('id', produtoIds);
-        (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome, preco_venda: Number(p.preco_venda || 0) }));
+        const { data: produtos } = await supabase
+          .from('produtos_finais')
+          .select('id, nome, preco_venda')
+          .in('id', produtoIds);
+        (produtos || []).forEach(
+          (p: any) =>
+            (produtoMap[String(p.id)] = { nome: p.nome, preco_venda: Number(p.preco_venda || 0) })
+        );
       }
 
       const ordensFormatadas = rows.map((ordem: any) => ({
@@ -80,8 +93,10 @@ export default function OrdensProducaoPage() {
   }, [toast]);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!profile?.organization_id) return;
     void loadOrdens();
-  }, [loadOrdens]);
+  }, [loadOrdens, authLoading, profile]);
 
   const { searchTerm, setSearchTerm, filteredItems } = useTableFilters(ordens, {
     searchFields: ['numero_op', 'produto_final.nome', 'status'],

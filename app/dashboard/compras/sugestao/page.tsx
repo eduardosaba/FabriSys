@@ -1,4 +1,5 @@
 'use client';
+import { useAuth } from '@/lib/auth';
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -6,6 +7,7 @@ import PageHeader from '@/components/ui/PageHeader';
 import { Copy, RefreshCw, AlertCircle, CheckCircle, ArrowRight, ClipboardList } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Button from '@/components/Button'; // Usando seu componente compartilhado
+import { Modal, InputField } from '@/components/ui/shared';
 // Loading não é usado aqui
 
 // Tipo retornado pela função SQL calcular_compras_planejamento
@@ -19,8 +21,18 @@ interface ItemCalculado {
 }
 
 export default function SugestaoComprasPage() {
+  const { profile, loading: authLoading } = useAuth();
+
   const [itens, setItens] = useState<ItemCalculado[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processingSaida, setProcessingSaida] = useState<string | null>(null);
+  const [isSaidaModalOpen, setIsSaidaModalOpen] = useState(false);
+  const [selectedSaida, setSelectedSaida] = useState<{
+    insumo_id: string;
+    nome_insumo: string;
+    sugerido?: number;
+  } | null>(null);
+  const [saidaQty, setSaidaQty] = useState<string>('');
 
   // Carrega os dados do banco usando a função RPC
   const carregarDados = async () => {
@@ -100,20 +112,124 @@ export default function SugestaoComprasPage() {
     toast.success('Lista copiada! Pode colar no WhatsApp.');
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="mx-auto h-10 w-10 animate-spin text-blue-500 mb-4" />
-          <p className="text-gray-500">Analisando estoque e ordens planejadas...</p>
-        </div>
-      </div>
-    );
-  }
+  // Execução da lógica de registrar saída sem UI (reutilizável)
+  const executeRegistrarSaida = async (insumo_id: string, qty: number) => {
+    setProcessingSaida(insumo_id);
+    try {
+      const payload: Record<string, unknown> = {
+        tipo_movimento: 'saida',
+        quantidade: qty,
+        observacoes: `Saída registrada via Sugestão de Compras`,
+        data_movimento: new Date().toISOString(),
+        insumo_id: insumo_id,
+        fornecedor_id: null,
+        fornecedor: null,
+        lote: null,
+        validade: null,
+        created_by: profile?.id || null,
+        organization_id: profile?.organization_id || null,
+        produto_id: null,
+        referencia_id: null,
+      };
+
+      const { error: errInsert } = await supabase.from('movimentacao_estoque').insert(payload);
+      if (errInsert) throw errInsert;
+
+      const { data: insRow, error: errSelect } = await supabase
+        .from('insumos')
+        .select('estoque_atual')
+        .eq('id', insumo_id)
+        .single();
+
+      if (!errSelect) {
+        const current = Number((insRow as any)?.estoque_atual ?? 0);
+        const novo = current - qty;
+        const { error: errUpdate } = await supabase
+          .from('insumos')
+          .update({ estoque_atual: novo })
+          .eq('id', insumo_id);
+        if (errUpdate) throw errUpdate;
+      } else {
+        console.warn('Não foi possível obter estoque atual do insumo', errSelect);
+      }
+
+      toast.success('Saída registrada');
+      await carregarDados();
+    } finally {
+      setProcessingSaida(null);
+    }
+  };
+
+  // Abrir modal para entrada de quantidade e confirmar saída
+  const handleRegistrarSaida = async (
+    insumo_id: string,
+    nome_insumo: string,
+    sugeridoQty?: number
+  ) => {
+    setSelectedSaida({ insumo_id, nome_insumo, sugerido: sugeridoQty });
+    setSaidaQty(String(sugeridoQty ?? 1));
+    setIsSaidaModalOpen(true);
+  };
 
   return (
     <div className="flex flex-col gap-6 p-6 animate-fade-up">
       <Toaster position="top-right" />
+
+      {/* Overlay de loading (permanece visível enquanto `loading` for true) */}
+      {loading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80">
+          <div className="text-center">
+            <RefreshCw className="mx-auto h-12 w-12 animate-spin text-blue-500 mb-4" />
+            <p className="text-gray-700">Analisando estoque e ordens planejadas...</p>
+          </div>
+        </div>
+      )}
+
+      <Modal
+        isOpen={isSaidaModalOpen}
+        onClose={() => {
+          setIsSaidaModalOpen(false);
+          setSelectedSaida(null);
+        }}
+        title={selectedSaida ? `Registrar Saída — ${selectedSaida.nome_insumo}` : 'Registrar Saída'}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <InputField
+            label="Quantidade"
+            type="number"
+            value={saidaQty}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSaidaQty(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="cancel"
+              onClick={() => {
+                setIsSaidaModalOpen(false);
+                setSelectedSaida(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!selectedSaida) return;
+                const qty = Number(saidaQty.replace(',', '.'));
+                if (!qty || qty <= 0) {
+                  toast.error('Quantidade inválida');
+                  return;
+                }
+                setIsSaidaModalOpen(false);
+                await executeRegistrarSaida(selectedSaida.insumo_id, qty);
+                setSelectedSaida(null);
+              }}
+              loading={processingSaida === selectedSaida?.insumo_id}
+            >
+              Confirmar Saída
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <PageHeader
         title="Sugestão de Compras (MRP)"
@@ -197,7 +313,26 @@ export default function SugestaoComprasPage() {
                 <tbody className="divide-y divide-red-50">
                   {itensParaComprar.map((item) => (
                     <tr key={item.insumo_id} className="hover:bg-red-50/30 transition-colors">
-                      <td className="px-4 py-3 font-medium text-slate-700">{item.nome_insumo}</td>
+                      <td className="px-4 py-3 font-medium text-slate-700 flex items-center justify-between">
+                        <span>{item.nome_insumo}</span>
+                        <div className="ml-4">
+                          <Button
+                            onClick={() =>
+                              void handleRegistrarSaida(
+                                item.insumo_id,
+                                item.nome_insumo,
+                                Math.abs(item.saldo_final)
+                              )
+                            }
+                            disabled={processingSaida === item.insumo_id}
+                            className="text-xs px-2 py-1"
+                          >
+                            {processingSaida === item.insumo_id
+                              ? 'Processando...'
+                              : 'Registrar Saída'}
+                          </Button>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-right text-slate-500">
                         {item.estoque_atual.toFixed(2)}
                       </td>

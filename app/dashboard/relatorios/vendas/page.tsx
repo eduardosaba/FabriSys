@@ -17,7 +17,7 @@ interface Venda {
 }
 
 export default function RelatorioVendasPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,6 +30,9 @@ export default function RelatorioVendasPage() {
   const [locais, setLocais] = useState<{ id: string; nome: string }[]>([]);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!profile?.organization_id) return;
+
     async function fetchLocais() {
       const { data } = await supabase.from('locais').select('id, nome').eq('tipo', 'pdv');
       setLocais((data as any) || []);

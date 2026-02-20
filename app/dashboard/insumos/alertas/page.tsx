@@ -15,11 +15,12 @@ import { Toaster, toast } from 'react-hot-toast';
 
 // --- IMPORTS RELATIVOS ---
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth';
 import { Button, Modal } from '@/components/ui/shared';
 import PageHeader from '@/components/ui/PageHeader';
 
 interface InsumoAlerta {
-  id: number;
+  id: string;
   nome: string;
   unidade_estoque: string;
   estoque_atual: number;
@@ -45,6 +46,10 @@ export default function AlertasPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'estoque' | 'validade'>('estoque');
+  const { profile, loading: authLoading } = useAuth();
+  const [selectedForPedido, setSelectedForPedido] = useState<Record<string, boolean>>({});
+  const [selectedQty, setSelectedQty] = useState<Record<string, number>>({});
+  const [gerandoPedido, setGerandoPedido] = useState(false);
 
   useEffect(() => {
     void fetchDados();
@@ -72,7 +77,7 @@ export default function AlertasPage() {
             : (categoriaRaw as Record<string, unknown> | undefined);
 
           return {
-            id: Number(d['id'] ?? 0),
+            id: String(d['id'] ?? ''),
             nome: String(d['nome'] ?? ''),
             unidade_estoque: String(d['unidade_estoque'] ?? ''),
             estoque_atual: Number(d['estoque_atual'] ?? 0),
@@ -164,6 +169,12 @@ export default function AlertasPage() {
     (a) => a.status === 'vencido' || a.status === 'critico'
   );
 
+  // IDs usados na lista principal (string)
+  const allRowIds = reposicaoNecessaria.map((c, idx) => (c.id ? String(c.id) : `repo-${idx}`));
+  const allSelected =
+    allRowIds.length > 0 && allRowIds.every((id) => selectedForPedido[id] ?? false);
+  const selectedCount = allRowIds.filter((id) => selectedForPedido[id] ?? false).length;
+
   return (
     <div className="space-y-6 animate-fade-up">
       <Toaster position="top-right" />
@@ -180,7 +191,7 @@ export default function AlertasPage() {
             disabled={reposicaoNecessaria.length === 0}
             icon={ShoppingCart}
           >
-            Gerar Pedido ({reposicaoNecessaria.length})
+            Gerar Pedido ({selectedCount || reposicaoNecessaria.length})
           </Button>
         </div>
       </PageHeader>
@@ -295,6 +306,31 @@ export default function AlertasPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50 text-slate-500 uppercase text-xs border-b">
                   <tr>
+                    <th className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={() => {
+                          if (!allSelected) {
+                            const newMap: Record<string, boolean> = {};
+                            const newQty: Record<string, number> = {};
+                            reposicaoNecessaria.forEach((c, idx) => {
+                              const id = c.id ? String(c.id) : `repo-${idx}`;
+                              newMap[id] = true;
+                              newQty[id] = Math.max(
+                                1,
+                                Math.ceil(c.estoque_minimo_alerta * 1.5) - c.estoque_atual
+                              );
+                            });
+                            setSelectedForPedido(newMap);
+                            setSelectedQty(newQty);
+                          } else {
+                            setSelectedForPedido({});
+                            setSelectedQty({});
+                          }
+                        }}
+                      />
+                    </th>
                     <th className="px-6 py-3">Situação</th>
                     <th className="px-6 py-3">Produto</th>
                     <th className="px-6 py-3 text-center">Nível Atual</th>
@@ -310,13 +346,32 @@ export default function AlertasPage() {
                     const qtdSugerida = alvoReposicao - item.estoque_atual;
                     const custoEstimado = qtdSugerida * item.custo_por_ue;
 
-                    const safeKey = Number.isFinite(Number(item.id)) ? item.id : `repo-${idx}`;
+                    const idStr = item.id ? String(item.id) : `repo-${idx}`;
+                    const safeKey = idStr;
+                    const checked = selectedForPedido[idStr] ?? false;
+                    const qty = selectedQty[idStr] ?? Math.max(1, qtdSugerida);
 
                     return (
                       <tr
                         key={safeKey}
                         className={`transition-colors ${isZero ? 'bg-red-50/30 hover:bg-red-50/60' : 'hover:bg-yellow-50/30'}`}
                       >
+                        <td className="px-4 py-4">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = !checked;
+                              setSelectedForPedido((prev) => ({ ...prev, [idStr]: next }));
+                              if (next) {
+                                setSelectedQty((prev) => ({
+                                  ...prev,
+                                  [idStr]: Math.max(1, qtdSugerida),
+                                }));
+                              }
+                            }}
+                          />
+                        </td>
                         <td className="px-6 py-4">
                           {isZero ? (
                             <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-100 text-red-700 text-xs font-bold border border-red-200">
@@ -348,7 +403,12 @@ export default function AlertasPage() {
                           {item.estoque_minimo_alerta}
                         </td>
                         <td className="px-6 py-4 text-right bg-blue-50/30 font-bold text-blue-600">
-                          +{qtdSugerida} {item.unidade_estoque}
+                          <div className="flex items-center justify-end gap-3">
+                            <span>
+                              +{qtdSugerida} {item.unidade_estoque}
+                            </span>
+                            <span className="text-xs text-slate-400">(editar ao gerar pedido)</span>
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-right text-slate-600 font-mono">
                           R$ {custoEstimado.toFixed(2)}
@@ -469,39 +529,185 @@ export default function AlertasPage() {
             <p className="text-sm text-blue-700 mb-3">
               Itens zerados têm prioridade máxima na lista.
             </p>
+            <div className="flex justify-end mb-3">
+              <button
+                type="button"
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                onClick={() => {
+                  const allIds = reposicaoNecessaria.map((c, idx) =>
+                    c.id ? String(c.id) : `modal-${idx}`
+                  );
+                  const allSelected =
+                    allIds.length > 0 && allIds.every((id) => selectedForPedido[id] ?? false);
+                  if (allSelected) {
+                    const newMap: Record<string, boolean> = {};
+                    const newQty: Record<string, number> = {};
+                    allIds.forEach((id) => {
+                      newMap[id] = false;
+                      newQty[id] = 0;
+                    });
+                    setSelectedForPedido(newMap);
+                    setSelectedQty(newQty);
+                  } else {
+                    const newMap: Record<string, boolean> = {};
+                    const newQty: Record<string, number> = {};
+                    reposicaoNecessaria.forEach((c, idx) => {
+                      const id = c.id ? String(c.id) : `modal-${idx}`;
+                      newMap[id] = true;
+                      const alvo = Math.max(
+                        1,
+                        Math.ceil(c.estoque_minimo_alerta * 1.5) - c.estoque_atual
+                      );
+                      newQty[id] = alvo;
+                    });
+                    setSelectedForPedido(newMap);
+                    setSelectedQty(newQty);
+                  }
+                }}
+              >
+                {reposicaoNecessaria.length > 0 &&
+                reposicaoNecessaria.every(
+                  (c, idx) => selectedForPedido[c.id ? String(c.id) : `modal-${idx}`] ?? false
+                )
+                  ? 'Desmarcar todos'
+                  : 'Selecionar todos'}
+              </button>
+            </div>
             <div className="max-h-64 overflow-y-auto bg-white p-3 rounded border border-blue-100">
               <ul className="text-sm text-slate-600 space-y-1">
-                {reposicaoNecessaria.map((c, idx) => {
-                  const isZero = (c.estoque_atual || 0) === 0;
-                  return (
-                    <li
-                      key={Number.isFinite(Number(c.id)) ? c.id : `modal-${idx}`}
-                      className="flex justify-between border-b border-slate-50 last:border-0 py-2 items-center"
-                    >
-                      <div className="flex items-center gap-2">
-                        {isZero && <Ban size={12} className="text-red-500" />}
-                        <span className={isZero ? 'font-bold text-slate-800' : ''}>{c.nome}</span>
-                      </div>
-                      <span className="font-bold text-blue-600">
-                        +{Math.ceil(c.estoque_minimo_alerta * 1.5) - c.estoque_atual}{' '}
-                        {c.unidade_estoque}
-                      </span>
-                    </li>
-                  );
-                })}
+                {(() => {
+                  const selectedRows = reposicaoNecessaria
+                    .map((c, idx) => ({ c, idStr: c.id ? String(c.id) : `modal-${idx}` }))
+                    .filter(({ idStr }) => selectedForPedido[idStr] ?? false);
+                  if (selectedRows.length === 0) {
+                    return (
+                      <li className="text-sm text-slate-500 py-4">Nenhum item selecionado.</li>
+                    );
+                  }
+                  return selectedRows.map(({ c, idStr }, idx) => {
+                    const isZero = (c.estoque_atual || 0) === 0;
+                    const suggested = Math.ceil(c.estoque_minimo_alerta * 1.5) - c.estoque_atual;
+                    const checked = selectedForPedido[idStr] ?? false;
+                    const qty = selectedQty[idStr] ?? Math.max(1, suggested);
+                    return (
+                      <li
+                        key={idStr}
+                        className="flex justify-between border-b border-slate-50 last:border-0 py-2 items-center"
+                      >
+                        <label className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = !checked;
+                              setSelectedForPedido((prev) => ({ ...prev, [idStr]: next }));
+                              if (next && !(idStr in selectedQty)) {
+                                setSelectedQty((prev) => ({
+                                  ...prev,
+                                  [idStr]: Math.max(1, suggested),
+                                }));
+                              }
+                            }}
+                          />
+                          <div className="flex items-center gap-2">
+                            {isZero && <Ban size={12} className="text-red-500" />}
+                            <span className={isZero ? 'font-bold text-slate-800' : ''}>
+                              {c.nome}
+                            </span>
+                          </div>
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="number"
+                            min={1}
+                            value={qty}
+                            onChange={(e) => {
+                              const v = Math.max(1, Number(e.target.value || 0));
+                              setSelectedQty((prev) => ({ ...prev, [idStr]: v }));
+                              setSelectedForPedido((prev) => ({ ...prev, [idStr]: true }));
+                            }}
+                            className="w-20 text-sm rounded border px-2 py-1"
+                          />
+                          <span className="font-bold text-blue-600">{c.unidade_estoque}</span>
+                        </div>
+                      </li>
+                    );
+                  });
+                })()}
               </ul>
             </div>
           </div>
 
           <div className="flex gap-3 justify-end">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+            <Button
+              variant="secondary"
+              onClick={() => setModalOpen(false)}
+              disabled={gerandoPedido}
+            >
               Cancelar
             </Button>
             <Button
               variant="primary"
-              onClick={() => {
-                toast.success('Pedido Gerado!');
-                setModalOpen(false);
+              loading={gerandoPedido}
+              onClick={async () => {
+                // Gerar pedido apenas com items selecionados
+                if (authLoading) return toast.error('Aguardando autenticação...');
+                try {
+                  setGerandoPedido(true);
+                  const selected = reposicaoNecessaria.filter((c, idx) => {
+                    const idKey = c.id ? String(c.id) : `modal-${idx}`;
+                    return selectedForPedido[idKey] ?? false;
+                  });
+                  if (selected.length === 0)
+                    return toast.error('Selecione ao menos um item para o pedido.');
+
+                  // Filtrar apenas itens com `id` válido (evita enviar chaves temporárias como "modal-0")
+                  const selectedValid = selected
+                    .map((c, idx) => {
+                      const idKey = c.id ? String(c.id) : `modal-${idx}`;
+                      const qty =
+                        selectedQty[idKey] ??
+                        Math.max(1, Math.ceil(c.estoque_minimo_alerta * 1.5) - c.estoque_atual);
+                      return { c, idKey, qty };
+                    })
+                    .filter((s) => !!s.c.id && !String(s.c.id).startsWith('modal-'));
+                  if (selectedValid.length === 0)
+                    return toast.error('Nenhum item válido selecionado para gerar o pedido.');
+
+                  // Montar cabecalho do pedido
+                  const insertPedido = await supabase
+                    .from('pedidos_compra')
+                    .insert({ status: 'pendente' })
+                    .select();
+                  if (insertPedido.error) throw insertPedido.error;
+                  const pedidoRow = Array.isArray(insertPedido.data)
+                    ? insertPedido.data[0]
+                    : insertPedido.data;
+                  const pedidoId = pedidoRow?.id;
+                  if (!pedidoId) throw new Error('Não foi possível criar pedido');
+
+                  const itensToInsert = selectedValid.map((s) => ({
+                    pedido_id: pedidoId,
+                    insumo_id: String(s.c.id),
+                    quantidade: Math.max(1, Number(s.qty || 1)),
+                    valor_unitario: (s.c as any).custo_por_ue || 0,
+                  }));
+
+                  const insertItems = await supabase
+                    .from('itens_pedido_compra')
+                    .insert(itensToInsert);
+                  if (insertItems.error) throw insertItems.error;
+
+                  toast.success('Pedido gerado com sucesso!');
+                  setModalOpen(false);
+                  // Navegar para lista de pedidos de compra
+                  window.location.href = '/dashboard/insumos/pedidos-compra';
+                } catch (err: any) {
+                  console.error('Erro ao gerar pedido:', err);
+                  toast.error('Erro ao gerar pedido: ' + (err?.message ?? String(err)));
+                } finally {
+                  setGerandoPedido(false);
+                }
               }}
             >
               Confirmar

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { getOperationalContext } from '@/lib/operationalLocal';
+import { setActiveLocal, getActiveLocal } from '@/lib/activeLocal';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
@@ -15,6 +16,7 @@ import {
   Package,
   Banknote,
   QrCode,
+  MapPin,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -111,7 +113,9 @@ export default function ControleCaixaPage() {
 
       // 2. Identificar Loja — preferir contexto operacional (caixa aberto do usuário), depois profile.local_id
       const opCtx = await getOperationalContext(profile);
-      let meuLocalId = opCtx.caixa?.local_id ?? opCtx.localId ?? profile?.local_id ?? null;
+      // Prioridade para o local salvo na sessão (localStorage) — permite que Admin "flutue" entre lojas
+      const memoriaLocal = getActiveLocal();
+      let meuLocalId = memoriaLocal ?? opCtx.caixa?.local_id ?? opCtx.localId ?? profile?.local_id ?? null;
       if (!meuLocalId) {
         const { data: locais } = await supabase
           .from('locais')
@@ -453,6 +457,23 @@ export default function ControleCaixaPage() {
         icon={DollarSign}
       />
 
+      {/* 📍 Banner de Unidade Ativa */}
+      {localId && (
+        <div className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm flex items-center justify-between animate-fade-in border-b-2 border-blue-700">
+          <div className="flex items-center gap-2">
+            <MapPin size={18} className="animate-pulse" />
+            <span className="text-sm font-bold uppercase tracking-wider">
+              Unidade Ativa: {listaLojasDisponiveis?.find((p) => p.id === localId)?.nome || 'Carregando Unidade...'}
+            </span>
+          </div>
+          {(profile?.role === 'admin' || profile?.role === 'master') && (
+            <span className="text-[10px] bg-blue-500 px-2 py-0.5 rounded font-black uppercase">
+              Modo Administrador
+            </span>
+          )}
+        </div>
+      )}
+
       {!caixaAberto ? (
         <div className="bg-white p-10 rounded-xl border border-slate-200 shadow-lg text-center max-w-md mx-auto mt-10">
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600">
@@ -469,7 +490,17 @@ export default function ControleCaixaPage() {
                 <select
                   className="w-full p-3 border rounded-xl bg-slate-50 font-medium outline-none focus:ring-2 focus:ring-green-500"
                   value={localId || ''}
-                  onChange={(e) => setLocalId(e.target.value)}
+                  onChange={(e) => {
+                    const novoId = e.target.value || null;
+                    setLocalId(novoId);
+                    try {
+                      setActiveLocal(novoId);
+                      toast.success('Unidade operacional alterada.');
+                    } catch (err) {
+                      // non-fatal
+                      console.warn('Falha ao salvar unidade ativa', err);
+                    }
+                  }}
                 >
                   <option value="">Selecione a Loja...</option>
                   {listaLojasDisponiveis.map((loja) => (
@@ -498,10 +529,14 @@ export default function ControleCaixaPage() {
 
           <Button
             onClick={abrirCaixa}
-            disabled={!localId}
-            className="w-full py-4 text-lg mt-6 bg-green-600 hover:bg-green-700"
+            disabled={!localId || !valorAbertura}
+            className={`w-full py-4 text-lg mt-6 transition-all ${!localId || !valorAbertura ? 'bg-slate-300 text-slate-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 shadow-lg'}`}
           >
-            Confirmar Abertura como {(profile?.nome || profile?.id || '').split(' ')[0] || 'Você'}
+            {!localId
+              ? 'Selecione uma Loja Acima'
+              : !valorAbertura
+              ? 'Informe o Fundo de Troco'
+              : `Confirmar Abertura na ${listaLojasDisponiveis.find((l) => l.id === localId)?.nome || 'Unidade'}`}
           </Button>
 
           <p className="text-[10px] text-slate-400 mt-4 uppercase tracking-widest">

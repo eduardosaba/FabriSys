@@ -13,19 +13,8 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/useToast';
-
-export type UserRole = 'master' | 'admin' | 'gerente' | 'compras' | 'fabrica' | 'pdv' | 'user'; // Adicionado fallback
-
-interface Profile {
-  id: string;
-  role: UserRole;
-  local_id?: string;
-  nome?: string;
-  email?: string;
-  organization_id?: string; // Vital para o SaaS
-  ativo?: boolean;
-  status_conta?: string;
-}
+import type { Profile, UserRole } from '@/types/profile';
+export type { UserRole } from '@/types/profile';
 
 interface AuthContextType {
   user: User | null;

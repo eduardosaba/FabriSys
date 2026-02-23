@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import type { ThemeSettings } from '@/lib/types';
 // Função utilitária para cor primária com opacidade
 function getPrimaryWithOpacity(_theme: Partial<ThemeSettings> | undefined, opacity: number) {
@@ -51,10 +51,13 @@ import {
   History,
   TrendingUp,
   Lightbulb,
+  MapPin,
+  CheckCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { getActiveLocal, setActiveLocal } from '@/lib/activeLocal';
 
 export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => void }) {
   const _router = useRouter();
@@ -86,6 +89,18 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationsList, setNotificationsList] = useState<any[]>([]);
   const [opLocalId, setOpLocalId] = useState<string | null>(null);
+  const [activeLocalName, setActiveLocalName] = useState<string | null>(null);
+  const [lojasAdmin, setLojasAdmin] = useState<any[]>([]);
+
+  const handleTrocarLoja = (id: string | null) => {
+    try {
+      setActiveLocal(id);
+      // reload to apply context across the app
+      window.location.reload();
+    } catch (e) {
+      void e;
+    }
+  };
 
   // Ref para a busca (sugestões IA)
   const searchRef = useRef<HTMLDivElement>(null);
@@ -243,43 +258,58 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
 
   const fetchRecentNotifications = async () => {
     try {
-      const since = new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(); // últimas 6h
-      // admin/master: vê tudo
+      const since = new Date();
+      // considerar início do dia local
+      since.setHours(0, 0, 0, 0);
+      const sinceIso = since.toISOString();
+
+      // admin: agregar vendas do dia por local + eventos de caixa
       if (isAdmin) {
-        const { data: vendas, error: errV } = await safeSelect(
-          supabase,
-          'vendas',
-          'id,total_venda,created_at,local:locais(nome)',
-          (b: any) => b.gte('created_at', since).order('created_at', { ascending: false }).limit(10)
-        );
+        // buscar vendas desde início do dia (limite razoável)
+        const { data: vendas, error: errV } = await supabase
+          .from('vendas')
+          .select('id,total_venda,created_at,local:locais(nome),local_id')
+          .gte('created_at', sinceIso)
+          .order('created_at', { ascending: false })
+          .limit(1000);
 
-        const { data: caixasAbertas, error: errCaixaA } = await supabase
+        // agregar por local
+        const vendasByLocal: Record<string, { nome: string; total: number }> = {};
+        (vendas || []).forEach((v: any) => {
+          const lid = String(v.local_id || 'unknown');
+          const nome = v.local?.nome || 'PDV';
+          vendasByLocal[lid] = vendasByLocal[lid] || { nome, total: 0 };
+          vendasByLocal[lid].total += Number(v.total_venda || 0);
+        });
+
+        const vendasNotifs = Object.entries(vendasByLocal).map(([lid, info]) => ({
+          id: `agg-v-${lid}`,
+          title: `${info.nome} — Vendas do dia`,
+          message: `Total vendido hoje: R$ ${info.total.toFixed(2)}`,
+          time: new Date().toISOString(),
+          type: 'vendas_diarias',
+        }));
+
+        const { data: caixasAbertas } = await supabase
           .from('caixa_sessao')
-          .select(
-            'id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome)'
-          )
-          .gte('data_abertura', since)
+          .select('id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome)')
+          .gte('data_abertura', sinceIso)
           .order('data_abertura', { ascending: false })
-          .limit(10);
+          .limit(50);
 
-        const { data: caixasFechadas, error: errCaixaF } = await supabase
+        const { data: caixasFechadas } = await supabase
           .from('caixa_sessao')
-          .select(
-            'id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome)'
-          )
-          .gte('data_fechamento', since)
+          .select('id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome)')
+          .gte('data_fechamento', sinceIso)
           .order('data_fechamento', { ascending: false })
-          .limit(10);
+          .limit(50);
 
-        const vendasNotifs = (vendas || []).map(mapVendaToNotif);
-        const caixaNotifs = [...(caixasAbertas || []), ...(caixasFechadas || [])].map(
-          mapCaixaToNotif
-        );
+        const caixaNotifs = [...(caixasAbertas || []), ...(caixasFechadas || [])].map(mapCaixaToNotif);
 
         const merged = [...vendasNotifs, ...caixaNotifs].sort(
           (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
         );
-        setNotificationsList(merged.slice(0, 20));
+        setNotificationsList(merged.slice(0, 50));
         return;
       }
 
@@ -539,6 +569,59 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
       }
     };
   }, [profile?.id, roleVal]);
+  // 1. Resolve a URL inicial (simplificado)
+  const _avatarRaw = (profile as any)?.avatar_url || (profile as any)?.foto_url || null;
+
+  const avatarSrc = useMemo(() => {
+    if (!_avatarRaw) return null;
+    const v = String(_avatarRaw).trim();
+    if (v.startsWith('http') || v.startsWith('data:') || v.startsWith('/')) return v;
+    return getImageUrl(v, { bucket: 'avatars' });
+  }, [_avatarRaw]);
+
+  const [avatarResolvedSrc, setAvatarResolvedSrc] = useState<string | null>(null);
+
+  // 2. Mantém o estado simples: atualiza resolved src quando avatarSrc muda
+  useEffect(() => {
+    setAvatarResolvedSrc(avatarSrc);
+  }, [avatarSrc]);
+
+  const displayName = profile?.nome || (profile as any)?.full_name || profile?.email || 'Usuário';
+
+  useEffect(() => {
+    const checkLocal = async () => {
+      try {
+        const id = getActiveLocal();
+        if (id) {
+          const { data } = await supabase.from('locais').select('nome').eq('id', id).maybeSingle();
+          if (data) setActiveLocalName(data.nome);
+          else setActiveLocalName(null);
+        } else {
+          setActiveLocalName(null);
+        }
+      } catch (e) {
+        setActiveLocalName(null);
+      }
+    };
+
+    checkLocal();
+    const onStorage = () => void checkLocal();
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const carregarLojas = async () => {
+      try {
+        const { data } = await supabase.from('locais').select('id,nome').eq('tipo', 'pdv').order('nome');
+        setLojasAdmin(data || []);
+      } catch (e) {
+        setLojasAdmin([]);
+      }
+    };
+    void carregarLojas();
+  }, [isAdmin]);
 
   return (
     <header
@@ -667,36 +750,16 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
       </div>
 
       {/* Ações e Ferramentas */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4">
         {/* Atalhos Rápidos */}
         {allowedRoles.includes(profile?.role ?? '') && (
           <Popover open={showQuickMenu} onOpenChange={setShowQuickMenu}>
             <div className="relative">
               <PopoverTrigger asChild>
-                <button
-                  className="flex items-center gap-2 rounded-md p-2"
-                  style={{ transition: 'background 0.2s' }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
-                      theme,
-                      0.8
-                    );
-                    const icons = e.currentTarget.querySelectorAll('svg');
-                    icons.forEach((icon) => {
-                      icon.style.color = getPrimaryWithOpacity(theme, 0.8);
-                    });
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = '';
-                    const icons = e.currentTarget.querySelectorAll('svg');
-                    icons.forEach((icon) => {
-                      icon.style.color = '';
-                    });
-                  }}
-                >
+                <button className="flex items-center gap-1 rounded-md p-2 hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
                   <Plus className="h-5 w-5" />
-                  <span className="hidden sm:inline">Atalhos</span>
-                  <ChevronDown className="h-4 w-4" />
+                  <span className="hidden md:inline text-sm font-medium">Atalhos</span>
+                  <ChevronDown className="h-3 w-3 opacity-50" />
                 </button>
               </PopoverTrigger>
 
@@ -865,37 +928,20 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
           <RefreshCw className="h-5 w-5" />
         </button>
 
-        {/* Notificações */}
-        <Popover open={showNotifications} onOpenChange={setShowNotifications}>
-          <div className="relative">
-            <PopoverTrigger asChild>
-              <button
-                className="relative rounded-md p-2"
-                style={{ transition: 'background 0.2s' }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
-                    theme,
-                    0.8
-                  );
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = '';
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = '';
-                }}
-                onClick={() => {
-                  setShowQuickMenu(false);
-                  setShowUserMenu(false);
-                }}
-              >
-                <Bell className="h-5 w-5" />
-                <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs text-white">
-                  2
-                </span>
-              </button>
-            </PopoverTrigger>
+        {/* Notificações (mostrar apenas para admin) */}
+        {isAdmin && (
+          <Popover open={showNotifications} onOpenChange={setShowNotifications}>
+            <div className="relative">
+                <PopoverTrigger asChild>
+                  <button className="relative rounded-md p-2 hover:bg-black/5 dark:hover:bg-white/10 transition-colors" onClick={() => { setShowQuickMenu(false); setShowUserMenu(false); }}>
+                    <Bell className="h-5 w-5" />
+                    {notificationsList.length > 0 && (
+                      <span className="absolute right-1 top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] text-white font-bold border-2 border-[var(--secondary)]">
+                        {notificationsList.length}
+                      </span>
+                    )}
+                  </button>
+                </PopoverTrigger>
 
             <PopoverContent className="w-80 p-0" align="end">
               <div
@@ -926,29 +972,17 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                 </div>
               </div>
             </PopoverContent>
-          </div>
-        </Popover>
+            </div>
+          </Popover>
+        )}
 
         {/* Toggle tema */}
         <button
           onClick={toggleMode}
-          className="rounded-md p-2"
-          style={{ transition: 'background 0.2s' }}
-          title={effectiveMode === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(theme, 0.8);
-            (e.currentTarget as HTMLElement).style.color = '';
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.background = '';
-            (e.currentTarget as HTMLElement).style.color = '';
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) icon.style.color = '';
-          }}
+          className="rounded-md p-2 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+          title="Alternar Tema"
         >
-          {effectiveMode === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          {effectiveMode === 'dark' ? <Sun className="h-5 w-5 text-yellow-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
         </button>
 
         {/* Menu do usuário */}
@@ -956,32 +990,42 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
           <div className="relative">
             <PopoverTrigger asChild>
               <button
-                className="flex items-center gap-2 rounded-md p-2"
-                style={{ transition: 'background 0.2s' }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
-                    theme,
-                    0.8
-                  );
-                  (e.currentTarget as HTMLElement).style.color = '';
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = '';
-                  (e.currentTarget as HTMLElement).style.color = '';
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) icon.style.color = '';
-                }}
+                className="flex items-center gap-3 rounded-full sm:rounded-md p-1 pr-2 hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95"
                 onClick={() => {
                   setShowQuickMenu(false);
                   setShowNotifications(false);
                 }}
               >
-                <User className="h-5 w-5" />
-                <span className="hidden text-sm font-medium sm:inline">
-                  {profile?.nome || profile?.email || 'Usuário'}
-                </span>
+                <div className="relative h-8 w-8 overflow-hidden rounded-full border-2 border-[var(--primary)] shadow-sm">
+                  {avatarResolvedSrc ? (
+                    <img
+                      src={avatarResolvedSrc}
+                      alt={displayName}
+                      className="h-full w-full object-cover"
+                      onError={() => setAvatarResolvedSrc(null)}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gray-100 dark:bg-gray-800">
+                      <User className="h-4 w-4 text-gray-400" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="hidden flex-col items-start sm:flex">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold leading-none text-gray-900 dark:text-white">{(profile?.nome || 'Usuário').split(' ')[0]}</span>
+
+                    {activeLocalName && (
+                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[9px] font-black uppercase tracking-tighter border border-blue-200 dark:border-blue-800">
+                        <MapPin className="h-3 w-3" />
+                        {activeLocalName}
+                      </span>
+                    )}
+                  </div>
+
+                  <span className="text-[10px] font-medium text-gray-500 uppercase tracking-tighter">{profile?.role === 'admin' ? 'Administrador' : profile?.role}</span>
+                </div>
+                <ChevronDown className="hidden h-3 w-3 opacity-50 sm:block" />
               </button>
             </PopoverTrigger>
 
@@ -990,14 +1034,28 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                 className="rounded-md"
                 style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}
               >
-                <div className="border-b border-gray-200 px-4 py-2 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                  {profile?.role === 'admin' && 'Administrador'}
-                  {profile?.role === 'fabrica' && 'Fábrica'}
-                  {profile?.role === 'pdv' && 'PDV'}
+                <div className="border-b border-gray-200 px-4 py-3 flex items-center gap-3 dark:border-gray-700">
+                  {avatarResolvedSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={avatarResolvedSrc}
+                        alt={displayName}
+                        className="h-10 w-10 rounded-full object-cover"
+                        onError={() => setAvatarResolvedSrc(null)}
+                      />
+                    ) : (
+                    <User className="h-10 w-10 text-gray-400" />
+                  )}
+                  <div className="text-sm">
+                    <div className="font-medium text-gray-900 dark:text-white">{displayName}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {profile?.role === 'admin' ? 'Administrador' : profile?.role === 'fabrica' ? 'Fábrica' : profile?.role === 'pdv' ? 'PDV' : profile?.role}
+                    </div>
+                  </div>
                 </div>
                 {profile?.role === 'admin' && (
                   <Link
-                    href="/dashboard/usuarios"
+                    href="/dashboard/configuracoes/usuarios"
                     className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700"
                     style={{ transition: 'background 0.2s' }}
                     onMouseEnter={(e) => {
@@ -1019,30 +1077,45 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                     Gerenciar Usuários
                   </Link>
                 )}
-                <button
-                  onClick={() => {
-                    setShowUserMenu(false);
-                    // TODO: Implementar navegação para ajustes
-                  }}
+                {/* Seção exclusiva para Admin trocar de unidade */}
+                {isAdmin && lojasAdmin.length > 0 && (
+                  <div className="border-b border-gray-200 dark:border-gray-700 bg-blue-50/30 dark:bg-blue-900/10 p-2">
+                    <p className="px-2 mb-1 text-[9px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-1">
+                      <Store className="h-3 w-3" /> Trocar Unidade
+                    </p>
+                    <div className="space-y-1">
+                      {lojasAdmin.map((loja) => (
+                        <button
+                          key={loja.id}
+                          onClick={() => handleTrocarLoja(loja.id)}
+                          className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors flex items-center justify-between ${
+                            getActiveLocal() === loja.id
+                              ? 'bg-blue-600 text-white font-bold'
+                              : 'text-gray-600 hover:bg-blue-100 dark:text-gray-300 dark:hover:bg-blue-900/40'
+                          }`}
+                        >
+                          {loja.nome}
+                          {getActiveLocal() === loja.id && <CheckCircle className="h-3 w-3" />}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => { handleTrocarLoja(null); }}
+                        className="w-full text-left px-2 py-1 text-[10px] text-gray-400 hover:text-red-500 transition-colors italic"
+                      >
+                        Limpar seleção (Modo Administrador)
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <Link
+                  href="/dashboard/profile"
                   className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700"
-                  style={{ transition: 'background 0.2s' }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = getPrimaryWithOpacity(
-                      theme,
-                      0.8
-                    );
-                    const icon = e.currentTarget.querySelector('svg');
-                    if (icon) icon.style.color = getPrimaryWithOpacity(theme, 0.8);
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = '';
-                    const icon = e.currentTarget.querySelector('svg');
-                    if (icon) icon.style.color = '';
-                  }}
+                  onClick={() => setShowUserMenu(false)}
                 >
                   <Settings className="h-4 w-4" />
-                  Ajustes
-                </button>
+                  Meu Perfil
+                </Link>
+                
                 <button
                   onClick={handleSignOut}
                   className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600"

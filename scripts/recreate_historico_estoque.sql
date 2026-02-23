@@ -2,7 +2,16 @@
 -- seja sempre um objeto JSON (ou NULL) com os campos esperados pelo frontend.
 -- Rode este script no SQL Editor do Supabase.
 
-CREATE OR REPLACE VIEW public.historico_estoque AS
+-- OBS: Se a view existente tiver colunas com nomes diferentes, o
+-- `CREATE OR REPLACE VIEW` pode falhar com erro 42P16. Para evitar
+-- isso, aqui descartamos a view antes de recriá-la. Use com cautela
+-- (dependências de objetos podem ser removidas). Se preferir
+-- preservar dependências, use `ALTER VIEW ... RENAME COLUMN ...`
+-- manualmente conforme as colunas atuais.
+
+DROP VIEW IF EXISTS public.historico_estoque CASCADE;
+
+CREATE VIEW public.historico_estoque AS
 SELECT
   m.id,
   m.tipo_movimento,

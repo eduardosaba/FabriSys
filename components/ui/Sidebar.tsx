@@ -186,16 +186,15 @@ const sidebarItems: SidebarItem[] = [
         name: 'Relatórios Financeiros',
         href: '/dashboard/relatorios/dre',
       },
+      {
+        id: 'financeiro_categorias',
+        name: 'Categorias Financeiras',
+        href: '/dashboard/financeiro/categorias',
+      },
     ],
   },
   // Link adicional para mobile: garante acesso rápido em telas pequenas
-  {
-    id: 'financeiro_categorias_mobile',
-    name: 'Categorias Financeiras',
-    href: '/dashboard/financeiro/categorias',
-    icon: <ClipboardList className="h-5 w-5" />,
-    allowedRoles: ['admin', 'master'],
-  },
+  // (movido) item de categorias financeiras agora faz parte do submenu 'financeiro'
   {
     id: 'configuracoes',
     name: 'Configurações',

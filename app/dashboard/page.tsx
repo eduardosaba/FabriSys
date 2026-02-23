@@ -25,6 +25,22 @@ import {
 } from '@/components/dashboard';
 import dynamic from 'next/dynamic';
 import WidgetSkeleton from '@/components/dashboard/WidgetSkeleton';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  KeyboardSensor,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+// avoid importing optional utilities to keep types simple
 
 // dynamic wrappers for specific widgets used in role-specific branches
 const CaixaStatusWidget = dynamic(
@@ -553,6 +569,52 @@ export default function DashboardPage() {
     });
   };
 
+  // DnD-kit sensors and handlers for mobile/desktop drag-and-drop
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
+
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+    if (!draftConfig) return;
+    if (over && active.id !== over.id) {
+      const oldIndex = draftConfig.indexOf(String(active.id));
+      const newIndex = draftConfig.indexOf(String(over.id));
+      if (oldIndex !== -1 && newIndex !== -1) {
+        setDraftConfig((items: string[] | null) => arrayMove((items || []) as string[], oldIndex, newIndex));
+      }
+    }
+  };
+
+  function SortableWidget({ id, idx, children, editing }: any) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+    const style: any = {
+      transform: transform ? `translate3d(${(transform as any).x ?? 0}px, ${(transform as any).y ?? 0}px, 0)` : undefined,
+      transition,
+      touchAction: 'none',
+      zIndex: isDragging ? 999 : 'auto',
+    };
+    const refFn = (el: HTMLDivElement | null) => {
+      setNodeRef(el);
+      itemRefs.current[idx] = el;
+    };
+
+    return (
+      <div ref={refFn} style={style} {...attributes}>
+        <div className="flex items-center justify-between">
+          {editing && (
+            <div {...listeners} className="p-2 mr-2 cursor-grab select-none touch-none">
+              ☰
+            </div>
+          )}
+        </div>
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 animate-fade-up p-6">
       {/* Filtros e Header */}
@@ -662,96 +724,74 @@ export default function DashboardPage() {
             </p>
           )}
 
-          <div
-            ref={containerRef}
-            className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-6"
-          >
-            {Array.from(new Set(configToRender)).map((wid, idx) => {
-              const entry = WIDGETS[wid];
-              if (!entry) return null;
-              const Comp = entry.component;
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={configToRender} strategy={rectSortingStrategy}>
+              <div ref={containerRef} className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-6">
+                {Array.from(new Set(configToRender)).map((wid, idx) => {
+                  const entry = WIDGETS[wid];
+                  if (!entry) return null;
+                  const Comp = entry.component;
 
-              // Map small cols (1..3) to a 12-grid system: 1 -> 4, 2 -> 8, 3 -> 12
-              const metaCols = dashboardMeta?.[role || '']?.[wid];
-              const defaultSizeToCols = (size: any) => {
-                switch (size) {
-                  case '2x1':
-                  case '2x2':
-                    return 2;
-                  case '4x1':
-                    return 3;
-                  default:
-                    return 1;
-                }
-              };
-              const rawCols =
-                metaCols ?? (entry.defaultSize ? defaultSizeToCols(entry.defaultSize) : 1);
-              const mdSpan = Math.max(1, Math.min(12, rawCols * 4));
-              const spanClass = `col-span-12 md:col-span-${mdSpan}`;
+                  // Map small cols (1..3) to a 12-grid system: 1 -> 4, 2 -> 8, 3 -> 12
+                  const metaCols = dashboardMeta?.[role || '']?.[wid];
+                  const defaultSizeToCols = (size: any) => {
+                    switch (size) {
+                      case '2x1':
+                      case '2x2':
+                        return 2;
+                      case '4x1':
+                        return 3;
+                      default:
+                        return 1;
+                    }
+                  };
+                  const rawCols = metaCols ?? (entry.defaultSize ? defaultSizeToCols(entry.defaultSize) : 1);
+                  const mdSpan = Math.max(1, Math.min(12, rawCols * 4));
+                  const spanClassWithSize = `col-span-12 md:col-span-${Math.max(1, Math.min(12, ((draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1)) * 4))}`;
 
-              const refFn = (el: HTMLDivElement | null) => {
-                itemRefs.current[idx] = el;
-              };
-
-              const sizeForWidget =
-                (draftMeta && draftMeta[wid]) ||
-                (dashboardMeta?.[role || '']?.[wid] as number) ||
-                (entry.defaultSize === '4x1' ? 3 : 1);
-              const spanClassWithSize = `col-span-12 md:col-span-${Math.max(1, Math.min(12, (sizeForWidget || 1) * 4))}`;
-
-              return (
-                <div
-                  key={wid}
-                  ref={refFn}
-                  className={`${spanClassWithSize}`}
-                  draggable={!!editing}
-                  onDragStart={(e) => editing && onDragStart(e, idx)}
-                  onDragOver={(e) => editing && onDragOver(e)}
-                  onDrop={(e) => editing && onDrop(e, idx)}
-                  onDragEnd={() => setDropIndex(null)}
-                >
-                  <div
-                    className={`bg-white p-6 rounded-xl border border-slate-200 shadow-sm ${editing && dropIndex === idx ? 'border-dashed border-2 border-indigo-300' : ''}`}
-                  >
-                    <h3 className="font-bold text-slate-800 mb-3 flex items-center justify-between">
-                      <span>{entry.title || wid}</span>
-                      <div className="flex items-center gap-2">
-                        {editing && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => changeSize(wid, 1)}
-                              className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 1 ? 'bg-slate-200' : 'bg-white'}`}
-                            >
-                              1
-                            </button>
-                            <button
-                              onClick={() => changeSize(wid, 2)}
-                              className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 2 ? 'bg-slate-200' : 'bg-white'}`}
-                            >
-                              2
-                            </button>
-                            <button
-                              onClick={() => changeSize(wid, 3)}
-                              className={`text-xs px-2 py-0.5 rounded ${sizeForWidget === 3 ? 'bg-slate-200' : 'bg-white'}`}
-                            >
-                              3
-                            </button>
-                          </div>
-                        )}
-                        {editing && <span className="text-xs text-slate-400">Arraste</span>}
-                      </div>
-                    </h3>
-                    <Comp
-                      filtros={filtros}
-                      auxFiltro={auxFiltro}
-                      organizationId={profile?.organization_id}
-                      profile={profile}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  return (
+                    <div key={wid} className={`${spanClassWithSize}`}>
+                      <SortableWidget id={wid} idx={idx} editing={editing}>
+                        <div
+                          className={`bg-white p-6 rounded-xl border border-slate-200 shadow-sm ${editing && dropIndex === idx ? 'border-dashed border-2 border-indigo-300' : ''}`}
+                        >
+                          <h3 className="font-bold text-slate-800 mb-3 flex items-center justify-between">
+                            <span>{entry.title || wid}</span>
+                            <div className="flex items-center gap-2">
+                              {editing && (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => changeSize(wid, 1)}
+                                    className={`text-xs px-2 py-0.5 rounded ${((draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1)) === 1 ? 'bg-slate-200' : 'bg-white'}`}
+                                  >
+                                    1
+                                  </button>
+                                  <button
+                                    onClick={() => changeSize(wid, 2)}
+                                    className={`text-xs px-2 py-0.5 rounded ${((draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1)) === 2 ? 'bg-slate-200' : 'bg-white'}`}
+                                  >
+                                    2
+                                  </button>
+                                  <button
+                                    onClick={() => changeSize(wid, 3)}
+                                    className={`text-xs px-2 py-0.5 rounded ${((draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1)) === 3 ? 'bg-slate-200' : 'bg-white'}`}
+                                  >
+                                    3
+                                  </button>
+                                </div>
+                              )}
+                              {editing && <span className="text-xs text-slate-400">Arraste</span>}
+                            </div>
+                          </h3>
+                          <Comp filtros={filtros} auxFiltro={auxFiltro} organizationId={profile?.organization_id} profile={profile} />
+                        </div>
+                      </SortableWidget>
+                    </div>
+                  );
+                })}
+              </div>
+            </SortableContext>
+          </DndContext>
         </div>
       ) : role === 'admin' || role === 'master' ? (
         <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-sm">

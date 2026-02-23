@@ -40,115 +40,99 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const lastFetchedUserId = useRef<string | null>(null);
 
   // Função isolada para buscar o perfil nas tabelas corretas
-  const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
-    // Evitar chamadas duplicadas simultaneas
-    if (fetchingProfile.current && lastFetchedUserId.current === userId) {
-      console.log(`[AuthProvider] ⏭️ Pulando fetchProfile duplicado para ${userId}`);
-      return;
-    }
-
-    fetchingProfile.current = true;
-    lastFetchedUserId.current = userId;
-    const startTime = performance.now();
-    console.log(`[AuthProvider] 🔍 Iniciando fetchProfile para userId=${userId}`);
-
-    try {
-      // Executar as duas queries em paralelo para reduzir latência total
-      console.log('[AuthProvider] 📋 Buscando em paralelo: colaboradores e profiles...');
-      const colabStart = performance.now();
-      const colabPromise = supabase
-        .from('colaboradores')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      const profStart = performance.now();
-      const profPromise = supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-
-      const [colabRes, profRes] = await Promise.all([colabPromise, profPromise]);
-
-      const colabDuration = performance.now() - colabStart;
-      const profDuration = performance.now() - profStart;
-      console.log(`[AuthProvider] ⏱️ Query colaboradores: ${colabDuration.toFixed(2)}ms`);
-      console.log(`[AuthProvider] ⏱️ Query profiles: ${profDuration.toFixed(2)}ms`);
-
-      const colab = (colabRes as any).data;
-      const colabError = (colabRes as any).error;
-      const prof = (profRes as any).data;
-      const profError = (profRes as any).error;
-
-      if (colabError) console.warn('[AuthProvider] ⚠️ Erro ao buscar colaboradores:', colabError);
-      if (profError) console.warn('[AuthProvider] ⚠️ Erro ao buscar profiles:', profError);
-
-      if (colab) {
-        const totalDuration = performance.now() - startTime;
-        console.log(
-          `[AuthProvider] ✅ Perfil encontrado em colaboradores. Total: ${totalDuration.toFixed(2)}ms`
-        );
-        console.log('[AuthProvider] 👤 Perfil:', {
-          id: colab.id,
-          role: colab.role,
-          organization_id: colab.organization_id,
-        });
-        setProfile(colab as Profile);
+  const fetchProfile = useCallback(
+    async (userId: string, userEmail?: string) => {
+      // Evitar chamadas duplicadas simultaneas
+      if (fetchingProfile.current && lastFetchedUserId.current === userId) {
+        console.log(`[AuthProvider] ⏭️ Pulando fetchProfile duplicado para ${userId}`);
         return;
       }
 
-      if (prof) {
-        const totalDuration = performance.now() - startTime;
-        console.log(
-          `[AuthProvider] ✅ Perfil encontrado em profiles. Total: ${totalDuration.toFixed(2)}ms`
-        );
-        const profileData = {
-          id: prof.id,
-          role: (prof.role as UserRole) || 'user',
-          nome: prof.full_name || prof.username || userEmail?.split('@')[0],
-          email: userEmail,
-          // Copiar organization_id e outros campos úteis quando disponíveis
-          organization_id: prof.organization_id ?? undefined,
-          ativo: prof.ativo ?? undefined,
-          status_conta: prof.status_conta ?? undefined,
-        };
-        console.log('[AuthProvider] 👤 Perfil:', profileData);
-        setProfile(profileData as Profile);
-        return;
-      }
+      fetchingProfile.current = true;
+      lastFetchedUserId.current = userId;
+      const startTime = performance.now();
+      console.log(`[AuthProvider] 🔍 Iniciando fetchProfile (sequencial) para userId=${userId}`);
 
-      // 3. Fallback de emergência (não trava o app se o banco falhar)
-      const totalDuration = performance.now() - startTime;
-      console.warn(
-        `[AuthProvider] ⚠️ Perfil não encontrado em nenhuma tabela. Total: ${totalDuration.toFixed(2)}ms`
-      );
-      console.log('[AuthProvider] 🔄 Usando fallback: role=user');
-      setProfile({ id: userId, role: 'user', email: userEmail });
-    } catch (error) {
-      const totalDuration = performance.now() - startTime;
-      console.error(
-        `[AuthProvider] ❌ Erro ao buscar perfil (${totalDuration.toFixed(2)}ms):`,
-        error
-      );
-      // Garante que o loading termine mesmo com erro
-      setProfile({ id: userId, role: 'user', email: userEmail });
-    } finally {
-      fetchingProfile.current = false;
-    }
-  }, []);
+      try {
+        // 1) Tentativa em colaboradores (funcionários) — se existir, usamos como base
+        // mas NÃO retornamos imediatamente: tentamos mesclar campos extras (ex: avatar_url)
+        let baseProfile: Profile | null = null;
+        try {
+          const { data: colab, error: colabErr } = await supabase
+            .from('colaboradores')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+          if (colabErr) console.warn('[AuthProvider] ⚠️ colaboradores query erro:', colabErr);
+          if (colab) {
+            console.log('[AuthProvider] ✅ Perfil vindo de colaboradores (base)', { id: colab.id, role: colab.role });
+            baseProfile = colab as Profile;
+            // não retorna — vamos tentar mesclar com `profiles` para buscar avatar_url/nomes adicionais
+          }
+        } catch (e) {
+          console.warn('[AuthProvider] ⚠️ Falha ao consultar colaboradores:', e);
+        }
+
+        // 2) Tentativa em profiles (clientes/administradores) — se existir, mesclar com base
+        try {
+          const { data: prof, error: profErr } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+          if (profErr) console.warn('[AuthProvider] ⚠️ profiles query erro:', profErr);
+          if (prof) {
+            const profileData = {
+              id: prof.id,
+              role: (prof.role as UserRole) || (baseProfile?.role as UserRole) || 'user',
+              nome: (prof as any).nome || prof.full_name || prof.username || baseProfile?.nome || userEmail?.split('@')[0],
+              full_name: prof.full_name || prof.username || baseProfile?.full_name || undefined,
+              email: userEmail ?? baseProfile?.email,
+              avatar_url: prof.avatar_url ?? prof.foto_url ?? baseProfile?.avatar_url ?? null,
+              organization_id: prof.organization_id ?? baseProfile?.organization_id ?? undefined,
+              ativo: prof.ativo ?? baseProfile?.ativo ?? undefined,
+              status_conta: prof.status_conta ?? baseProfile?.status_conta ?? undefined,
+            } as Profile;
+            console.log('[AuthProvider] ✅ Perfil vindo de profiles (mesclado)', profileData);
+            setProfile(profileData);
+            return;
+          }
+        } catch (e) {
+          console.warn('[AuthProvider] ⚠️ Falha ao consultar profiles:', e);
+        }
+
+        // Se não existiu registro em `profiles` mas `baseProfile` foi encontrado, usa ele
+        if (baseProfile) {
+          console.log('[AuthProvider] ✅ Usando perfil base de colaboradores (sem profiles)');
+          setProfile(baseProfile);
+          return;
+        }
+
+        // 3) Fallback: perfil mínimo para não travar a app
+        console.warn('[AuthProvider] ⚠️ Perfil não encontrado em colaboradores/profiles — aplicando fallback');
+        setProfile({ id: userId, role: 'user', email: userEmail } as Profile);
+      } catch (error) {
+        console.error('[AuthProvider] ❌ Erro crítico no fetchProfile:', error);
+        setProfile({ id: userId, role: 'user', email: userEmail } as Profile);
+      } finally {
+        fetchingProfile.current = false;
+        setLoading(false);
+        const totalDuration = performance.now() - startTime;
+        console.log(`[AuthProvider] fetchProfile finalizado em ${totalDuration.toFixed(2)}ms`);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     // Timeout de segurança: evita loading infinito se houver problemas de rede
-    // Se o profile não carregar em 15s, força loading=false e marca que ocorreu timeout
-    // Aumentamos o limite para 15s para tolerar queries maiores em ambientes remotos.
+    // Se o profile não carregar em 10s, força loading=false e emite aviso
     const timeoutOccurred = { value: false } as { value: boolean };
     const _timeout = setTimeout(() => {
       timeoutOccurred.value = true;
-      setLoading((prev) => {
-        if (prev) {
-          console.warn('Timeout de loading excedido (Auth). A busca de perfil pode estar lenta.');
-          return false;
-        }
-        return prev;
-      });
-    }, 15000);
+      setLoading(false);
+      console.warn('⚠️ Auth: Timeout de 10s atingido. Forçando entrada com perfil limitado.');
+    }, 10000);
 
     const getInitialSession = async () => {
       try {
@@ -160,7 +144,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(initialSession?.user ?? null);
 
         if (initialSession?.user) {
-          await fetchProfile(initialSession.user.id, initialSession.user.email);
+          // tenta buscar o perfil, mas fetchProfile agora é seguro e sempre resolve
+          void fetchProfile(initialSession.user.id, initialSession.user.email);
         }
       } catch (error) {
         console.error('Erro na sessão inicial:', error);
@@ -168,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearTimeout(_timeout);
         if (timeoutOccurred.value) {
           console.log(
-            '[AuthProvider] fetchProfile finalizou após timeout; profile pode ter sido carregado posteriormente.'
+            '[AuthProvider] fetchProfile pode ter finalizado após o timeout; perfil pode ter sido carregado posteriormente.'
           );
         }
         setLoading(false);

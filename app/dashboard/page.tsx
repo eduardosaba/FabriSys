@@ -583,7 +583,7 @@ export default function DashboardPage() {
       const oldIndex = draftConfig.indexOf(String(active.id));
       const newIndex = draftConfig.indexOf(String(over.id));
       if (oldIndex !== -1 && newIndex !== -1) {
-        setDraftConfig((items: string[] | null) => arrayMove((items || []) as string[], oldIndex, newIndex));
+        setDraftConfig((items: string[] | null) => arrayMove((items || []), oldIndex, newIndex));
       }
     }
   };

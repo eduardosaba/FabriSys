@@ -223,27 +223,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           '#e9c4c2'
       );
       root.style.setProperty(
-        '--sidebar-hover-bg',
-        (colors as Partial<ThemeColors>).sidebar_hover_bg ||
-          themeToApply.sidebar_hover_bg ||
-          '#88544c'
-      );
-      root.style.setProperty(
-        '--header-bg',
-        (colors as Partial<ThemeColors>).header_bg ||
-          themeToApply.header_bg ||
-          colors.secondary ||
-          '#e9c4c2'
-      );
-      // Footer background: por padrão usar a cor secundária para consistência
-      root.style.setProperty(
-        '--footer-bg',
-        (colors as Partial<ThemeColors>).footer_bg ||
-          themeToApply.footer_bg ||
-          colors.secondary ||
-          '#e9c4c2'
-      );
-      root.style.setProperty(
         '--sidebar-text',
         (colors as Partial<ThemeColors>).sidebar_text || themeToApply.sidebar_text || '#4a2c2b'
       );
@@ -283,17 +262,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchScopedThemeColors = useCallback(
-    async (options: {
-      userId?: string;
-      organizationId?: string;
-    }): Promise<Partial<ThemeColors> | null> => {
+    async (options: { userId?: string; organizationId?: string }): Promise<Partial<ThemeColors> | null> => {
       try {
-        // Primeiro tenta buscar tema vinculado à organização (maior prioridade)
+        // Helper to parse colors_json safely
+        const parseExtra = (row: any) => {
+          try {
+            if (row && typeof row.colors_json === 'string') return JSON.parse(row.colors_json) || {};
+          } catch (e) {
+            // ignore
+          }
+          return {};
+        };
+
+        // 1) organization scope
         if (options.organizationId) {
           const { data: orgData, error: orgErr } = await supabase
             .from('user_theme_colors')
             .select(
-              'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family, sidebar_bg, sidebar_hover_bg, sidebar_text, sidebar_active_text'
+              'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family, sidebar_bg, sidebar_hover_bg, sidebar_text, sidebar_active_text, colors_json, company_name, name'
             )
             .eq('organization_id', options.organizationId)
             .eq('theme_mode', resolvedTheme)
@@ -302,6 +288,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           if (orgErr) {
             console.error('Erro ao buscar cores da organização:', orgErr);
           } else if (orgData) {
+            const extra = parseExtra(orgData);
             return {
               primary: orgData.primary_color as string,
               tituloPaginas: orgData.titulo_paginas_color as string,
@@ -314,16 +301,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
               sidebar_hover_bg: orgData.sidebar_hover_bg as string,
               sidebar_text: orgData.sidebar_text as string,
               sidebar_active_text: orgData.sidebar_active_text as string,
-            };
+              name: extra.name || orgData.name,
+              footer_company_name: extra.footer_company_name || orgData.company_name || undefined,
+              footer_system_version: extra.footer_system_version || undefined,
+            } as unknown as Partial<ThemeColors>;
           }
         }
 
-        // Se não encontrou por organização, tenta por usuário
+        // 2) user scope
         if (options.userId) {
           const { data, error } = await supabase
             .from('user_theme_colors')
             .select(
-              'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family, sidebar_bg, sidebar_hover_bg, sidebar_text, sidebar_active_text'
+              'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family, sidebar_bg, sidebar_hover_bg, sidebar_text, sidebar_active_text, colors_json'
             )
             .eq('user_id', options.userId)
             .eq('theme_mode', resolvedTheme)
@@ -335,6 +325,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (data) {
+            const extra = parseExtra(data);
             return {
               primary: data.primary_color as string,
               tituloPaginas: data.titulo_paginas_color as string,
@@ -347,7 +338,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
               sidebar_hover_bg: data.sidebar_hover_bg as string,
               sidebar_text: data.sidebar_text as string,
               sidebar_active_text: data.sidebar_active_text as string,
-            };
+              name: extra.name || undefined,
+              footer_company_name: extra.footer_company_name || undefined,
+              footer_system_version: extra.footer_system_version || undefined,
+            } as unknown as Partial<ThemeColors>;
           }
         }
 

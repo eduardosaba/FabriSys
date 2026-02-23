@@ -54,7 +54,7 @@ export default function ProfilePage() {
         } catch (e) {
           // tabela subscriptions pode não existir no projeto — não falhar a página por isso
           // logamos apenas para diagnóstico
-          // eslint-disable-next-line no-console
+           
           console.debug('Tabela subscriptions não disponível:', e);
           sub = null;
         }
@@ -130,7 +130,7 @@ export default function ProfilePage() {
             return publicUrl;
           } catch (err) {
             // para um arquivo problemático, não interrompe o processamento
-            // eslint-disable-next-line no-console
+             
             console.debug('Erro ao processar avatar:', file.name, err);
             return null;
           }
@@ -176,9 +176,13 @@ export default function ProfilePage() {
     const fileExt = file.name.split('.').pop();
     const filePath = `public/${profile.id}/avatars/avatar-${Date.now()}.${fileExt}`;
     try {
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file, { upsert: true });
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true, contentType: file.type });
       if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+
+      // Usa o path retornado pelo upload para obter a publicUrl
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(uploadData.path);
       await updateAvatarUrl(urlData.publicUrl);
       try { toast({ title: 'Sucesso', description: 'Foto atualizada.' }); } catch (e) { void e; }
     } catch (err: any) {
@@ -282,7 +286,13 @@ export default function ProfilePage() {
               <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-gray-100 dark:border-slate-800 shadow-inner bg-gray-50 dark:bg-slate-800 flex items-center justify-center">
                 {formData.avatar_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={getImageUrl(formData.avatar_url) || formData.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  <img
+                    src={getImageUrl(formData.avatar_url) || formData.avatar_url}
+                    alt="Avatar"
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-slate-600"><User size={48} /></div>
                 )}
@@ -439,7 +449,17 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
                   {libraryAvatars.map((url, idx) => (
                     <button key={idx} onClick={() => handleSelectLibraryAvatar(url)} className="group relative aspect-square rounded-xl bg-gray-50 dark:bg-slate-800 overflow-hidden ring-1 ring-gray-200 dark:ring-slate-700 hover:ring-2 hover:ring-[var(--primary)] transition-all shadow-sm hover:shadow-md">
-                      {url ? (<img src={url} alt={`Avatar ${idx}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />) : (<div className="w-full h-full bg-gray-100 flex items-center justify-center text-sm text-gray-400">Avatar indisponível</div>)}
+                      {url ? (
+                        <img
+                          src={url}
+                          alt={`Avatar ${idx}`}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          referrerPolicy="no-referrer"
+                          crossOrigin="anonymous"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gray-100 flex items-center justify-center text-sm text-gray-400">Avatar indisponível</div>
+                      )}
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                     </button>
                   ))}

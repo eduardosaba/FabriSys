@@ -581,12 +581,73 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
 
   const [avatarResolvedSrc, setAvatarResolvedSrc] = useState<string | null>(null);
 
-  // 2. Mantém o estado simples: atualiza resolved src quando avatarSrc muda
+  // 2. Tenta validar a URL (HEAD). Se inacessível e o valor original parece ser um storage path,
+  // tenta criar um signed url como fallback.
   useEffect(() => {
-    setAvatarResolvedSrc(avatarSrc);
-  }, [avatarSrc]);
+    let mounted = true;
+    const resolveAvatar = async () => {
+      if (!avatarSrc) {
+        if (mounted) setAvatarResolvedSrc(null);
+        return;
+      }
+
+      const trySet = (v: string | null) => { if (mounted) setAvatarResolvedSrc(v); };
+
+      try {
+        // Verifica rapidamente se a URL atual responde (HEAD)
+        try {
+          const resp = await fetch(avatarSrc, { method: 'HEAD' });
+          if (resp.ok) {
+            trySet(avatarSrc);
+            return;
+          }
+        } catch (e) {
+          // falha no HEAD — tentaremos fallback
+        }
+
+        // Se o valor original (_avatarRaw) parece ser um storage path (não começa com http/data:),
+        // tentamos gerar um signed url a partir do bucket 'avatars'.
+        const raw = String(_avatarRaw || '').trim();
+        if (raw && !raw.startsWith('http') && !raw.startsWith('data:')) {
+          // normaliza path: remove leading slashes
+          const path = raw.replace(/^\/+/,'');
+          try {
+            const signed = await supabase.storage.from('avatars').createSignedUrl(path, 60);
+            const signedUrl = signed?.data?.signedUrl || null;
+            if (signedUrl) {
+              trySet(signedUrl);
+              return;
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        // fallback final: mantém a URL original (poderá falhar no render)
+        trySet(avatarSrc);
+      } catch (e) {
+        trySet(avatarSrc);
+      }
+    };
+
+    void resolveAvatar();
+    return () => { mounted = false; };
+  }, [avatarSrc, _avatarRaw]);
 
   const displayName = profile?.nome || (profile as any)?.full_name || profile?.email || 'Usuário';
+
+  useEffect(() => {
+    try {
+      console.log('[DashboardHeader] avatar debug:', {
+        profileId: profile?.id,
+        _avatarRaw,
+        avatarSrc,
+        avatarResolvedSrc,
+      });
+    } catch (e) {
+      void e;
+    }
+  }, [profile?.id, _avatarRaw, avatarSrc, avatarResolvedSrc]);
 
   useEffect(() => {
     const checkLocal = async () => {
@@ -998,6 +1059,7 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
               >
                 <div className="relative h-8 w-8 overflow-hidden rounded-full border-2 border-[var(--primary)] shadow-sm">
                   {avatarResolvedSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={avatarResolvedSrc}
                       alt={displayName}
@@ -1013,6 +1075,18 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
 
                 <div className="hidden flex-col items-start sm:flex">
                   <div className="flex items-center gap-2">
+                    {/* Miniatura baseada no valor salvo em profiles.avatar_url */}
+                    { (avatarResolvedSrc || _avatarRaw) && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={avatarResolvedSrc || getImageUrl(_avatarRaw) || _avatarRaw}
+                        alt={(profile?.nome || 'Usuário').split(' ')[0]}
+                        title={String(avatarResolvedSrc || _avatarRaw)}
+                        className="h-6 w-6 rounded-full object-cover"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+
                     <span className="text-sm font-bold leading-none text-gray-900 dark:text-white">{(profile?.nome || 'Usuário').split(' ')[0]}</span>
 
                     {activeLocalName && (
@@ -1048,9 +1122,13 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                   )}
                   <div className="text-sm">
                     <div className="font-medium text-gray-900 dark:text-white">{displayName}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {profile?.role === 'admin' ? 'Administrador' : profile?.role === 'fabrica' ? 'Fábrica' : profile?.role === 'pdv' ? 'PDV' : profile?.role}
-                    </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {profile?.role === 'admin' ? 'Administrador' : profile?.role === 'fabrica' ? 'Fábrica' : profile?.role === 'pdv' ? 'PDV' : profile?.role}
+                      </div>
+                      {/* Debug: mostrar URL bruta do avatar (ajuda a diagnosticar formatos inválidos) */}
+                      { (avatarResolvedSrc || _avatarRaw) && (
+                        <div className="mt-1 text-[11px] text-gray-400 break-all max-w-[220px]">{String(avatarResolvedSrc || _avatarRaw)}</div>
+                      )}
                   </div>
                 </div>
                 {profile?.role === 'admin' && (

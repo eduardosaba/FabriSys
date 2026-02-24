@@ -117,12 +117,12 @@ const defaultTheme: ThemeSettings = {
       barraSuperiorMenu: '#4a2c2b',
       textoIconeAjuda: '#9ca3af',
       iconeAjuda: '#4a2c2b',
-      sidebar_bg: '#111827',
+      sidebar_bg: '#4a2c2b',
       sidebar_hover_bg: '#4a2c2b',
       sidebar_text: '#f2e8e3',
       sidebar_active_text: '#e9c4c2',
       header_bg: '#4a2c2b',
-      footer_bg: '#111827',
+      footer_bg: '#4a2c2b',
     },
   },
 };
@@ -262,12 +262,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchScopedThemeColors = useCallback(
-    async (options: { userId?: string; organizationId?: string }): Promise<Partial<ThemeColors> | null> => {
+    async (options: {
+      userId?: string;
+      organizationId?: string;
+    }): Promise<Partial<ThemeColors> | null> => {
       try {
         // Helper to parse colors_json safely
         const parseExtra = (row: any) => {
           try {
-            if (row && typeof row.colors_json === 'string') return JSON.parse(row.colors_json) || {};
+            if (row && typeof row.colors_json === 'string')
+              return JSON.parse(row.colors_json) || {};
           } catch (e) {
             // ignore
           }

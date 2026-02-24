@@ -27,7 +27,6 @@ import { useAuth } from '@/lib/auth';
 import { getOperationalContext } from '@/lib/operationalLocal';
 import { usePageTracking } from '@/hooks/usePageTracking';
 import { supabase } from '@/lib/supabase';
-import safeSelect from '@/lib/supabaseSafeSelect';
 import {
   Search,
   Sun,
@@ -105,8 +104,8 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
   // Ref para a busca (sugestões IA)
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // Função para fechar todos os menus
-  const closeAllMenus = () => {
+  // Função para fechar todos os menus (prefixada com _ para evitar warning se não for usada)
+  const _closeAllMenus = () => {
     setShowQuickMenu(false);
     setShowNotifications(false);
     setShowUserMenu(false);
@@ -292,19 +291,25 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
 
         const { data: caixasAbertas } = await supabase
           .from('caixa_sessao')
-          .select('id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome)')
+          .select(
+            'id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome)'
+          )
           .gte('data_abertura', sinceIso)
           .order('data_abertura', { ascending: false })
           .limit(50);
 
         const { data: caixasFechadas } = await supabase
           .from('caixa_sessao')
-          .select('id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome)')
+          .select(
+            'id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome)'
+          )
           .gte('data_fechamento', sinceIso)
           .order('data_fechamento', { ascending: false })
           .limit(50);
 
-        const caixaNotifs = [...(caixasAbertas || []), ...(caixasFechadas || [])].map(mapCaixaToNotif);
+        const caixaNotifs = [...(caixasAbertas || []), ...(caixasFechadas || [])].map(
+          mapCaixaToNotif
+        );
 
         const merged = [...vendasNotifs, ...caixaNotifs].sort(
           (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
@@ -591,7 +596,9 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
         return;
       }
 
-      const trySet = (v: string | null) => { if (mounted) setAvatarResolvedSrc(v); };
+      const trySet = (v: string | null) => {
+        if (mounted) setAvatarResolvedSrc(v);
+      };
 
       try {
         // Verifica rapidamente se a URL atual responde (HEAD)
@@ -610,7 +617,7 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
         const raw = String(_avatarRaw || '').trim();
         if (raw && !raw.startsWith('http') && !raw.startsWith('data:')) {
           // normaliza path: remove leading slashes
-          const path = raw.replace(/^\/+/,'');
+          const path = raw.replace(/^\/+/, '');
           try {
             const signed = await supabase.storage.from('avatars').createSignedUrl(path, 60);
             const signedUrl = signed?.data?.signedUrl || null;
@@ -631,7 +638,9 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
     };
 
     void resolveAvatar();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [avatarSrc, _avatarRaw]);
 
   const displayName = profile?.nome || (profile as any)?.full_name || profile?.email || 'Usuário';
@@ -675,7 +684,11 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
     if (!isAdmin) return;
     const carregarLojas = async () => {
       try {
-        const { data } = await supabase.from('locais').select('id,nome').eq('tipo', 'pdv').order('nome');
+        const { data } = await supabase
+          .from('locais')
+          .select('id,nome')
+          .eq('tipo', 'pdv')
+          .order('nome');
         setLojasAdmin(data || []);
       } catch (e) {
         setLojasAdmin([]);
@@ -993,46 +1006,52 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
         {isAdmin && (
           <Popover open={showNotifications} onOpenChange={setShowNotifications}>
             <div className="relative">
-                <PopoverTrigger asChild>
-                  <button className="relative rounded-md p-2 hover:bg-black/5 dark:hover:bg-white/10 transition-colors" onClick={() => { setShowQuickMenu(false); setShowUserMenu(false); }}>
-                    <Bell className="h-5 w-5" />
-                    {notificationsList.length > 0 && (
-                      <span className="absolute right-1 top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] text-white font-bold border-2 border-[var(--secondary)]">
-                        {notificationsList.length}
-                      </span>
-                    )}
-                  </button>
-                </PopoverTrigger>
-
-            <PopoverContent className="w-80 p-0" align="end">
-              <div
-                className="rounded-md"
-                style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}
-              >
-                <div className="border-b border-gray-200 p-4 dark:border-gray-700">
-                  <h3 className="text-sm font-medium">Notificações</h3>
-                </div>
-                <div className="max-h-96 overflow-y-auto">
-                  {notificationsList.length === 0 && (
-                    <div className="border-b border-gray-200 p-4 dark:border-gray-700">
-                      <p className="text-sm text-gray-600 dark:text-gray-300">
-                        Sem novas notificações
-                      </p>
-                    </div>
+              <PopoverTrigger asChild>
+                <button
+                  className="relative rounded-md p-2 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                  onClick={() => {
+                    setShowQuickMenu(false);
+                    setShowUserMenu(false);
+                  }}
+                >
+                  <Bell className="h-5 w-5" />
+                  {notificationsList.length > 0 && (
+                    <span className="absolute right-1 top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] text-white font-bold border-2 border-[var(--secondary)]">
+                      {notificationsList.length}
+                    </span>
                   )}
+                </button>
+              </PopoverTrigger>
 
-                  {notificationsList.map((n) => (
-                    <div key={n.id} className="border-b border-gray-200 p-4 dark:border-gray-700">
-                      <p className="text-sm text-gray-700 dark:text-gray-200">{n.title}</p>
-                      <p className="text-xs text-gray-500 mt-1">{n.message}</p>
-                      <p className="mt-1 text-xs text-gray-400">
-                        {new Date(n.time).toLocaleString('pt-BR')}
-                      </p>
-                    </div>
-                  ))}
+              <PopoverContent className="w-80 p-0" align="end">
+                <div
+                  className="rounded-md"
+                  style={{ background: 'var(--secondary)', border: '1px solid var(--primary)' }}
+                >
+                  <div className="border-b border-gray-200 p-4 dark:border-gray-700">
+                    <h3 className="text-sm font-medium">Notificações</h3>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto">
+                    {notificationsList.length === 0 && (
+                      <div className="border-b border-gray-200 p-4 dark:border-gray-700">
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                          Sem novas notificações
+                        </p>
+                      </div>
+                    )}
+
+                    {notificationsList.map((n) => (
+                      <div key={n.id} className="border-b border-gray-200 p-4 dark:border-gray-700">
+                        <p className="text-sm text-gray-700 dark:text-gray-200">{n.title}</p>
+                        <p className="text-xs text-gray-500 mt-1">{n.message}</p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {new Date(n.time).toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </PopoverContent>
+              </PopoverContent>
             </div>
           </Popover>
         )}
@@ -1043,7 +1062,11 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
           className="rounded-md p-2 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
           title="Alternar Tema"
         >
-          {effectiveMode === 'dark' ? <Sun className="h-5 w-5 text-yellow-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
+          {effectiveMode === 'dark' ? (
+            <Sun className="h-5 w-5 text-yellow-500" />
+          ) : (
+            <Moon className="h-5 w-5 text-slate-700" />
+          )}
         </button>
 
         {/* Menu do usuário */}
@@ -1059,7 +1082,6 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
               >
                 <div className="relative h-8 w-8 overflow-hidden rounded-full border-2 border-[var(--primary)] shadow-sm">
                   {avatarResolvedSrc ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={avatarResolvedSrc}
                       alt={displayName}
@@ -1075,19 +1097,9 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
 
                 <div className="hidden flex-col items-start sm:flex">
                   <div className="flex items-center gap-2">
-                    {/* Miniatura baseada no valor salvo em profiles.avatar_url */}
-                    { (avatarResolvedSrc || _avatarRaw) && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={avatarResolvedSrc || getImageUrl(_avatarRaw) || _avatarRaw}
-                        alt={(profile?.nome || 'Usuário').split(' ')[0]}
-                        title={String(avatarResolvedSrc || _avatarRaw)}
-                        className="h-6 w-6 rounded-full object-cover"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    )}
-
-                    <span className="text-sm font-bold leading-none text-gray-900 dark:text-white">{(profile?.nome || 'Usuário').split(' ')[0]}</span>
+                    <span className="text-sm font-bold leading-none text-gray-900 dark:text-white">
+                      {(profile?.nome || 'Usuário').split(' ')[0]}
+                    </span>
 
                     {activeLocalName && (
                       <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[9px] font-black uppercase tracking-tighter border border-blue-200 dark:border-blue-800">
@@ -1097,7 +1109,9 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                     )}
                   </div>
 
-                  <span className="text-[10px] font-medium text-gray-500 uppercase tracking-tighter">{profile?.role === 'admin' ? 'Administrador' : profile?.role}</span>
+                  <span className="text-[10px] font-medium text-gray-500 uppercase tracking-tighter">
+                    {profile?.role === 'admin' ? 'Administrador' : profile?.role}
+                  </span>
                 </div>
                 <ChevronDown className="hidden h-3 w-3 opacity-50 sm:block" />
               </button>
@@ -1110,25 +1124,27 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
               >
                 <div className="border-b border-gray-200 px-4 py-3 flex items-center gap-3 dark:border-gray-700">
                   {avatarResolvedSrc ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={avatarResolvedSrc}
-                        alt={displayName}
-                        className="h-10 w-10 rounded-full object-cover"
-                        onError={() => setAvatarResolvedSrc(null)}
-                      />
-                    ) : (
+                    <img
+                      src={avatarResolvedSrc}
+                      alt={displayName}
+                      className="h-10 w-10 rounded-full object-cover"
+                      onError={() => setAvatarResolvedSrc(null)}
+                    />
+                  ) : (
                     <User className="h-10 w-10 text-gray-400" />
                   )}
                   <div className="text-sm">
                     <div className="font-medium text-gray-900 dark:text-white">{displayName}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {profile?.role === 'admin' ? 'Administrador' : profile?.role === 'fabrica' ? 'Fábrica' : profile?.role === 'pdv' ? 'PDV' : profile?.role}
-                      </div>
-                      {/* Debug: mostrar URL bruta do avatar (ajuda a diagnosticar formatos inválidos) */}
-                      { (avatarResolvedSrc || _avatarRaw) && (
-                        <div className="mt-1 text-[11px] text-gray-400 break-all max-w-[220px]">{String(avatarResolvedSrc || _avatarRaw)}</div>
-                      )}
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {profile?.role === 'admin'
+                        ? 'Administrador'
+                        : profile?.role === 'fabrica'
+                          ? 'Fábrica'
+                          : profile?.role === 'pdv'
+                            ? 'PDV'
+                            : profile?.role}
+                    </div>
+                    {/* Debug de URL removido para não exibir links sensíveis no dropdown */}
                   </div>
                 </div>
                 {profile?.role === 'admin' && (
@@ -1177,7 +1193,9 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                         </button>
                       ))}
                       <button
-                        onClick={() => { handleTrocarLoja(null); }}
+                        onClick={() => {
+                          handleTrocarLoja(null);
+                        }}
                         className="w-full text-left px-2 py-1 text-[10px] text-gray-400 hover:text-red-500 transition-colors italic"
                       >
                         Limpar seleção (Modo Administrador)
@@ -1193,7 +1211,7 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                   <Settings className="h-4 w-4" />
                   Meu Perfil
                 </Link>
-                
+
                 <button
                   onClick={handleSignOut}
                   className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600"

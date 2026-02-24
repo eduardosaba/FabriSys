@@ -181,7 +181,7 @@ export default function CustomizacaoTab() {
     // newSettings atualizado com campos globais do preset
 
     // Validação simples de contraste para modo dark
-    const darkBg = darkColors?.background ?? '#111827';
+    const darkBg = darkColors?.background ?? '#4a2c2b';
     const darkText = darkColors?.text ?? '#f9fafb';
     function luminance(hex: string) {
       hex = hex.replace('#', '');
@@ -650,11 +650,7 @@ export default function CustomizacaoTab() {
           </div>
 
           <div className="mb-6 text-sm text-gray-600">
-            <p>
-              {isMasterAdmin
-                ? ''
-                : ''}
-            </p>
+            <p>{isMasterAdmin ? '' : ''}</p>
           </div>
 
           <Tabs
@@ -672,7 +668,10 @@ export default function CustomizacaoTab() {
                       {/* Nome do Sistema (apenas master) */}
                       {isMasterAdmin && (
                         <>
-                          <SystemNameSection settings={settings} onFieldChange={handleFieldChange} />
+                          <SystemNameSection
+                            settings={settings}
+                            onFieldChange={handleFieldChange}
+                          />
 
                           <LogoUploadSection
                             title="Upload de Logo"

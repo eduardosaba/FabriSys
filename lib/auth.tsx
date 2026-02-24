@@ -40,89 +40,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const lastFetchedUserId = useRef<string | null>(null);
 
   // Função isolada para buscar o perfil nas tabelas corretas
-  const fetchProfile = useCallback(
-    async (userId: string, userEmail?: string) => {
-      // Evitar chamadas duplicadas simultaneas
-      if (fetchingProfile.current && lastFetchedUserId.current === userId) {
-        console.log(`[AuthProvider] ⏭️ Pulando fetchProfile duplicado para ${userId}`);
+  const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
+    // Evitar chamadas duplicadas simultaneas
+    if (fetchingProfile.current && lastFetchedUserId.current === userId) {
+      console.log(`[AuthProvider] ⏭️ Pulando fetchProfile duplicado para ${userId}`);
+      return;
+    }
+
+    fetchingProfile.current = true;
+    lastFetchedUserId.current = userId;
+    const startTime = performance.now();
+    console.log(`[AuthProvider] 🔍 Iniciando fetchProfile (sequencial) para userId=${userId}`);
+
+    try {
+      // 1) Tentativa em colaboradores (funcionários) — se existir, usamos como base
+      // mas NÃO retornamos imediatamente: tentamos mesclar campos extras (ex: avatar_url)
+      let baseProfile: Profile | null = null;
+      try {
+        const { data: colab, error: colabErr } = await supabase
+          .from('colaboradores')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        if (colabErr) console.warn('[AuthProvider] ⚠️ colaboradores query erro:', colabErr);
+        if (colab) {
+          console.log('[AuthProvider] ✅ Perfil vindo de colaboradores (base)', {
+            id: colab.id,
+            role: colab.role,
+          });
+          baseProfile = colab as Profile;
+          // não retorna — vamos tentar mesclar com `profiles` para buscar avatar_url/nomes adicionais
+        }
+      } catch (e) {
+        console.warn('[AuthProvider] ⚠️ Falha ao consultar colaboradores:', e);
+      }
+
+      // 2) Tentativa em profiles (clientes/administradores) — se existir, mesclar com base
+      try {
+        const { data: prof, error: profErr } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        if (profErr) console.warn('[AuthProvider] ⚠️ profiles query erro:', profErr);
+        if (prof) {
+          const profileData = {
+            id: prof.id,
+            role: (prof.role as UserRole) || (baseProfile?.role as UserRole) || 'user',
+            nome:
+              prof.nome ||
+              prof.full_name ||
+              prof.username ||
+              baseProfile?.nome ||
+              userEmail?.split('@')[0],
+            full_name: prof.full_name || prof.username || baseProfile?.full_name || undefined,
+            email: userEmail ?? baseProfile?.email,
+            avatar_url: prof.avatar_url ?? prof.foto_url ?? baseProfile?.avatar_url ?? null,
+            organization_id: prof.organization_id ?? baseProfile?.organization_id ?? undefined,
+            ativo: prof.ativo ?? baseProfile?.ativo ?? undefined,
+            status_conta: prof.status_conta ?? baseProfile?.status_conta ?? undefined,
+          } as Profile;
+          console.log('[AuthProvider] ✅ Perfil vindo de profiles (mesclado)', profileData);
+          setProfile(profileData);
+          return;
+        }
+      } catch (e) {
+        console.warn('[AuthProvider] ⚠️ Falha ao consultar profiles:', e);
+      }
+
+      // Se não existiu registro em `profiles` mas `baseProfile` foi encontrado, usa ele
+      if (baseProfile) {
+        console.log('[AuthProvider] ✅ Usando perfil base de colaboradores (sem profiles)');
+        setProfile(baseProfile);
         return;
       }
 
-      fetchingProfile.current = true;
-      lastFetchedUserId.current = userId;
-      const startTime = performance.now();
-      console.log(`[AuthProvider] 🔍 Iniciando fetchProfile (sequencial) para userId=${userId}`);
-
-      try {
-        // 1) Tentativa em colaboradores (funcionários) — se existir, usamos como base
-        // mas NÃO retornamos imediatamente: tentamos mesclar campos extras (ex: avatar_url)
-        let baseProfile: Profile | null = null;
-        try {
-          const { data: colab, error: colabErr } = await supabase
-            .from('colaboradores')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
-          if (colabErr) console.warn('[AuthProvider] ⚠️ colaboradores query erro:', colabErr);
-          if (colab) {
-            console.log('[AuthProvider] ✅ Perfil vindo de colaboradores (base)', { id: colab.id, role: colab.role });
-            baseProfile = colab as Profile;
-            // não retorna — vamos tentar mesclar com `profiles` para buscar avatar_url/nomes adicionais
-          }
-        } catch (e) {
-          console.warn('[AuthProvider] ⚠️ Falha ao consultar colaboradores:', e);
-        }
-
-        // 2) Tentativa em profiles (clientes/administradores) — se existir, mesclar com base
-        try {
-          const { data: prof, error: profErr } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
-          if (profErr) console.warn('[AuthProvider] ⚠️ profiles query erro:', profErr);
-          if (prof) {
-            const profileData = {
-              id: prof.id,
-              role: (prof.role as UserRole) || (baseProfile?.role as UserRole) || 'user',
-              nome: (prof as any).nome || prof.full_name || prof.username || baseProfile?.nome || userEmail?.split('@')[0],
-              full_name: prof.full_name || prof.username || baseProfile?.full_name || undefined,
-              email: userEmail ?? baseProfile?.email,
-              avatar_url: prof.avatar_url ?? prof.foto_url ?? baseProfile?.avatar_url ?? null,
-              organization_id: prof.organization_id ?? baseProfile?.organization_id ?? undefined,
-              ativo: prof.ativo ?? baseProfile?.ativo ?? undefined,
-              status_conta: prof.status_conta ?? baseProfile?.status_conta ?? undefined,
-            } as Profile;
-            console.log('[AuthProvider] ✅ Perfil vindo de profiles (mesclado)', profileData);
-            setProfile(profileData);
-            return;
-          }
-        } catch (e) {
-          console.warn('[AuthProvider] ⚠️ Falha ao consultar profiles:', e);
-        }
-
-        // Se não existiu registro em `profiles` mas `baseProfile` foi encontrado, usa ele
-        if (baseProfile) {
-          console.log('[AuthProvider] ✅ Usando perfil base de colaboradores (sem profiles)');
-          setProfile(baseProfile);
-          return;
-        }
-
-        // 3) Fallback: perfil mínimo para não travar a app
-        console.warn('[AuthProvider] ⚠️ Perfil não encontrado em colaboradores/profiles — aplicando fallback');
-        setProfile({ id: userId, role: 'user', email: userEmail } as Profile);
-      } catch (error) {
-        console.error('[AuthProvider] ❌ Erro crítico no fetchProfile:', error);
-        setProfile({ id: userId, role: 'user', email: userEmail } as Profile);
-      } finally {
-        fetchingProfile.current = false;
-        setLoading(false);
-        const totalDuration = performance.now() - startTime;
-        console.log(`[AuthProvider] fetchProfile finalizado em ${totalDuration.toFixed(2)}ms`);
-      }
-    },
-    []
-  );
+      // 3) Fallback: perfil mínimo para não travar a app
+      console.warn(
+        '[AuthProvider] ⚠️ Perfil não encontrado em colaboradores/profiles — aplicando fallback'
+      );
+      setProfile({ id: userId, role: 'user', email: userEmail } as Profile);
+    } catch (error) {
+      console.error('[AuthProvider] ❌ Erro crítico no fetchProfile:', error);
+      setProfile({ id: userId, role: 'user', email: userEmail } as Profile);
+    } finally {
+      fetchingProfile.current = false;
+      setLoading(false);
+      const totalDuration = performance.now() - startTime;
+      console.log(`[AuthProvider] fetchProfile finalizado em ${totalDuration.toFixed(2)}ms`);
+    }
+  }, []);
 
   useEffect(() => {
     // Timeout de segurança: evita loading infinito se houver problemas de rede
@@ -131,8 +138,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const _timeout = setTimeout(() => {
       timeoutOccurred.value = true;
       setLoading(false);
-      console.warn('⚠️ Auth: Timeout de 10s atingido. Forçando entrada com perfil limitado.');
-    }, 10000);
+      console.warn(
+        '⚠️ Auth: Timeout de 20s atingido. O carregamento do perfil pode continuar em segundo plano; algumas informações podem demorar a aparecer.'
+      );
+    }, 20000);
 
     const getInitialSession = async () => {
       try {

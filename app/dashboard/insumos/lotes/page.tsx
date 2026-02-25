@@ -118,21 +118,39 @@ export default function ControleEstoquePage() {
     try {
       setLoading(true);
 
-      // 1. Buscar histórico (VIEW `historico_estoque`) — formato legacy garantido pela view
-      const { data: dataHist, error: errHist } = await supabase
+      // 1. Buscar histórico (VIEW `historico_estoque`) — selecionar colunas de compatibilidade
+      // Algumas implantações expõem `created_at`/`tipo`/`nf`, outras usam `data_movimento`/`tipo_movimento`/`observacoes`.
+      const { data: dataHistRaw, error: errHist } = await supabase
         .from('historico_estoque')
         .select(
-          `
-                                                id, created_at, tipo, quantidade, nf, fornecedor, insumo
-                                `
+          `id, created_at, data_movimento, tipo, tipo_movimento, quantidade, nf, observacoes, fornecedor, insumo, lote, validade`
         )
-        .order('created_at', { ascending: false })
         .limit(50);
 
       if (errHist) {
         console.error('Erro ao buscar historico_estoque:', errHist);
         throw errHist;
       }
+
+      // Normalizar resultados: garantir campos usados pelo frontend e ordenar localmente pela data
+      const rows = (dataHistRaw || []).map((r: any) => ({
+        id: r.id,
+        created_at: r.created_at ?? r.data_movimento ?? null,
+        tipo: r.tipo ?? r.tipo_movimento ?? null,
+        quantidade: r.quantidade,
+        nf: r.nf ?? r.observacoes ?? null,
+        fornecedor: r.fornecedor ?? null,
+        insumo: r.insumo ?? null,
+        lote: r.lote ?? null,
+        validade: r.validade ?? null,
+      }));
+
+      // Ordenar por data decrescente (as strings ISO são ordenáveis)
+      rows.sort((a: any, b: any) => {
+        const da = a.created_at ? String(a.created_at) : '';
+        const db = b.created_at ? String(b.created_at) : '';
+        return db.localeCompare(da);
+      });
 
       // 2. Buscar Insumos para o Select do Modal
       const { data: dataInsumos, error: errIns } = await supabase
@@ -142,7 +160,7 @@ export default function ControleEstoquePage() {
 
       if (errIns) throw errIns;
 
-      setMovimentacoes(dataHist || []);
+      setMovimentacoes(rows || []);
       setInsumos(dataInsumos || []);
 
       // 3. Buscar Fornecedores (nomes) para o select

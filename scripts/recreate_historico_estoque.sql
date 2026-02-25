@@ -14,24 +14,21 @@ DROP VIEW IF EXISTS public.historico_estoque CASCADE;
 CREATE VIEW public.historico_estoque AS
 SELECT
   m.id,
-  m.tipo_movimento,
-  m.quantidade,
-  m.data_movimento,
-  m.observacoes,
-  m.referencia_id,
-  m.created_by,
-  m.organization_id,
-  m.insumo_id,
-  CASE
-    WHEN i.id IS NULL THEN NULL
-    ELSE jsonb_build_object(
-      'id', i.id,
-      'nome', i.nome,
-      'unidade_estoque', i.unidade_estoque
-    )
-  END AS insumo
+  COALESCE(m.data_movimento, m.created_at, now())::timestamptz AS created_at,
+  COALESCE(m.tipo_movimento, m.tipo) AS tipo,
+  m.quantidade AS quantidade,
+  m.observacoes AS nf,
+  COALESCE(f.nome, m.fornecedor) AS fornecedor,
+  jsonb_build_object(
+    'id', i.id,
+    'nome', COALESCE(i.nome, ''),
+    'unidade_estoque', COALESCE(i.unidade_estoque, i.unidade_medida, '')
+  ) AS insumo,
+  m.lote,
+  m.validade
 FROM public.movimentacao_estoque m
-LEFT JOIN public.insumos i ON i.id = m.insumo_id;
+LEFT JOIN public.insumos i ON i.id = m.insumo_id
+LEFT JOIN public.fornecedores f ON (f.id::text = m.fornecedor OR f.nome = m.fornecedor);
 
 -- Observações:
 -- - Se você usa RLS, verifique as políticas em `insumos` e `movimentacao_estoque`.

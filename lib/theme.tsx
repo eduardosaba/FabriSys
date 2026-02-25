@@ -827,6 +827,41 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
                     },
                   },
                 };
+                // Também procurar por `visual_identity` (logo pública + logo_scale)
+                try {
+                  let visRow: any = null;
+                  if (orgId) {
+                    const { data: v } = await supabase
+                      .from('configuracoes_sistema')
+                      .select('valor, logo_scale, updated_at')
+                      .eq('chave', 'visual_identity')
+                      .eq('organization_id', orgId)
+                      .maybeSingle();
+                    visRow = v;
+                  }
+                  if (!visRow) {
+                    const { data: v2 } = await supabase
+                      .from('configuracoes_sistema')
+                      .select('valor, logo_scale, updated_at')
+                      .eq('chave', 'visual_identity')
+                      .is('organization_id', null)
+                      .maybeSingle();
+                    visRow = v2;
+                  }
+
+                  if (visRow) {
+                    activeTheme.logo_url = visRow.valor || activeTheme.logo_url;
+                    if (visRow.logo_scale !== undefined && visRow.logo_scale !== null) {
+                      const parsed = Number(visRow.logo_scale);
+                      if (!Number.isNaN(parsed)) activeTheme.logo_scale = parsed;
+                    }
+                    // propagar updated_at para possibilitar cache-buster
+                    (activeTheme as any).updated_at =
+                      visRow.updated_at || (activeTheme as any).updated_at;
+                  }
+                } catch (e) {
+                  // non-blocking
+                }
               }
             } catch (e) {
               // non-blocking

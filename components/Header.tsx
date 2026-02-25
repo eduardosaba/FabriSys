@@ -1,6 +1,9 @@
 import React from 'react';
 import Image from 'next/image';
 import { useTheme } from '../lib/theme';
+import { useAuth } from '@/lib/auth';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import getImageUrl from '@/lib/getImageUrl';
 import Text from '../components/ui/Text';
 
@@ -10,6 +13,26 @@ type Props = {
 
 export default function Header({ onMenuClick }: Props) {
   const { theme } = useTheme();
+  const { profile } = useAuth();
+  const [orgName, setOrgName] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadOrg() {
+      try {
+        if (!profile?.organization_id) return;
+        const { data, error } = await supabase
+          .from('organizations')
+          .select('nome')
+          .eq('id', profile.organization_id)
+          .maybeSingle();
+        if (error) throw error;
+        if (data && (data as any).nome) setOrgName((data as any).nome as string);
+      } catch (e) {
+        // fallback silencioso
+      }
+    }
+    void loadOrg();
+  }, [profile?.organization_id]);
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center border-b bg-white dark:border-gray-700 dark:bg-gray-800">
       <div className="flex w-full items-center justify-between px-4">
@@ -41,7 +64,12 @@ export default function Header({ onMenuClick }: Props) {
             {theme?.logo_url && theme.logo_url.trim() !== '' && (
               <div className="relative">
                 <Image
-                  src={getImageUrl(theme.logo_url) || theme.logo_url}
+                  src={
+                    (getImageUrl(theme.logo_url) || theme.logo_url) +
+                    (theme && (theme as any).updated_at
+                      ? `?v=${new Date((theme as any).updated_at).getTime()}`
+                      : '')
+                  }
                   alt={theme?.name || 'Logo Sistema'}
                   width={32}
                   height={32}
@@ -98,7 +126,7 @@ export default function Header({ onMenuClick }: Props) {
               theme.logo_url.trim() === '' ||
               theme.logo_url === '/logo.png') && (
               <Text variant="h4" weight="medium">
-                {theme?.name || 'Confectio v. 1.0.0'}
+                {(orgName ? `${orgName} - ` : '') + (theme?.name || 'Confectio v. 1.0.0')}
               </Text>
             )}
           </div>

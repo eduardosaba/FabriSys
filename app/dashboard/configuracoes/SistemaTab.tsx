@@ -16,6 +16,7 @@ export default function SistemaTab() {
   const { profile, loading: authLoading } = useAuth();
 
   const [configs, setConfigs] = useState<Record<string, string>>({});
+  const [logoScale, setLogoScale] = useState<number>(1);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -37,6 +38,27 @@ export default function SistemaTab() {
         if (!configMap['modo_pdv']) configMap['modo_pdv'] = 'padrao';
 
         setConfigs(configMap);
+        // inicializar escala se a chave visual_identity existir
+        const visual = configMap['visual_identity'];
+        if (visual) {
+          try {
+            const { data: vdata } = await supabase
+              .from('configuracoes_sistema')
+              .select('logo_scale')
+              .eq('chave', 'visual_identity')
+              .maybeSingle();
+            if (
+              vdata &&
+              (vdata as any).logo_scale !== undefined &&
+              (vdata as any).logo_scale !== null
+            ) {
+              const parsed = Number((vdata as any).logo_scale);
+              if (!Number.isNaN(parsed)) setLogoScale(parsed);
+            }
+          } catch (e) {
+            // noop
+          }
+        }
       } catch (err) {
         console.error(err);
         toast.error('Erro ao carregar configurações.');
@@ -150,6 +172,25 @@ export default function SistemaTab() {
           anyChanged ? 'Regras do sistema atualizadas!' : 'Nenhuma alteração necessária',
         error: (err) => `Erro ao salvar configurações: ${err?.message || ''}`,
       });
+
+      // Garantir persistência da identidade visual (mesma linha, chave 'visual_identity')
+      try {
+        const payload: any = {
+          chave: 'visual_identity',
+          valor: configs['visual_identity'] || null,
+          logo_scale: logoScale,
+          primary_color: configs['primary_color'] || configs['primary'] || '#88544c',
+          updated_at: new Date().toISOString(),
+        };
+        if (profile?.organization_id) payload.organization_id = profile.organization_id;
+
+        const { error: visErr } = await supabase
+          .from('configuracoes_sistema')
+          .upsert(payload, { onConflict: 'chave,organization_id' });
+        if (visErr) throw visErr;
+      } catch (e) {
+        console.warn('Falha ao persistir visual_identity:', e);
+      }
 
       void result; // mantemos compatibilidade; resultado já mostrado no toast
     } catch (err) {
@@ -345,6 +386,27 @@ export default function SistemaTab() {
                 Salvar Regras
               </Button>
             </div>
+          </div>
+        </div>
+      </div>
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <h3 className="font-bold text-slate-800 mb-4">Identidade Visual</h3>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Escala da Logo</label>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.05"
+                value={logoScale}
+                onChange={(e) => setLogoScale(Number(e.target.value))}
+              />
+              <span className="text-sm text-slate-500">{logoScale.toFixed(2)}x</span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Ajuste o tamanho da logo no header.</p>
           </div>
         </div>
       </div>

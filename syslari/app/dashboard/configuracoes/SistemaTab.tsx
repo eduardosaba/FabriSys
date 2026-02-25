@@ -17,6 +17,9 @@ export default function SistemaTab() {
   const [configs, setConfigs] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoScale, setLogoScale] = useState<number>(1);
   const { profile } = useAuth();
 
   // Carregar configurações do banco
@@ -68,6 +71,15 @@ export default function SistemaTab() {
     void loadConfigs();
   }, [profile?.organization_id]);
 
+  useEffect(() => {
+    // initialize scale from configs if present
+    const scaleVal = configs['logo_scale'];
+    if (scaleVal) {
+      const parsed = Number(scaleVal);
+      if (!Number.isNaN(parsed)) setLogoScale(parsed);
+    }
+  }, [configs]);
+
   // Salvar alterações
   const handleSave = async () => {
     setSaving(true);
@@ -108,6 +120,56 @@ export default function SistemaTab() {
 
   const handleChange = (chave: string, valor: string) => {
     setConfigs((prev) => ({ ...prev, [chave]: valor }));
+  };
+
+  // Upload handler that sends the file to our server API which will resize and persist
+  const handleUploadLogo = async () => {
+    if (!logoFile) {
+      toast.error('Selecione um arquivo primeiro');
+      return;
+    }
+    setSaving(true);
+    try {
+      // 1) Upload direto para bucket `company_assets` (bucket público para leitura)
+      const fileExt = logoFile.name.split('.').pop() || 'png';
+      const fileName = `settings/logo_sistema_${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('company_assets')
+        .upload(fileName, logoFile, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // 2) Pegar URL pública
+      const { data: publicData } = supabase.storage.from('company_assets').getPublicUrl(fileName);
+      const urlPublica = publicData?.publicUrl ?? '';
+
+      // 3) Persistir na tabela de configuracoes_sistema com upsert atômico
+      const payload = {
+        chave: 'visual_identity',
+        valor: urlPublica,
+        logo_scale: logoScale,
+        primary_color: configs['primary_color'] ?? configs['primary'] ?? '#88544c',
+        organization_id: profile?.organization_id ?? null,
+        updated_at: new Date().toISOString(),
+      } as Record<string, unknown>;
+
+      const { error: upsertErr } = await supabase
+        .from('configuracoes_sistema')
+        .upsert(payload, { onConflict: 'chave,organization_id' });
+
+      if (upsertErr) throw upsertErr;
+
+      toast.success('Configurações visuais salvas com sucesso');
+      await loadConfigs();
+      setLogoFile(null);
+      setLogoPreview(null);
+    } catch (err: any) {
+      console.error('Erro upload logo', err);
+      toast.error('Erro ao enviar logo: ' + (err.message || String(err)));
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <div className="p-8 text-center text-slate-500">Carregando regras...</div>;
@@ -193,6 +255,55 @@ export default function SistemaTab() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* --- SEÇÃO: LOGO E IDENTIDADE --- */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-4">Identidade Visual</h3>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Logo do Sistema
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setLogoFile(f);
+                  if (f) setLogoPreview(URL.createObjectURL(f));
+                }}
+              />
+              {logoPreview && (
+                <div className="mt-2">
+                  <img src={logoPreview} alt="preview" className="h-16 object-contain" />
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Escala da Logo
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2"
+                  step="0.05"
+                  value={logoScale}
+                  onChange={(e) => setLogoScale(Number(e.target.value))}
+                />
+                <span className="text-sm text-slate-500">{logoScale.toFixed(2)}x</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={handleUploadLogo} loading={saving} variant="primary">
+                Salvar Logo
+              </Button>
+            </div>
+          </div>
+        </div>
         {/* --- SEÇÃO 2: ALERTAS E RISCOS --- */}
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
           <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">

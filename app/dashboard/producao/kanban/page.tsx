@@ -80,8 +80,11 @@ export default function KanbanPage() {
         error = res.error ?? null;
         if (error) throw error;
       } catch (e) {
-        // Fallback: filtra por estagio_atual != 'concluido' como antes
-        const res2 = await baseQuery.neq('estagio_atual', 'concluido');
+        // Fallback: incluir ordens cujo `estagio_atual` não é 'concluido' _ou_ é NULL
+        // (inserções recentes podem deixar a coluna NULL; comparação direta exclui NULLs)
+        const res2 = await (baseQuery as any).or(
+          'estagio_atual.is.null,estagio_atual.neq.concluido'
+        );
         data = res2.data ?? null;
         error = res2.error ?? null;
         if (error) throw error;

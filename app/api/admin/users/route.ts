@@ -142,6 +142,24 @@ export async function POST(request: Request) {
       );
     }
 
+    // 4. Garantir que a tabela `profiles` também reflita role/nome (usada pelo fluxo de login)
+    try {
+      const { error: profErr } = await supabaseAdmin.from('profiles').upsert(
+        {
+          id: userId,
+          email,
+          nome,
+          role,
+          organization_id: criador.organization_id,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
+      if (profErr) console.warn('[api/admin/users] warning upserting profiles:', profErr);
+    } catch (e) {
+      console.warn('[api/admin/users] exception while upserting profiles:', e);
+    }
+
     return NextResponse.json({ success: true, userId: userId });
   } catch (error: any) {
     console.error('[api/admin/users] exception:', error);

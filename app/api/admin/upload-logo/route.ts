@@ -2,18 +2,21 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE as string;
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
-  throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE env vars');
-}
-
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
-  auth: { persistSession: false },
-});
-
 export async function POST(req: Request) {
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
+  const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE as string | undefined;
+
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
+    return NextResponse.json(
+      { error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE env vars' },
+      { status: 500 }
+    );
+  }
+
+  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
+    auth: { persistSession: false },
+  });
+
   try {
     const form = await req.formData();
     const file = form.get('file') as File | null;

@@ -105,6 +105,19 @@ export default function UsuariosPage() {
           return 'updated';
         }
 
+        // Sincronizar também com `profiles` para que o fluxo de login e permissões
+        // reflitam imediatamente a mudança de `role`.
+        if (editingId) {
+          try {
+            const { error: profErr } = await supabase
+              .from('profiles')
+              .upsert({ id: editingId, role: formData.role, nome: formData.nome }, { onConflict: 'id' });
+            if (profErr) console.warn('profiles upsert warning', profErr);
+          } catch (e) {
+            console.warn('Erro ao sincronizar profiles:', e);
+          }
+        }
+
         const response = await fetch('/api/admin/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

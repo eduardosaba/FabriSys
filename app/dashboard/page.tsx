@@ -34,12 +34,7 @@ import {
   useSensors,
   KeyboardSensor,
 } from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  rectSortingStrategy,
-} from '@dnd-kit/sortable';
+import { arrayMove, SortableContext, useSortable, rectSortingStrategy } from '@dnd-kit/sortable';
 // avoid importing optional utilities to keep types simple
 
 // dynamic wrappers for specific widgets used in role-specific branches
@@ -298,7 +293,7 @@ export default function DashboardPage() {
           const { data: produtos, error: prodErr } = await supabase
             .from('produtos_finais')
             .select('id, nome, preco_venda')
-            .in('id', chunk);
+            .in('id', (chunk || []).filter(Boolean));
           if (prodErr) throw prodErr;
           (produtos || []).forEach((p: any) => {
             produtoMap[String(p.id)] = {
@@ -583,15 +578,19 @@ export default function DashboardPage() {
       const oldIndex = draftConfig.indexOf(String(active.id));
       const newIndex = draftConfig.indexOf(String(over.id));
       if (oldIndex !== -1 && newIndex !== -1) {
-        setDraftConfig((items: string[] | null) => arrayMove((items || []), oldIndex, newIndex));
+        setDraftConfig((items: string[] | null) => arrayMove(items || [], oldIndex, newIndex));
       }
     }
   };
 
   function SortableWidget({ id, idx, children, editing }: any) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+      id,
+    });
     const style: any = {
-      transform: transform ? `translate3d(${(transform as any).x ?? 0}px, ${(transform as any).y ?? 0}px, 0)` : undefined,
+      transform: transform
+        ? `translate3d(${(transform as any).x ?? 0}px, ${(transform as any).y ?? 0}px, 0)`
+        : undefined,
       transition,
       touchAction: 'none',
       zIndex: isDragging ? 999 : 'auto',
@@ -724,9 +723,16 @@ export default function DashboardPage() {
             </p>
           )}
 
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
             <SortableContext items={configToRender} strategy={rectSortingStrategy}>
-              <div ref={containerRef} className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-6">
+              <div
+                ref={containerRef}
+                className="grid grid-cols-1 md:grid-cols-12 lg:grid-cols-12 gap-6"
+              >
                 {Array.from(new Set(configToRender)).map((wid, idx) => {
                   const entry = WIDGETS[wid];
                   if (!entry) return null;
@@ -745,7 +751,8 @@ export default function DashboardPage() {
                         return 1;
                     }
                   };
-                  const rawCols = metaCols ?? (entry.defaultSize ? defaultSizeToCols(entry.defaultSize) : 1);
+                  const rawCols =
+                    metaCols ?? (entry.defaultSize ? defaultSizeToCols(entry.defaultSize) : 1);
                   const mdSpan = Math.max(1, Math.min(12, rawCols * 4));
                   const spanClassWithSize = `col-span-12 md:col-span-${Math.max(1, Math.min(12, ((draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1)) * 4))}`;
 
@@ -783,7 +790,12 @@ export default function DashboardPage() {
                               {editing && <span className="text-xs text-slate-400">Arraste</span>}
                             </div>
                           </h3>
-                          <Comp filtros={filtros} auxFiltro={auxFiltro} organizationId={profile?.organization_id} profile={profile} />
+                          <Comp
+                            filtros={filtros}
+                            auxFiltro={auxFiltro}
+                            organizationId={profile?.organization_id}
+                            profile={profile}
+                          />
                         </div>
                       </SortableWidget>
                     </div>

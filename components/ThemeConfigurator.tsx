@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { toast, Toaster } from 'react-hot-toast';
 import { Card } from '@/components/ui/Card';
 import Button from '@/components/Button';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-client';
 import { useTheme } from '@/lib/theme';
 
 // 🧩 Validação do formulário com Zod

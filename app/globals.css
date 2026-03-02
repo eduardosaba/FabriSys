@@ -40,8 +40,13 @@
   --background: var(--light-background, #ffffff);
   --foreground: var(--light-text, #171717);
   /* Mapeamento de cores padrão: orange → primary, blue → secondary */
-  --primary: var(--light-primary, #f97316); /* Laranja padrão (primary) */
-  --secondary: var(--light-secondary, #2563eb); /* Azul padrão (secondary) */
+  /* Mapeamento para suportar variáveis injetadas pelo servidor (ex: --primary-color) */
+  --primary: var(--primary-color, var(--light-primary, #f97316)); /* Laranja padrão (primary) */
+  --primary-hover: var(--primary-hover, calc(var(--primary) + 0));
+  --secondary: var(
+    --secondary-color,
+    var(--light-secondary, #2563eb)
+  ); /* Azul padrão (secondary) */
   --accent: var(--light-accent, #f97316);
   --radius: var(--border-radius, 0.5rem);
 

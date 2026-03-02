@@ -30,37 +30,36 @@ export default function ReposicaoListener() {
     };
 
     // Criar canal para ouvir inserções em solicitacoes_reposicao
-    const channel = supabase
-      .channel('public:solicitacoes_reposicao')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'solicitacoes_reposicao' },
-        (payload) => {
-          const row = payload.new as any;
-          const local = row.local_id || 'Loja';
-          const produto = row.produto_id || '';
-          const urg = row.urgencia || '';
-          const obs = row.observacao || '';
-          toast.custom(
-            (t) => (
-              <div className={`bg-white p-3 rounded shadow-lg border`}>
-                <div className="font-bold text-sm">Nova solicitação de reposição</div>
-                <div className="text-xs text-slate-600">{`Loja: ${local} · Produto: ${produto} · ${urg}`}</div>
-                {obs && <div className="text-xs text-slate-500 mt-1">{obs}</div>}
-              </div>
-            ),
-            { duration: 6000 }
-          );
-          playBeep();
-        }
-      )
-      .subscribe();
+    const channel = supabase.channel('public:solicitacoes_reposicao');
+    channel.on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'solicitacoes_reposicao' },
+      (payload) => {
+        const row = payload.new as any;
+        const local = row.local_id || 'Loja';
+        const produto = row.produto_id || '';
+        const urg = row.urgencia || '';
+        const obs = row.observacao || '';
+        toast.custom(
+          (t) => (
+            <div className={`bg-white p-3 rounded shadow-lg border`}>
+              <div className="font-bold text-sm">Nova solicitação de reposição</div>
+              <div className="text-xs text-slate-600">{`Loja: ${local} · Produto: ${produto} · ${urg}`}</div>
+              {obs && <div className="text-xs text-slate-500 mt-1">{obs}</div>}
+            </div>
+          ),
+          { duration: 6000 }
+        );
+        playBeep();
+      }
+    );
+    void channel.subscribe();
 
     return () => {
       try {
-        channel.unsubscribe();
+        void channel.unsubscribe();
       } catch (e) {
-        void 0;
+        void e;
       }
     };
   }, []);

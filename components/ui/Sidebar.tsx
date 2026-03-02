@@ -24,7 +24,7 @@ import {
 
 import { useTheme } from '@/lib/theme';
 import { useAuth } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-client';
 import getImageUrl from '@/lib/getImageUrl';
 
 const DEFAULT_PERMISSOES: Record<string, string[]> = {
@@ -103,6 +103,11 @@ const sidebarItems: SidebarItem[] = [
       { id: 'ordens_producao', name: 'Ordens de Produção', href: '/dashboard/producao/ordens' },
       { id: 'produtos', name: 'Produtos Finais', href: '/dashboard/producao/produtos' },
       { id: 'ficha_tecnica', name: 'Fichas Técnicas', href: '/dashboard/producao/fichas-tecnicas' },
+      {
+        id: 'estoque_fabrica',
+        name: 'Estoque Fábrica',
+        href: '/dashboard/producao/estoque-fabrica',
+      },
     ],
   },
   {
@@ -119,6 +124,7 @@ const sidebarItems: SidebarItem[] = [
         href: '/dashboard/pdv/controle-caixa',
       },
       { id: 'pdv_recebimento', name: 'Recebimento Carga', href: '/dashboard/pdv/recebimento' },
+      { id: 'pdv_inventario', name: 'Inventário de Loja', href: '/dashboard/pdv/inventario' },
     ],
   },
   {
@@ -271,10 +277,13 @@ const sidebarItems: SidebarItem[] = [
 interface SidebarProps {
   isOpen: boolean;
   onClose?: () => void;
+  logoUrl?: string;
 }
 
-export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  // Toggle rápido para desativar temporariamente o footer do sidebar
+  const SHOW_SIDEBAR_FOOTER = false;
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const pathname = usePathname();
@@ -352,6 +361,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   }, [profile?.organization_id]);
 
   const logoSrc = ((): string | null => {
+    // Preferência: se o servidor enviou uma URL, use-a imediatamente
+    if (logoUrl) return getImageUrl(logoUrl) || logoUrl;
+
+    // Prioriza a logo da empresa no profile (logo do usuário/cliente)
+    const profileCompany = profile?.company_logo_url?.toString?.().trim();
+    if (profileCompany) return getImageUrl(profileCompany) || profileCompany;
+
     const company = theme?.company_logo_url?.toString?.().trim();
     const logo = theme?.logo_url?.toString?.().trim();
     const raw = company || logo || '/logo.png';
@@ -455,7 +471,15 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     transformOrigin: 'left center',
                   }}
                   onError={(e) => {
-                    e.currentTarget.style.display = 'none';
+                    // tenta fallback para logo padrão do sistema
+                    try {
+                      // evita loop infinito caso /logo.png falhe
+                      (e.currentTarget as HTMLImageElement).onerror = null;
+                      (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                    } catch (err) {
+                      void err;
+                      e.currentTarget.style.display = 'none';
+                    }
                   }}
                 />
               )}
@@ -759,25 +783,29 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </ul>
       </nav>
 
-      {/* Footer do Sidebar (Perfil) */}
-      <div className={`border-t border-slate-100 p-4 ${isCollapsed ? 'flex justify-center' : ''}`}>
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-bold text-slate-500">
-            {profile?.nome ? profile.nome.substring(0, 2).toUpperCase() : 'US'}
-          </div>
-          {!isCollapsed && (
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-700">
-                {profile?.nome || 'Usuário'}
-              </p>
-              <p className="truncate text-xs text-slate-500">
-                {profile?.email || 'email@confectio.com'}
-              </p>
+      {/* Footer do Sidebar (Perfil) - desativado temporariamente */}
+      {SHOW_SIDEBAR_FOOTER ? (
+        <div
+          className={`border-t border-slate-100 p-4 ${isCollapsed ? 'flex justify-center' : ''}`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-bold text-slate-500">
+              {profile?.nome ? profile.nome.substring(0, 2).toUpperCase() : 'US'}
             </div>
-          )}
+            {!isCollapsed && (
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-slate-700">
+                  {profile?.nome || 'Usuário'}
+                </p>
+                <p className="truncate text-xs text-slate-500">
+                  {profile?.email || 'email@confectio.com'}
+                </p>
+              </div>
+            )}
+          </div>
+          {/* debug panel removed per request */}
         </div>
-        {/* debug panel removed per request */}
-      </div>
+      ) : null}
     </aside>
   );
 }

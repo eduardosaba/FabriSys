@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
-import { createClient } from '@supabase/supabase-js';
+import createServerClient from '@/lib/supabase/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 
@@ -33,7 +32,7 @@ if (!supabaseUrl) {
 export async function GET(_request: Request) {
   try {
     // Criar cliente baseado em cookies para identificar o usuário
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = await createServerClient();
 
     const { data: userData, error: userError } = await supabase.auth.getUser();
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -56,7 +55,7 @@ export async function GET(_request: Request) {
       return NextResponse.json({ error: 'Service role key not configured' }, { status: 500 });
     }
 
-    const supabaseAdmin = createClient(supabaseUrl!, serviceKey, {
+    const supabaseAdmin = createSupabaseClient(supabaseUrl!, serviceKey, {
       auth: { persistSession: false },
     });
 

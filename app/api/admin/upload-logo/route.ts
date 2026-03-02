@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
 
 export async function POST(req: Request) {
-  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
-  const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE as string | undefined;
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
     return NextResponse.json(

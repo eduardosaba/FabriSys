@@ -82,7 +82,7 @@ export default function ValorProducaoWidget({
           const { data: produtos, error: prodErr } = await supabase
             .from('produtos_finais')
             .select('id, preco_venda')
-            .in('id', chunk);
+            .in('id', (chunk || []).filter(Boolean));
           if (prodErr) throw prodErr;
           (produtos || []).forEach(
             (p: any) => (produtoMap[String(p.id)] = { preco_venda: Number(p.preco_venda || 0) })

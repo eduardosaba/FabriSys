@@ -52,7 +52,7 @@ export default function RelatorioVendasPage() {
             created_at,
             total_venda,
             metodo_pagamento,
-            local:locais(nome)
+            local:locais!local_id(nome)
           `
         )
         .gte('created_at', `${dataInicio}T00:00:00`)

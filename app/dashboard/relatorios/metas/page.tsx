@@ -105,7 +105,10 @@ export default function RelatorioMetasPage() {
     const locaisIds = Object.keys(mapUnidades).filter((id) => id && id !== 'unknown');
     let nomesMap: Record<string, string> = {};
     if (locaisIds.length > 0) {
-      const { data: locais } = await supabase.from('locais').select('id, nome').in('id', locaisIds);
+      const { data: locais } = await supabase
+        .from('locais')
+        .select('id, nome')
+        .in('id', (locaisIds || []).filter(Boolean));
       nomesMap = (locais || []).reduce(
         (acc: Record<string, string>, l: any) => ({ ...acc, [l.id]: l.nome }),
         {}

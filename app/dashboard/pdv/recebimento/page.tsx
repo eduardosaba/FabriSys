@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { setActiveLocal } from '@/lib/activeLocal';
 import { getOperationalContext } from '@/lib/operationalLocal';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-client';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
 import { Truck, CheckCircle, Package, MapPin, AlertCircle, X } from 'lucide-react';
@@ -77,67 +77,83 @@ export default function RecebimentoPage() {
   }, [selectedPdv]);
 
   // 2. Carregar Cargas (Filtrando pela loja)
-  const carregarCargas = useCallback(async (idLoja: string) => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('distribuicao_pedidos')
-        .select(
-          `
+  const carregarCargas = useCallback(
+    async (idLoja: string) => {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('distribuicao_pedidos')
+          .select(
+            `
           id, quantidade_solicitada, status, created_at, local_destino_id,
-          local:locais(nome),
-          ordem:ordens_producao(numero_op, produto_final_id)
+          local:locais!local_destino_id(nome),
+          ordem:ordens_producao!inner(id, numero_op, produto_final_id, status_logistica)
         `
-        )
-        .neq('status', 'recebido')
-        .eq('local_destino_id', idLoja)
-        .order('created_at', { ascending: false });
+          )
+          .eq('local_destino_id', idLoja)
+          .eq('organization_id', profile?.organization_id)
+          // aceitar tanto registros 'pendente' (planejados) quanto 'enviado' (confirmados pela expedição)
+          .in('status', ['pendente', 'enviado'] as any[])
+          .order('created_at', { ascending: false });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      // Normalização dos dados e busca dos nomes dos produtos
-      const norm = (data || []) as any[];
-      const produtoIds = Array.from(
-        new Set(norm.map((c) => String(c.ordem?.produto_final_id)).filter(Boolean))
-      );
-      const produtoMap: Record<string, { nome?: string }> = {};
-      if (produtoIds.length > 0) {
-        const { data: produtos } = await supabase
-          .from('produtos_finais')
-          .select('id, nome')
-          .in('id', produtoIds);
-        (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
+        // Normalização dos dados e busca dos nomes dos produtos
+        // Filtrar apenas distribuições que foram efetivamente enviadas pela Expedição.
+        // Condição: distribuição com status 'enviado' OU ordem.status_logistica === 'enviado'.
+        let norm = (data || []) as any[];
+        norm = norm.filter((c: any) => {
+          const distSent = String(c.status || '').toLowerCase() === 'enviado';
+          const ordemSent = String(c.ordem?.status_logistica || '').toLowerCase() === 'enviado';
+          return distSent || ordemSent;
+        });
+        const produtoIds = Array.from(
+          new Set(norm.map((c) => String(c.ordem?.produto_final_id)).filter(Boolean))
+        );
+        const cleanProdutoIds = (produtoIds || [])
+          .filter(Boolean)
+          .filter((id) => id !== 'undefined');
+        const produtoMap: Record<string, { nome?: string }> = {};
+        if (cleanProdutoIds.length > 0) {
+          const { data: produtos } = await supabase
+            .from('produtos_finais')
+            .select('id, nome')
+            .in('id', cleanProdutoIds as any[]);
+          (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
+        }
+
+        const formatted = norm.map((c: any) => {
+          const ordem = c.ordem || {};
+          return {
+            ...c,
+            ordem: {
+              id: ordem.id,
+              numero_op: ordem.numero_op,
+              produto: { nome: produtoMap[String(ordem.produto_final_id)]?.nome },
+            },
+          };
+        });
+
+        setCargas(formatted);
+
+        // Inicializar quantidades/observações com valores padrão
+        const qMap: Record<string, number> = {};
+        const oMap: Record<string, string> = {};
+        (formatted || []).forEach((f: any) => {
+          qMap[f.id] = Number(f.quantidade_solicitada) || 0;
+          oMap[f.id] = '';
+        });
+        setQuantidades(qMap);
+        setObservacoes(oMap);
+      } catch (err) {
+        console.error(err);
+        toast.error('Erro ao buscar cargas.');
+      } finally {
+        setLoading(false);
       }
-
-      const formatted = norm.map((c: any) => {
-        const ordem = c.ordem || {};
-        return {
-          ...c,
-          ordem: {
-            numero_op: ordem.numero_op,
-            produto: { nome: produtoMap[String(ordem.produto_final_id)]?.nome },
-          },
-        };
-      });
-
-      setCargas(formatted);
-
-      // Inicializar quantidades/observações com valores padrão
-      const qMap: Record<string, number> = {};
-      const oMap: Record<string, string> = {};
-      (formatted || []).forEach((f: any) => {
-        qMap[f.id] = Number(f.quantidade_solicitada) || 0;
-        oMap[f.id] = '';
-      });
-      setQuantidades(qMap);
-      setObservacoes(oMap);
-    } catch (err) {
-      console.error(err);
-      toast.error('Erro ao buscar cargas.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [profile?.organization_id]
+  );
 
   useEffect(() => {
     const init = async () => {
@@ -174,6 +190,22 @@ export default function RecebimentoPage() {
       })) as any;
       if (error) throw error;
 
+      // Atualizar histórico de envio (não-fatal)
+      try {
+        await supabase
+          .from('envios_historico')
+          .update({
+            recebido_por: profile?.id || null,
+            recebido_em: new Date().toISOString(),
+            quantidade_recebida: p_quant,
+            observacao: p_obs || null,
+            status: 'recebido',
+          })
+          .eq('distrib_id', id);
+      } catch (histErr) {
+        console.warn('Falha ao atualizar histórico de envio (não fatal):', histErr);
+      }
+
       toast.success('Estoque atualizado com sucesso!');
       await carregarCargas(localId); // Recarrega lista
       return data;
@@ -195,6 +227,10 @@ export default function RecebimentoPage() {
 
   const handleConfirmarFinal = async () => {
     if (!cargaSelecionada) return;
+    if (qtdRecebida !== cargaSelecionada?.quantidade_solicitada && !obsRecebimento) {
+      toast.error('Por favor, relate o motivo da diferença na observação.');
+      return;
+    }
     try {
       setLoading(true);
       const { data, error } = (await supabase.rpc('confirmar_recebimento_pdv', {
@@ -204,7 +240,21 @@ export default function RecebimentoPage() {
       })) as any;
       if (error) throw error;
 
-      toast.success('Entrada de estoque confirmada!');
+      // Se a RPC realizou apenas a atualização de estoque, marcamos a OP como entregue
+      try {
+        const ordemId = cargaSelecionada?.ordem?.id;
+        if (ordemId) {
+          const { error: updErr } = await supabase
+            .from('ordens_producao')
+            .update({ status_logistica: 'recebido' })
+            .eq('id', ordemId);
+          if (updErr) console.warn('Falha ao atualizar status_logistica da OP:', updErr);
+        }
+      } catch (updEx) {
+        console.warn('Erro ao finalizar ciclo logístico da OP:', updEx);
+      }
+
+      toast.success('Entrada de estoque confirmada! Logística encerrada.');
       setIsModalOpen(false);
       // Recarrega a lista
       if (localId) await carregarCargas(localId);
@@ -227,6 +277,18 @@ export default function RecebimentoPage() {
         description="Confirme a entrada dos produtos enviados pela Fábrica."
         icon={Truck}
       />
+
+      <div className="max-w-5xl mx-auto mt-2">
+        <div className="rounded-md bg-amber-50 border border-amber-100 p-3 flex items-start gap-3">
+          <AlertCircle className="text-amber-600" size={18} />
+          <div>
+            <div className="text-sm font-semibold text-amber-800">Atenção</div>
+            <div className="text-sm text-amber-700">
+              Mostrando apenas entregas confirmadas pela Expedição (itens com status 'enviado').
+            </div>
+          </div>
+        </div>
+      </div>
 
       {pdvOptions.length > 0 && profile?.role === 'admin' && (
         <div className="max-w-5xl mx-auto mt-2">
@@ -285,9 +347,22 @@ export default function RecebimentoPage() {
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-lg mb-4 border border-slate-100">
-                  <label className="block text-xs text-slate-500 uppercase mb-1">
-                    Quantidade Recebida
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs text-slate-500 uppercase font-bold">
+                      Quantidade Recebida
+                    </label>
+                    <button
+                      onClick={() =>
+                        setQuantidades((prev) => ({
+                          ...prev,
+                          [carga.id]: Number(carga.quantidade_solicitada),
+                        }))
+                      }
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold"
+                    >
+                      RECEBER TUDO
+                    </button>
+                  </div>
                   <input
                     type="number"
                     step="0.01"
@@ -383,9 +458,27 @@ export default function RecebimentoPage() {
             </div>
 
             <div className="p-4 bg-slate-50 border-t flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => setIsModalOpen(false)}>
+              <Button variant="secondary" className="flex-1" onClick={() => setIsModalOpen(false)}>
                 Cancelar
               </Button>
+
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => {
+                  try {
+                    if (!localId)
+                      return toast.error('Loja não identificada para visualizar estoque.');
+                    window.open(`/dashboard/pdv/inventario?local=${localId}`, '_blank');
+                  } catch (e) {
+                    console.error('Erro ao abrir Inventário do PDV', e);
+                    toast.error('Não foi possível abrir o Inventário do PDV.');
+                  }
+                }}
+              >
+                Ver Estoque do PDV
+              </Button>
+
               <Button
                 className="flex-[2] bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 shadow-lg"
                 onClick={handleConfirmarFinal}

@@ -9,6 +9,8 @@ interface Organization {
   nome: string;
   plano: string;
   setup_concluido: boolean;
+  logo_url?: string;
+  primary_color?: string;
 }
 
 export function useOrganization() {

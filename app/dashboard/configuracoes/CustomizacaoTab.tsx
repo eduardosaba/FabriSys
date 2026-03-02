@@ -252,26 +252,46 @@ export default function CustomizacaoTab() {
           updatedSettings.header_bg = appliedPreset.header_bg;
         }
 
+        // Preparar payload explícito incluindo logos/escala
+        const newThemePayload: Partial<import('@/lib/types').ThemeSettings> = {
+          ...updatedSettings,
+          logo_url: updatedSettings.logo_url,
+          logo_scale: updatedSettings.logo_scale,
+          company_logo_url: updatedSettings.company_logo_url,
+          company_logo_scale: updatedSettings.company_logo_scale,
+          colors: {
+            ...themeColors,
+            light: lightUpdatedColors,
+            dark: darkUpdatedColors,
+          },
+        };
+
         // Salvar configurações específicas do usuário admin para ambos os modos
-        await toast.promise(
-          updateTheme(
-            {
-              ...updatedSettings,
-              colors: {
-                ...themeColors,
-                light: lightUpdatedColors,
-                dark: darkUpdatedColors,
-              },
-            },
-            false,
-            userId
-          ),
-          {
-            loading: 'Salvando customização...',
-            success: 'Customização salva com sucesso!',
-            error: (err) => `Erro ao salvar customização: ${err?.message || ''}`,
+        await toast.promise(updateTheme(newThemePayload, false, userId), {
+          loading: 'Salvando customização...',
+          success: 'Customização salva com sucesso!',
+          error: (err) => `Erro ao salvar customização: ${err?.message || ''}`,
+        });
+
+        // Verificação opcional: confirmar que user_theme_colors recebeu os dados
+        try {
+          if (userId) {
+            const { data: verify } = await supabase
+              .from('user_theme_colors')
+              .select('logo_url,logo_scale,company_logo_url,company_logo_scale,colors_json')
+              .eq('user_id', userId)
+              .eq('theme_mode', 'light')
+              .maybeSingle();
+            if (!verify) {
+              toast('Configuração salva localmente; persistência no servidor não confirmada.', {
+                icon: '⚠️',
+              } as any);
+            }
           }
-        );
+        } catch (err) {
+          // não bloquear o fluxo principal
+          console.warn('Verificação pós-salvamento falhou:', err);
+        }
 
         setAppliedPreset(null); // Reset após salvar
       } else {
@@ -313,25 +333,44 @@ export default function CustomizacaoTab() {
           }
         });
 
+        // Preparar payload incluindo logos/escala e as cores do modo atual
+        const newThemePayload: Partial<import('@/lib/types').ThemeSettings> = {
+          ...updatedSettings,
+          logo_url: updatedSettings.logo_url,
+          logo_scale: updatedSettings.logo_scale,
+          company_logo_url: updatedSettings.company_logo_url,
+          company_logo_scale: updatedSettings.company_logo_scale,
+          colors: {
+            ...themeColors,
+            [themeMode]: updatedColors,
+          },
+        };
+
         // Salvar configurações específicas do usuário admin
-        await toast.promise(
-          updateTheme(
-            {
-              ...updatedSettings,
-              colors: {
-                ...themeColors,
-                [themeMode]: updatedColors,
-              },
-            },
-            false,
-            userId
-          ),
-          {
-            loading: 'Salvando customização...',
-            success: 'Customização salva com sucesso!',
-            error: (err) => `Erro ao salvar customização: ${err?.message || ''}`,
+        await toast.promise(updateTheme(newThemePayload, false, userId), {
+          loading: 'Salvando customização...',
+          success: 'Customização salva com sucesso!',
+          error: (err) => `Erro ao salvar customização: ${err?.message || ''}`,
+        });
+
+        // Verificação opcional: confirmar persistência no servidor
+        try {
+          if (userId) {
+            const { data: verify } = await supabase
+              .from('user_theme_colors')
+              .select('logo_url,logo_scale,company_logo_url,company_logo_scale,colors_json')
+              .eq('user_id', userId)
+              .eq('theme_mode', themeMode)
+              .maybeSingle();
+            if (!verify) {
+              toast('Configuração salva localmente; persistência no servidor não confirmada.', {
+                icon: '⚠️',
+              } as any);
+            }
           }
-        );
+        } catch (err) {
+          console.warn('Verificação pós-salvamento falhou:', err);
+        }
       }
     } catch (error) {
       console.error('Erro ao salvar customização:', error);
@@ -635,6 +674,97 @@ export default function CustomizacaoTab() {
     void loadUserPresets();
   }, [loadUserPresets]);
 
+  // Construir dinamicamente as tabs e expor a aba 'system' apenas para master
+  const tabsArr: any[] = [
+    {
+      id: 'general',
+      label: 'Geral',
+      icon: '🏷️',
+      content: (
+        <div className="space-y-6">
+          {/* Seção de Logo */}
+          <div className="mb-6">
+            <Text className="mb-3 font-medium">Logo Personalizado</Text>
+
+            {/* Nome do Sistema (apenas master) */}
+            {isMasterAdmin && (
+              <>
+                <SystemNameSection settings={settings} onFieldChange={handleFieldChange} />
+
+                <LogoUploadSection
+                  title="Upload de Logo"
+                  description="Máximo 2MB. Formatos: PNG, JPG, SVG"
+                  logoUrl={settings.logo_url as string}
+                  logoScale={(settings.logo_scale as number) || 1}
+                  onLogoUrlChange={(url) => handleFieldChange('logo_url', url)}
+                  onLogoScaleChange={(scale) => handleFieldChange('logo_scale', scale)}
+                  storagePath="user-logo"
+                />
+              </>
+            )}
+          </div>
+
+          {/* Seção de Logo da Empresa */}
+          <div className="mb-6">
+            <Text className="mb-3 font-medium">Logo da Empresa</Text>
+            <p className="mb-3 text-sm text-gray-600">
+              Este logo aparecerá ao lado do logo do sistema no cabeçalho para identificação da sua
+              empresa.
+            </p>
+
+            <LogoUploadSection
+              title="Upload do Logo da Empresa"
+              description="Máximo 2MB. Formatos: PNG, JPG, SVG"
+              logoUrl={settings.company_logo_url as string}
+              logoScale={(settings.company_logo_scale as number) || 1}
+              onLogoUrlChange={(url) => handleFieldChange('company_logo_url', url)}
+              onLogoScaleChange={(scale) => handleFieldChange('company_logo_scale', scale)}
+              storagePath="company-logo"
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'appearance',
+      label: 'Aparência',
+      icon: '🎨',
+      content: (
+        <div className="space-y-6">
+          {/* Seção de Fonte */}
+          <FontSettingsSection settings={settings} onFieldChange={handleFieldChange} />
+
+          {/* Seção de Predefinições */}
+          <ThemePresetsSection
+            presets={[...THEME_PRESETS, ...userPresets]}
+            onApplyPreset={handleApplyPreset}
+          />
+
+          {/* Campos de customização pessoal do admin */}
+          <ColorFieldsSection
+            availableFields={availableFields}
+            settings={settings}
+            onFieldChange={handleFieldChange}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  if (profile?.role === 'master') {
+    tabsArr.push({
+      id: 'system',
+      label: 'Sistema',
+      icon: '⚙️',
+      content: (
+        <div className="space-y-6">
+          {/* Seção de Footer */}
+          <FooterSettingsSection settings={settings} onFieldChange={handleFieldChange} />
+        </div>
+      ),
+    });
+  }
+
   return (
     <div className="space-y-6 pb-20 md:pb-0">
       {/* Seção Admin da Marca - Customização Pessoal */}
@@ -652,101 +782,7 @@ export default function CustomizacaoTab() {
           <div className="mb-6 text-sm text-gray-600">
             <p>{isMasterAdmin ? '' : ''}</p>
           </div>
-
-          <Tabs
-            tabs={[
-              {
-                id: 'general',
-                label: 'Geral',
-                icon: '🏷️',
-                content: (
-                  <div className="space-y-6">
-                    {/* Seção de Logo */}
-                    <div className="mb-6">
-                      <Text className="mb-3 font-medium">Logo Personalizado</Text>
-
-                      {/* Nome do Sistema (apenas master) */}
-                      {isMasterAdmin && (
-                        <>
-                          <SystemNameSection
-                            settings={settings}
-                            onFieldChange={handleFieldChange}
-                          />
-
-                          <LogoUploadSection
-                            title="Upload de Logo"
-                            description="Máximo 2MB. Formatos: PNG, JPG, SVG"
-                            logoUrl={settings.logo_url as string}
-                            logoScale={(settings.logo_scale as number) || 1}
-                            onLogoUrlChange={(url) => handleFieldChange('logo_url', url)}
-                            onLogoScaleChange={(scale) => handleFieldChange('logo_scale', scale)}
-                            storagePath="user-logo"
-                          />
-                        </>
-                      )}
-                    </div>
-
-                    {/* Seção de Logo da Empresa */}
-                    <div className="mb-6">
-                      <Text className="mb-3 font-medium">Logo da Empresa</Text>
-                      <p className="mb-3 text-sm text-gray-600">
-                        Este logo aparecerá ao lado do logo do sistema no cabeçalho para
-                        identificação da sua empresa.
-                      </p>
-
-                      <LogoUploadSection
-                        title="Upload do Logo da Empresa"
-                        description="Máximo 2MB. Formatos: PNG, JPG, SVG"
-                        logoUrl={settings.company_logo_url as string}
-                        logoScale={(settings.company_logo_scale as number) || 1}
-                        onLogoUrlChange={(url) => handleFieldChange('company_logo_url', url)}
-                        onLogoScaleChange={(scale) =>
-                          handleFieldChange('company_logo_scale', scale)
-                        }
-                        storagePath="company-logo"
-                      />
-                    </div>
-                  </div>
-                ),
-              },
-              {
-                id: 'appearance',
-                label: 'Aparência',
-                icon: '🎨',
-                content: (
-                  <div className="space-y-6">
-                    {/* Seção de Fonte */}
-                    <FontSettingsSection settings={settings} onFieldChange={handleFieldChange} />
-
-                    {/* Seção de Predefinições */}
-                    <ThemePresetsSection
-                      presets={[...THEME_PRESETS, ...userPresets]}
-                      onApplyPreset={handleApplyPreset}
-                    />
-
-                    {/* Campos de customização pessoal do admin */}
-                    <ColorFieldsSection
-                      availableFields={availableFields}
-                      settings={settings}
-                      onFieldChange={handleFieldChange}
-                    />
-                  </div>
-                ),
-              },
-              {
-                id: 'system',
-                label: 'Sistema',
-                icon: '⚙️',
-                content: (
-                  <div className="space-y-6">
-                    {/* Seção de Footer */}
-                    <FooterSettingsSection settings={settings} onFieldChange={handleFieldChange} />
-                  </div>
-                ),
-              },
-            ]}
-            defaultActiveTab="general"
-          />
+          <Tabs tabs={tabsArr} defaultActiveTab="general" />
         </Card>
       )}
 

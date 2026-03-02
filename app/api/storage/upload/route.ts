@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
 
 // 60s timeout para evitar problemas com o upload de arquivos grandes
 export const maxDuration = 60;
@@ -20,7 +19,7 @@ export async function POST(request: Request) {
     const fileName = `${path.replace(/\.[^/.]+$/, '')}.${fileExt}`;
 
     // Upload do arquivo para o bucket public
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = await createClient();
     const { error } = await supabase.storage.from('public').upload(fileName, file, {
       cacheControl: '3600',
       upsert: true,

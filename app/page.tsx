@@ -467,7 +467,17 @@ export default function App() {
       {showSplash ? (
         <SplashScreen onComplete={() => setShowSplash(false)} />
       ) : (
-        <OnboardingLogin onLoginSuccess={() => router.push('/dashboard')} />
+        <OnboardingLogin
+          onLoginSuccess={() => {
+            if (typeof window !== 'undefined') {
+              // Forçar reload completo para garantir que o servidor
+              // recarregue cookies/feature flags e aplique tema/logo
+              window.location.href = '/dashboard';
+            } else {
+              router.push('/dashboard');
+            }
+          }}
+        />
       )}
     </ThemeProvider>
   );

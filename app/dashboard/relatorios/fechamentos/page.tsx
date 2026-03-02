@@ -134,7 +134,7 @@ export default function RelatorioFechamentosPage() {
 
       let query = supabase
         .from('caixa_sessao')
-        .select(`*, local:locais(nome)`)
+        .select(`*, local:locais!local_id(nome)`)
         .gte('data_abertura', inicio)
         .lte('data_abertura', fim)
         .order('data_abertura', { ascending: false });

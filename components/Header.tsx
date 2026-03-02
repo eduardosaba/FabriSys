@@ -3,7 +3,7 @@ import Image from 'next/image';
 import { useTheme } from '../lib/theme';
 import { useAuth } from '@/lib/auth';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-client';
 import getImageUrl from '@/lib/getImageUrl';
 import Text from '../components/ui/Text';
 
@@ -132,8 +132,63 @@ export default function Header({ onMenuClick }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center">
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Usuário</span>
+        <div className="flex items-center gap-3">
+          {profile ? (
+            <>
+              {/* Avatar do usuário (com fallback para iniciais) */}
+              {profile.avatar_url || (profile as any).foto || (profile as any).picture ? (
+                <div className="relative w-9 h-9 rounded-full overflow-hidden bg-slate-100">
+                  <Image
+                    src={
+                      getImageUrl(
+                        profile.avatar_url || (profile as any).foto || (profile as any).picture
+                      ) ||
+                      profile.avatar_url ||
+                      (profile as any).foto ||
+                      (profile as any).picture
+                    }
+                    alt={(profile as any).name || profile.email || 'Usuário'}
+                    width={36}
+                    height={36}
+                    className="object-cover"
+                    unoptimized
+                    loading="eager"
+                    onError={(e) => {
+                      const parent = e.currentTarget.parentElement;
+                      if (parent) {
+                        const name = (profile as any).name || profile.email || 'U';
+                        const initials = name
+                          .split(' ')
+                          .map((w: string) => w[0])
+                          .join('')
+                          .toUpperCase()
+                          .slice(0, 2);
+                        parent.innerHTML = `<div class="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-medium">${initials}</div>`;
+                      }
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-medium">
+                  {(((profile as any).name || profile.email || 'U') as string)
+                    .split(' ')
+                    .map((w: string) => w[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)}
+                </div>
+              )}
+
+              <div className="hidden sm:flex flex-col text-right">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  {(profile as any).name || profile.email}
+                </span>
+                {profile.role && <span className="text-xs text-slate-400">{profile.role}</span>}
+              </div>
+            </>
+          ) : (
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Usuário</span>
+          )}
         </div>
       </div>
     </header>

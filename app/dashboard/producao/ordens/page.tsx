@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getActiveLocal } from '@/lib/activeLocal';
 import Button from '@/components/Button';
 import { Plus, Eye, Edit, Trash2, Loader2, ClipboardList } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/format';
@@ -49,12 +50,21 @@ export default function OrdensProducaoPage() {
 
   const loadOrdens = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      const localId = getActiveLocal() ?? profile?.local_id;
+
+      let q: any = supabase
         .from('ordens_producao')
         .select(
-          'id, numero_op, quantidade_prevista, status, data_prevista, custo_previsto, created_at, produto_final_id'
+          'id, numero_op, quantidade_prevista, status, data_prevista, custo_previsto, created_at, produto_final_id, local_destino_id'
         )
         .order('created_at', { ascending: false });
+
+      // Permitir ordens finalizadas aparecerem no filtro do gerenciamento
+      q = q.in('status', ['pendente', 'em_producao', 'pausada', 'finalizada']);
+      if (localId) q = q.eq('local_destino_id', localId);
+      if (profile?.organization_id) q = q.eq('organization_id', profile.organization_id);
+
+      const { data, error } = await q;
 
       if (error) throw error;
 
@@ -62,12 +72,13 @@ export default function OrdensProducaoPage() {
       const produtoIds = Array.from(
         new Set(rows.map((r) => String(r.produto_final_id)).filter(Boolean))
       );
+      const cleanProdutoIds = (produtoIds || []).filter(Boolean).filter((id) => id !== 'undefined');
       const produtoMap: Record<string, { nome?: string; preco_venda?: number }> = {};
-      if (produtoIds.length > 0) {
+      if (cleanProdutoIds.length > 0) {
         const { data: produtos } = await supabase
           .from('produtos_finais')
           .select('id, nome, preco_venda')
-          .in('id', produtoIds);
+          .in('id', cleanProdutoIds as any[]);
         (produtos || []).forEach(
           (p: any) =>
             (produtoMap[String(p.id)] = { nome: p.nome, preco_venda: Number(p.preco_venda || 0) })

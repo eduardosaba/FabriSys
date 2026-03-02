@@ -207,12 +207,13 @@ export default function CaixaPDVPage() {
       if (itensErr) throw itensErr;
 
       const produtoIds = Array.from(new Set((itensData || []).map((it: any) => it.produto_id)));
+      const cleanProdutoIds = (produtoIds || []).filter(Boolean).filter((id) => id !== 'undefined');
       let produtosMap: Record<string, string> = {};
-      if (produtoIds.length > 0) {
+      if (cleanProdutoIds.length > 0) {
         const { data: prods, error: prodsErr } = await supabase
           .from('produtos_finais')
           .select('id, nome')
-          .in('id', produtoIds);
+          .in('id', cleanProdutoIds);
         if (!prodsErr && prods) {
           produtosMap = prods.reduce((acc: any, p: any) => ({ ...acc, [p.id]: p.nome }), {});
         }
@@ -900,9 +901,44 @@ export default function CaixaPDVPage() {
       // 3. Baixar Estoque da Loja (SOMENTE SE MODO PADRÃO)
       // No modo 'inventario', a baixa é feita pela diferença de contagem no fim do dia.
       if (modoPdv === 'padrao') {
+        // Validação preventiva: garantir que há estoque suficiente antes de tentar decrementar
+        const insuficientes: Array<{
+          produtoId: string;
+          nome: string;
+          needed: number;
+          available: number;
+        }> = [];
         for (const item of carrinho) {
-          // Chama a RPC para garantir a transação no banco
-          // Não bloquear a venda se o estoque estiver zerado ou RPC falhar — apenas logar e avisar
+          try {
+            const { data: est } = await supabase
+              .from('estoque_produtos')
+              .select('quantidade')
+              .eq('local_id', opLocalId)
+              .eq('produto_id', item.produto.id)
+              .maybeSingle();
+            const available = (est && (est as any).quantidade) || 0;
+            if (available < item.quantidade) {
+              insuficientes.push({
+                produtoId: item.produto.id,
+                nome: item.produto.nome,
+                needed: item.quantidade,
+                available,
+              });
+            }
+          } catch (e) {
+            console.warn('Falha ao validar estoque antes da venda:', e);
+          }
+        }
+
+        if (insuficientes.length > 0) {
+          const lista = insuficientes
+            .map((i) => `${i.nome} (${i.available}/${i.needed})`)
+            .join(', ');
+          throw new Error('Estoque insuficiente para: ' + lista);
+        }
+
+        // Se passou na validação, decrementa via RPC — tratar erro como fatal para manter consistência no Controle Total
+        for (const item of carrinho) {
           try {
             const { error: rpcErr } = await supabase.rpc('decrementar_estoque_loja_numeric', {
               p_local_id: opLocalId,
@@ -910,15 +946,12 @@ export default function CaixaPDVPage() {
               p_qtd: item.quantidade,
             });
             if (rpcErr) {
-              console.warn('RPC decrementar_estoque_loja_numeric retornou erro:', rpcErr);
-              toast(
-                'Estoque insuficiente para alguns itens; venda continuará sem atualizar estoque.'
-              );
-              // continuar sem lançar erro
+              console.error('RPC decrementar_estoque_loja_numeric retornou erro:', rpcErr);
+              throw rpcErr;
             }
           } catch (rpcEx) {
-            console.warn('Erro ao chamar RPC decrementar_estoque_loja_numeric:', rpcEx);
-            toast('Falha ao atualizar estoque (RPC). Venda continuará.');
+            console.error('Erro ao chamar RPC decrementar_estoque_loja_numeric:', rpcEx);
+            throw new Error('Falha ao atualizar estoque (RPC). Venda abortada.');
           }
         }
       }
@@ -1129,6 +1162,16 @@ export default function CaixaPDVPage() {
           </div>
         )}
 
+        {modoPdv === 'padrao' && (
+          <div className="bg-blue-50 border-b border-blue-100 text-blue-800 px-4 py-2 text-sm flex items-center justify-center gap-2">
+            <Lock size={16} />
+            <strong>MODO RASTREABILIDADE ATIVO</strong>
+            <span className="text-xs text-slate-600 ml-2">
+              Registre cada venda ao passar o produto.
+            </span>
+          </div>
+        )}
+
         <div className="flex flex-1 gap-4 p-4 overflow-hidden">
           {/* ESQUERDA: CATÁLOGO DE PRODUTOS */}
           <div className="flex-1 flex flex-col gap-4">
@@ -1155,67 +1198,76 @@ export default function CaixaPDVPage() {
             {/* Grid de Produtos */}
             <div className="flex-1 overflow-y-auto pr-2">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {produtosFiltrados.map((produto) => (
-                  <div
-                    key={produto.id}
-                    onClick={() => addAoCarrinho(produto)}
-                    className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-orange-300 transition-all cursor-pointer flex flex-col gap-3 group select-none active:scale-95 duration-100 overflow-hidden"
-                  >
-                    <div className="w-full">
-                      {produto.imagem_url ? (
-                        <div className="mb-2 flex items-center justify-center overflow-hidden">
-                          <img
-                            src={produto.imagem_url}
-                            alt={produto.nome}
-                            className="h-20 md:h-24 lg:h-28 w-auto max-w-full object-contain rounded-md"
-                          />
+                {produtosFiltrados.map((produto) => {
+                  const disabledProduto = modoPdv === 'padrao' && (produto.estoque_loja ?? 0) <= 0;
+                  return (
+                    <div
+                      key={produto.id}
+                      onClick={() => {
+                        if (disabledProduto) {
+                          toast.error('Produto sem estoque disponível!');
+                          return;
+                        }
+                        addAoCarrinho(produto);
+                      }}
+                      className={`bg-white p-3 rounded-xl border border-slate-200 shadow-sm transition-all ${disabledProduto ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:shadow-md hover:border-orange-300 cursor-pointer'} flex flex-col gap-3 group select-none active:scale-95 duration-100 overflow-hidden`}
+                    >
+                      <div className="w-full">
+                        {produto.imagem_url ? (
+                          <div className="mb-2 flex items-center justify-center overflow-hidden">
+                            <img
+                              src={produto.imagem_url}
+                              alt={produto.nome}
+                              className="h-20 md:h-24 lg:h-28 w-auto max-w-full object-contain rounded-md"
+                            />
+                          </div>
+                        ) : null}
+
+                        <h3 className="font-bold text-slate-800 line-clamp-2 group-hover:text-orange-700">
+                          {produto.nome}
+                        </h3>
+                        <p
+                          className={`text-xs mt-1 ${produto.estoque_loja > 0 ? 'text-green-600' : 'text-red-500 font-bold'}`}
+                        >
+                          Estoque: {produto.estoque_loja} un
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-lg font-bold text-slate-900">
+                          R$ {produto.preco_venda.toFixed(2)}
+                        </span>
+                        <div className="mt-2 flex justify-end md:justify-between gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              solicitarReposicaoRapida(produto.id, 10);
+                            }}
+                            title="Solicitar Reposição (10 un)"
+                            className="text-xs md:text-sm px-2 md:px-3 py-1 md:py-2 bg-orange-50 border border-orange-200 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors flex items-center gap-1 touch-none min-w-[72px] justify-center"
+                          >
+                            <Send size={14} />
+                            Repor
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedProdutoForPerda(produto.id);
+                              setSelectedQuantidadeForPerda(1);
+                              setIsPerdaOpen(true);
+                            }}
+                            title="Registrar Perda deste produto"
+                            className="text-xs md:text-sm px-2 md:px-3 py-1 md:py-2 bg-red-50 border border-red-100 text-red-600 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1 min-w-[72px] justify-center"
+                          >
+                            <Trash2 size={14} />
+                            Perda
+                          </button>
                         </div>
-                      ) : null}
-
-                      <h3 className="font-bold text-slate-800 line-clamp-2 group-hover:text-orange-700">
-                        {produto.nome}
-                      </h3>
-                      <p
-                        className={`text-xs mt-1 ${produto.estoque_loja > 0 ? 'text-green-600' : 'text-red-500 font-bold'}`}
-                      >
-                        Estoque: {produto.estoque_loja} un
-                      </p>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-slate-900">
-                        R$ {produto.preco_venda.toFixed(2)}
-                      </span>
-                      <div className="mt-2 flex justify-end md:justify-between gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            solicitarReposicaoRapida(produto.id, 10);
-                          }}
-                          title="Solicitar Reposição (10 un)"
-                          className="text-xs md:text-sm px-2 md:px-3 py-1 md:py-2 bg-orange-50 border border-orange-200 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors flex items-center gap-1 touch-none min-w-[72px] justify-center"
-                        >
-                          <Send size={14} />
-                          Repor
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedProdutoForPerda(produto.id);
-                            setSelectedQuantidadeForPerda(1);
-                            setIsPerdaOpen(true);
-                          }}
-                          title="Registrar Perda deste produto"
-                          className="text-xs md:text-sm px-2 md:px-3 py-1 md:py-2 bg-red-50 border border-red-100 text-red-600 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1 min-w-[72px] justify-center"
-                        >
-                          <Trash2 size={14} />
-                          Perda
-                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             {/* Se houver promoções, exibir seção separada */}
@@ -1223,34 +1275,47 @@ export default function CaixaPDVPage() {
               <div className="mt-6">
                 <h3 className="text-md font-semibold mb-2">Promoções</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {promocoesPDV.map((promo) => (
-                    <div
-                      key={promo.id}
-                      onClick={() => addAoCarrinho(promo)}
-                      className="bg-white p-3 rounded-xl border border-purple-200 shadow-sm hover:shadow-md hover:border-purple-300 transition-all cursor-pointer flex flex-col gap-3 select-none active:scale-95 duration-100 overflow-hidden"
-                    >
-                      <div className="w-full">
-                        {promo.imagem_url ? (
-                          <div className="mb-2 flex items-center justify-center overflow-hidden">
-                            <img
-                              src={promo.imagem_url}
-                              alt={promo.nome}
-                              className="h-20 w-auto object-contain rounded-md"
-                            />
-                          </div>
-                        ) : null}
-                        <h3 className="font-bold text-slate-800 line-clamp-2">{promo.nome}</h3>
-                        <p className="text-xs mt-1 text-slate-500">
-                          Combo — {promo.itens_combo?.length || 0} itens
-                        </p>
+                  {promocoesPDV.map((promo) => {
+                    const disabledPromo = modoPdv === 'padrao' && (promo.estoque_loja ?? 0) <= 0;
+                    return (
+                      <div
+                        key={promo.id}
+                        onClick={() => {
+                          if (disabledPromo) {
+                            toast.error('Promoção indisponível por falta de estoque');
+                            return;
+                          }
+                          addAoCarrinho(promo);
+                        }}
+                        className={`bg-white p-3 rounded-xl border border-purple-200 shadow-sm transition-all flex flex-col gap-3 select-none active:scale-95 duration-100 overflow-hidden ${
+                          disabledPromo
+                            ? 'opacity-50 grayscale cursor-not-allowed'
+                            : 'hover:shadow-md hover:border-purple-300 cursor-pointer'
+                        }`}
+                      >
+                        <div className="w-full">
+                          {promo.imagem_url ? (
+                            <div className="mb-2 flex items-center justify-center overflow-hidden">
+                              <img
+                                src={promo.imagem_url}
+                                alt={promo.nome}
+                                className="h-20 w-auto object-contain rounded-md"
+                              />
+                            </div>
+                          ) : null}
+                          <h3 className="font-bold text-slate-800 line-clamp-2">{promo.nome}</h3>
+                          <p className="text-xs mt-1 text-slate-500">
+                            Combo — {promo.itens_combo?.length || 0} itens
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-lg font-bold text-purple-700">
+                            R$ {promo.preco_venda.toFixed(2)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-lg font-bold text-purple-700">
-                          R$ {promo.preco_venda.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

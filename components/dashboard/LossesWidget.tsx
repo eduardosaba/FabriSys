@@ -78,7 +78,7 @@ export default function LossesWidget({ filtros, auxFiltro, organizationId, profi
             const res = await supabase
               .from('produtos_finais')
               .select('id, nome, preco_custo')
-              .in('id', produtoIds);
+              .in('id', (produtoIds || []).filter(Boolean));
             if ((res as any).error) throw (res as any).error;
             produtos = (res as any).data || null;
           } catch (errSelect) {
@@ -86,7 +86,7 @@ export default function LossesWidget({ filtros, auxFiltro, organizationId, profi
             const res2 = await supabase
               .from('produtos_finais')
               .select('id, nome')
-              .in('id', produtoIds);
+              .in('id', (produtoIds || []).filter(Boolean));
             produtos = (res2 as any).data || null;
           }
           (produtos || []).forEach(

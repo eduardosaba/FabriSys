@@ -43,10 +43,15 @@ export function OrdemProducaoProvider({ children }: { children: React.ReactNode 
       if (error) throw error;
 
       const rows = data as any[];
-      const produtoIds = Array.from(new Set(rows.map((r) => String(r.produto_final_id)).filter(Boolean)));
+      const produtoIds = Array.from(
+        new Set(rows.map((r) => String(r.produto_final_id)).filter(Boolean))
+      );
       const produtoMap: Record<string, { nome?: string }> = {};
       if (produtoIds.length > 0) {
-        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
+        const { data: produtos } = await supabase
+          .from('produtos_finais')
+          .select('id, nome')
+          .in('id', (produtoIds || []).filter(Boolean));
         (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
       }
 

@@ -86,13 +86,16 @@ export default function ProfitMarginWidget({
               const res = await supabase
                 .from('produtos_finais')
                 .select('id, preco_custo')
-                .in('id', chunk);
+                .in('id', (chunk || []).filter(Boolean));
               if ((res as any).error) throw (res as any).error;
               produtos = (res as any).data || null;
             } catch (errSelect) {
               // provável que coluna `preco_custo` não exista — fallback para não quebrar
               console.warn('preco_custo não disponível, usando fallback:', errSelect);
-              const res2 = await supabase.from('produtos_finais').select('id').in('id', chunk);
+              const res2 = await supabase
+                .from('produtos_finais')
+                .select('id')
+                .in('id', (chunk || []).filter(Boolean));
               produtos = (res2 as any).data || null;
             }
             (produtos || []).forEach((p: any) => {

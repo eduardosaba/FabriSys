@@ -24,9 +24,11 @@ export default function StatusProducao() {
 
   const loadOrdens = useCallback(async () => {
     try {
-      const resp = await safeSelect(supabase, 'ordens_producao', 'id, numero_op, produto_final_id, quantidade_prevista, status, data_inicio, data_fim', (b: any) => b
-        .in('status', ['pendente', 'em_producao'])
-        .limit(50)
+      const resp = await safeSelect(
+        supabase,
+        'ordens_producao',
+        'id, numero_op, produto_final_id, quantidade_prevista, status, data_inicio, data_fim',
+        (b: any) => b.in('status', ['pendente', 'em_producao']).limit(50)
       );
 
       const data = resp.data as unknown;
@@ -35,10 +37,15 @@ export default function StatusProducao() {
 
       const rows = Array.isArray(data) ? data : [];
 
-      const produtoIds = Array.from(new Set(rows.map((r: any) => String(r.produto_final_id)).filter(Boolean)));
+      const produtoIds = Array.from(
+        new Set(rows.map((r: any) => String(r.produto_final_id)).filter(Boolean))
+      );
       const produtoMap: Record<string, { nome?: string }> = {};
       if (produtoIds.length > 0) {
-        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
+        const { data: produtos } = await supabase
+          .from('produtos_finais')
+          .select('id, nome')
+          .in('id', (produtoIds || []).filter(Boolean));
         (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
       }
 

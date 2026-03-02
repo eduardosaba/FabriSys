@@ -95,7 +95,7 @@ export default function RankingProdutosWidget({
             const { data: produtos, error: prodErr } = await supabase
               .from('produtos_finais')
               .select('id, nome')
-              .in('id', chunk);
+              .in('id', (chunk || []).filter(Boolean));
             if (prodErr) throw prodErr;
             (produtos || []).forEach((p: any) => {
               produtoMap[String(p.id)] = { id: String(p.id), nome: p.nome || 'Produto Removido' };

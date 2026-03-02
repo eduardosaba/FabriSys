@@ -44,7 +44,7 @@ export default function PromocaoLauncher({ onUpdate }: Props) {
           const { data: produtos } = await supabase
             .from('produtos_finais')
             .select('id, nome, preco_venda')
-            .in('id', produtoIds);
+            .in('id', (produtoIds || []).filter(Boolean));
           (produtos || []).forEach(
             (p: any) =>
               (produtoMap[String(p.id)] = { nome: p.nome, preco_venda: Number(p.preco_venda || 0) })

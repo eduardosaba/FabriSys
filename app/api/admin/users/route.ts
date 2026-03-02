@@ -1,7 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import createServerClient from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   // inicializar o cliente aqui para evitar erro em tempo de build quando variáveis não estiverem definidas
@@ -15,7 +14,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+  const supabaseAdmin = createSupabaseClient(supabaseUrl, supabaseServiceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
   try {
@@ -28,7 +27,7 @@ export async function POST(request: Request) {
     // Fallback: tentar extrair usuário da sessão via cookies (SSR)
     if (!currentUserId) {
       try {
-        const supabaseServer = createRouteHandlerClient({ cookies });
+        const supabaseServer = await createServerClient();
         const { data: userData, error: userErr } = await supabaseServer.auth.getUser();
         if (!userErr && userData?.user?.id) {
           currentUserId = userData.user.id;

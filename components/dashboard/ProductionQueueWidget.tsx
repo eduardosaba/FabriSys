@@ -83,7 +83,7 @@ export default function ProductionQueueWidget({
         const { data: produtos } = await supabase
           .from('produtos_finais')
           .select('id, nome')
-          .in('id', produtoIds);
+          .in('id', (produtoIds || []).filter(Boolean));
         (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
       }
 
@@ -99,7 +99,7 @@ export default function ProductionQueueWidget({
             supabase,
             'ordens_producao',
             'id, data_entrega, data_entrega_prevista',
-            (b: any) => b.in('id', ordIds)
+            (b: any) => b.in('id', (ordIds || []).filter(Boolean))
           );
           if (!datesErr && datesData) {
             (datesData || []).forEach((d: any) => {

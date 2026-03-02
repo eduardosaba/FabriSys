@@ -14,6 +14,9 @@ export interface Profile {
   // Avatares e campos auxiliares
   avatar_url?: string;
   foto_url?: string;
+  company_logo_url?: string;
+  primary_color?: string;
+  theme_primary_color?: string;
 }
 
 export default Profile;

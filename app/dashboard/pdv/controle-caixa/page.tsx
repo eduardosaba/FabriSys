@@ -115,7 +115,8 @@ export default function ControleCaixaPage() {
       const opCtx = await getOperationalContext(profile);
       // Prioridade para o local salvo na sessão (localStorage) — permite que Admin "flutue" entre lojas
       const memoriaLocal = getActiveLocal();
-      let meuLocalId = memoriaLocal ?? opCtx.caixa?.local_id ?? opCtx.localId ?? profile?.local_id ?? null;
+      let meuLocalId =
+        memoriaLocal ?? opCtx.caixa?.local_id ?? opCtx.localId ?? profile?.local_id ?? null;
       if (!meuLocalId) {
         const { data: locais } = await supabase
           .from('locais')
@@ -343,6 +344,75 @@ export default function ControleCaixaPage() {
 
   const resumo = calcularResumo();
 
+  // Retornar sobras para a fábrica (exige confirmação do usuário)
+  const retornarSobra = async () => {
+    if (modoPdv !== 'inventario') return;
+
+    const itensParaDevolver = produtosParaContar
+      .filter((p) => p.estoque_contado !== '' && p.estoque_contado > 0)
+      .map((p) => ({ produto_id: p.id, quantidade: Number(p.estoque_contado), nome: p.nome }));
+
+    if (itensParaDevolver.length === 0) {
+      toast('Nenhuma sobra para devolver.');
+      return;
+    }
+
+    const confirmed = await confirmDialog.confirm({
+      title: 'Confirmar Devolução das Sobras',
+      message: `Deseja devolver ${itensParaDevolver.length} item(ns) para a fábrica? Esta ação atualizará os saldos.`,
+      confirmText: 'Devolver',
+      cancelText: 'Cancelar',
+      variant: 'warning',
+    });
+
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      // Localiza a fábrica da organização
+      const { data: fabrica, error: fabErr } = await supabase
+        .from('locais')
+        .select('id')
+        .eq('organization_id', profile?.organization_id)
+        .eq('tipo', 'fabrica')
+        .limit(1)
+        .maybeSingle();
+
+      if (fabErr) throw fabErr;
+      if (!fabrica?.id) {
+        toast.error('Fábrica não encontrada para esta organização.');
+        return;
+      }
+
+      for (const sobra of itensParaDevolver) {
+        try {
+          const { error: insErr } = await supabase.from('envios_historico').insert({
+            produto_id: sobra.produto_id,
+            quantidade: sobra.quantidade,
+            local_origem_id: localId,
+            local_destino_id: fabrica.id,
+            enviado_por: profile?.id,
+            enviado_em: new Date().toISOString(),
+            status: 'retorno_pendente',
+            observacao: 'Solicitação de retorno via fechamento de caixa',
+            organization_id: profile?.organization_id,
+          });
+
+          if (insErr) throw insErr;
+          toast.success(`Solicitado retorno: ${sobra.nome}`);
+        } catch (err) {
+          console.error('Erro ao registrar solicitação de devolução:', sobra, err);
+          toast.error(`Falha ao solicitar devolução de ${sobra.nome}`);
+        }
+      }
+
+      // Recarrega estado para refletir que as solicitações foram criadas
+      await carregarEstado();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fecharCaixa = async () => {
     if (!valoresFechamento.dinheiro) return toast.error('Informe o dinheiro em caixa');
 
@@ -373,40 +443,48 @@ export default function ControleCaixaPage() {
             produto_id: p.id,
             quantidade: p.estoque_sistema - (p.estoque_contado as number),
             preco_unitario: p.preco_venda,
+            subtotal: (p.estoque_sistema - (p.estoque_contado as number)) * p.preco_venda,
           }));
 
         if (itensVendidos.length > 0) {
-          const { data: venda, error: errVenda } = await supabase
+          // 1. Gera uma venda consolidada única do dia (marcada como consolidado_inventario)
+          const { data: vendaConsolidada, error: errVenda } = await supabase
             .from('vendas')
             .insert({
               local_id: localId,
               caixa_id: caixaAberto?.id,
               organization_id: profile?.organization_id,
-              total_venda: resumo.vendaBruta - valorTotalDescontos, // Valor líquido
-              metodo_pagamento: 'consolidado_diario',
+              total_venda: resumo.vendaBruta - valorTotalDescontos,
+              metodo_pagamento: 'consolidado_inventario',
               status: 'concluida',
+              observacoes: 'Venda gerada automaticamente via contagem de sobras.',
             })
             .select()
             .single();
 
           if (errVenda) throw errVenda;
 
+          // 2. Insere os detalhes (itens_venda) com subtotal
           const itensInsert = itensVendidos.map((i) => ({
-            venda_id: venda.id,
+            venda_id: vendaConsolidada.id,
             produto_id: i.produto_id,
             quantidade: i.quantidade,
             preco_unitario: i.preco_unitario,
-            subtotal: i.quantidade * i.preco_unitario,
+            subtotal: i.subtotal,
           }));
           await supabase.from('itens_venda').insert(itensInsert);
 
-          // Baixar Estoque Real
+          // 3. Baixa o estoque real via RPC
           for (const item of itensVendidos) {
-            await supabase.rpc('decrementar_estoque_loja_numeric', {
-              p_local_id: localId,
-              p_produto_id: item.produto_id,
-              p_qtd: item.quantidade,
-            });
+            try {
+              await supabase.rpc('decrementar_estoque_loja_numeric', {
+                p_local_id: localId,
+                p_produto_id: item.produto_id,
+                p_qtd: item.quantidade,
+              });
+            } catch (rpcErr) {
+              console.warn('Falha ao decrementar estoque via RPC para', item.produto_id, rpcErr);
+            }
           }
         }
       }
@@ -463,7 +541,9 @@ export default function ControleCaixaPage() {
           <div className="flex items-center gap-2">
             <MapPin size={18} className="animate-pulse" />
             <span className="text-sm font-bold uppercase tracking-wider">
-              Unidade Ativa: {listaLojasDisponiveis?.find((p) => p.id === localId)?.nome || 'Carregando Unidade...'}
+              Unidade Ativa:{' '}
+              {listaLojasDisponiveis?.find((p) => p.id === localId)?.nome ||
+                'Carregando Unidade...'}
             </span>
           </div>
           {(profile?.role === 'admin' || profile?.role === 'master') && (
@@ -535,8 +615,8 @@ export default function ControleCaixaPage() {
             {!localId
               ? 'Selecione uma Loja Acima'
               : !valorAbertura
-              ? 'Informe o Fundo de Troco'
-              : `Confirmar Abertura na ${listaLojasDisponiveis.find((l) => l.id === localId)?.nome || 'Unidade'}`}
+                ? 'Informe o Fundo de Troco'
+                : `Confirmar Abertura na ${listaLojasDisponiveis.find((l) => l.id === localId)?.nome || 'Unidade'}`}
           </Button>
 
           <p className="text-[10px] text-slate-400 mt-4 uppercase tracking-widest">
@@ -550,9 +630,23 @@ export default function ControleCaixaPage() {
             {modoPdv === 'inventario' ? (
               // MODO ÁGIL: MOSTRA CONTAGEM
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4 pb-2 border-b">
-                  <Package size={20} className="text-blue-600" /> 1. Contagem de Sobras
-                </h3>
+                <div className="flex items-start justify-between mb-4 pb-2 border-b">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <Package size={20} className="text-blue-600" /> 1. Contagem de Sobras
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() =>
+                        setProdutosParaContar((prev) =>
+                          prev.map((p) => ({ ...p, estoque_contado: 0 }))
+                        )
+                      }
+                      className="text-[10px] bg-red-50 text-red-600 px-2 py-1 rounded font-bold hover:bg-red-100"
+                    >
+                      VENDI TUDO (ZERAR SOBRAS)
+                    </button>
+                  </div>
+                </div>
                 <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
                   {produtosParaContar.map((prod, idx) => (
                     <div
@@ -693,8 +787,12 @@ export default function ControleCaixaPage() {
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Vendas Calculadas</span>
-                  <span className="font-mono text-slate-700">
+                  <span className="text-slate-500 font-medium">
+                    {modoPdv === 'inventario'
+                      ? 'Vendas (por Estoque Contado)'
+                      : 'Vendas (Registradas)'}
+                  </span>
+                  <span className="font-mono text-blue-700 font-bold">
                     + R$ {resumo.vendaBruta.toFixed(2)}
                   </span>
                 </div>
@@ -722,6 +820,17 @@ export default function ControleCaixaPage() {
                   <span className="text-xl font-bold">R$ {resumo.diferenca.toFixed(2)}</span>
                 </div>
               </div>
+
+              {modoPdv === 'inventario' && (
+                <div className="flex gap-3">
+                  <Button
+                    onClick={retornarSobra}
+                    className="w-full py-3 mt-4 bg-yellow-500 hover:bg-yellow-600 text-white"
+                  >
+                    Retornar Sobra (para Fábrica)
+                  </Button>
+                </div>
+              )}
 
               <Button
                 variant="danger"

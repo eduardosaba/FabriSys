@@ -26,7 +26,7 @@ import getImageUrl from '@/lib/getImageUrl';
 import { useAuth } from '@/lib/auth';
 import { getOperationalContext } from '@/lib/operationalLocal';
 import { usePageTracking } from '@/hooks/usePageTracking';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-client';
 import {
   Search,
   Sun,
@@ -57,18 +57,28 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { getActiveLocal, setActiveLocal } from '@/lib/activeLocal';
+import BrandSkeleton from '@/components/ui/BrandSkeleton';
 
-export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => void }) {
+export default function DashboardHeader({
+  onMenuClick,
+  logoUrl,
+}: {
+  onMenuClick?: () => void;
+  logoUrl?: string;
+}) {
   const _router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAISearch, setShowAISearch] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const { theme, resolvedTheme, updateTheme } = useTheme();
-  const _rawLogo = String(theme?.logo_url ?? '')
-    .toString()
-    .trim();
-  const logoUrl = getImageUrl(_rawLogo) || _rawLogo;
+  const finalLogoUrl = useMemo(() => {
+    if (logoUrl) return logoUrl;
+    const _rawLogo = String(theme?.logo_url ?? '').trim();
+    return getImageUrl(_rawLogo) || _rawLogo;
+  }, [logoUrl, theme?.logo_url]);
+
+  const [logoLoaded, setLogoLoaded] = useState(false);
   const { profile, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -410,25 +420,24 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
         if (!mounted) return;
         setOpLocalId(myLocal ?? null);
 
-        vendasChannel = supabase
-          .channel('public:vendas')
-          .on(
-            'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'vendas' },
-            (payload) => {
-              const v = payload.new as any;
-              if (isAdmin) {
+        vendasChannel = supabase.channel('public:vendas');
+        vendasChannel.on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'vendas' },
+          (payload: any) => {
+            const v = payload.new;
+            if (isAdmin) {
+              const notif = mapVendaToNotif(v);
+              setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
+            } else if (isPdv) {
+              if (myLocal && v.local_id === myLocal) {
                 const notif = mapVendaToNotif(v);
                 setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
-              } else if (isPdv) {
-                if (myLocal && v.local_id === myLocal) {
-                  const notif = mapVendaToNotif(v);
-                  setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
-                }
               }
             }
-          )
-          .subscribe();
+          }
+        );
+        void vendasChannel.subscribe();
 
         caixaChannel = supabase
           .channel('public:caixa_sessao')
@@ -535,8 +544,8 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
               };
               setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
             }
-          )
-          .subscribe();
+          );
+        void caixaChannel.subscribe();
 
         if (isFabrica || isCompras) {
           pedidoChannel = supabase
@@ -555,8 +564,8 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
                 };
                 setNotificationsList((prev) => [notif, ...prev].slice(0, 50));
               }
-            )
-            .subscribe();
+            );
+          void pedidoChannel.subscribe();
         }
       } catch (e) {
         console.error('Erro ao iniciar subscriptions de notificações:', e);
@@ -646,16 +655,7 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
   const displayName = profile?.nome || (profile as any)?.full_name || profile?.email || 'Usuário';
 
   useEffect(() => {
-    try {
-      console.log('[DashboardHeader] avatar debug:', {
-        profileId: profile?.id,
-        _avatarRaw,
-        avatarSrc,
-        avatarResolvedSrc,
-      });
-    } catch (e) {
-      void e;
-    }
+    // Debug logging removed in production.
   }, [profile?.id, _avatarRaw, avatarSrc, avatarResolvedSrc]);
 
   useEffect(() => {
@@ -725,22 +725,26 @@ export default function DashboardHeader({ onMenuClick }: { onMenuClick?: () => v
 
       {/* Logo e Busca */}
       <div className="flex flex-1 items-center gap-4">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          {/* Logo do Sistema (Marca A - sempre visível se existir) */}
-          {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt={theme.name || 'Sistema'}
-              width={32}
-              height={32}
-              className="rounded-md object-contain"
-              style={{
-                width: `calc(32px * var(--logo-scale, ${theme?.logo_scale ?? 1}))`,
-                height: 'auto',
-                imageRendering: 'auto',
-              }}
-              loading="eager"
-            />
+        <Link href="/dashboard" className="flex items-center gap-2 relative">
+          {/* Logo do Sistema (prioriza URL enviada pelo servidor) */}
+          {finalLogoUrl ? (
+            <>
+              {!logoLoaded && <BrandSkeleton />}
+              <img
+                src={finalLogoUrl}
+                alt={theme.name || 'Sistema'}
+                onLoad={() => setLogoLoaded(true)}
+                className={`rounded-md object-contain transition-opacity duration-300 ${
+                  logoLoaded ? 'opacity-100' : 'opacity-0 absolute'
+                }`}
+                style={{
+                  width: `calc(32px * var(--logo-scale, ${theme?.logo_scale ?? 1}))`,
+                  height: 'auto',
+                  imageRendering: 'auto',
+                }}
+                loading="eager"
+              />
+            </>
           ) : (
             <span className="hidden text-lg font-semibold sm:inline">
               {theme.name || 'SistemaLari'}

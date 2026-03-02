@@ -59,12 +59,13 @@ export default function FichasTecnicasPage() {
       const produtoIds = Array.from(
         new Set(rows.map((r: any) => String(r.produto_final_id)).filter(Boolean))
       );
+      const cleanProdutoIds = (produtoIds || []).filter(Boolean).filter((id) => id !== 'undefined');
       const produtoMap: Record<string, { nome?: string }> = {};
-      if (produtoIds.length > 0) {
+      if (cleanProdutoIds.length > 0) {
         const { data: produtos } = await supabase
           .from('produtos_finais')
           .select('id, nome')
-          .in('id', produtoIds);
+          .in('id', cleanProdutoIds as any[]);
         (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
       }
 

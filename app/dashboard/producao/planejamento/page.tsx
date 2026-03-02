@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { getActiveLocal } from '@/lib/activeLocal';
 import { useAuth } from '@/lib/auth';
 import Button from '@/components/Button';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
 import { useToast } from '@/hooks/useToast';
+import TabelaResumoExplosao from '@/components/planejamento/TabelaResumoExplosao';
 import {
   Truck,
   Save,
@@ -53,6 +55,10 @@ export default function PlanejamentoPage() {
   const [locais, setLocais] = useState<Local[]>([]);
   const [produtos, setProdutos] = useState<ProdutoPlanejamento[]>([]);
   const [plano, setPlano] = useState<Record<string, ItemPlanejamento>>({});
+  const [explosaoDados, setExplosaoDados] = useState<any[] | null>(null);
+  const [explosaoLoading, setExplosaoLoading] = useState(false);
+  const [produtosParaProduzir, setProdutosParaProduzir] = useState<Record<string, number>>({});
+  const [mostrarExplosao, setMostrarExplosao] = useState(false);
 
   // Estado para expandir cards no mobile
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
@@ -225,6 +231,9 @@ export default function PlanejamentoPage() {
             status: 'pendente',
             organization_id: profile?.organization_id,
             created_by: profile?.id,
+            // 🎯 Definir local de origem (fábrica) e destino principal
+            local_origem_id: profile?.local_id || getActiveLocal(),
+            local_destino_id: getActiveLocal() ?? profile?.local_id,
           })
           .select()
           .single();
@@ -255,8 +264,173 @@ export default function PlanejamentoPage() {
       toast({ title: `${ordensGeradas} ordens geradas!`, variant: 'success' });
       setPlano({});
     } catch (err: any) {
-      console.error(err);
-      toast({ title: 'Erro ao salvar', description: err.message, variant: 'error' });
+      console.error('Erro ao salvar', err);
+      let errMsg = 'Erro desconhecido';
+      try {
+        if (err && typeof err === 'object') {
+          errMsg = (err.message as string) ?? JSON.stringify(err);
+        } else {
+          errMsg = String(err);
+        }
+      } catch (e) {
+        errMsg = String(err);
+      }
+      toast({ title: 'Erro ao salvar', description: errMsg, variant: 'error' });
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // --- Explosão de Massas (MRP simplificado) ---
+  const calcularExplosao = async () => {
+    // Montar lista agregada de produtos planejados
+    const planejados = Object.keys(plano)
+      .map((produtoId) => {
+        const itens = plano[produtoId] || {};
+        const total = Object.values(itens).reduce((acc, n) => acc + (n || 0), 0);
+        return { produto_id: produtoId, quantidade: total };
+      })
+      .filter((p) => p.quantidade > 0);
+
+    if (planejados.length === 0) {
+      toast({ title: 'Nenhuma quantidade definida', variant: 'warning' });
+      return;
+    }
+
+    try {
+      setExplosaoLoading(true);
+      const { data, error } = await supabase.rpc('calcular_explosao_massas', {
+        p_itens_planejados: planejados,
+      });
+      if (error) throw error;
+      const rows = data || [];
+      setExplosaoDados(rows);
+      // Inicializar valores propostos
+      const mapa: Record<string, number> = {};
+      (rows || []).forEach((r: any) => {
+        mapa[r.massa_id] = Number(r.sugestao || r.sugestao_producao || 0);
+      });
+      setProdutosParaProduzir(mapa);
+      setMostrarExplosao(true);
+    } catch (err) {
+      console.error('Erro ao calcular explosão:', err);
+      toast({ title: 'Erro ao calcular explosão', variant: 'error' });
+    } finally {
+      setExplosaoLoading(false);
+    }
+  };
+
+  const handleChangeProducao = (massaId: string, valor: number) => {
+    setProdutosParaProduzir((prev) => ({ ...prev, [massaId]: valor }));
+  };
+
+  const gerarOPsExplodidas = async () => {
+    // 1) Inserir OPs de semi-acabado (massas) para cada massa com quantidade > 0
+    if (!explosaoDados || explosaoDados.length === 0)
+      return toast({ title: 'Nada para gerar', variant: 'warning' });
+    try {
+      setSalvando(true);
+      const fabricaRes = await supabase
+        .from('locais')
+        .select('id')
+        .eq('tipo', 'fabrica')
+        .limit(1)
+        .maybeSingle();
+      const fabricaId = fabricaRes.data?.id ?? getActiveLocal();
+
+      const massOpMap: Record<string, string> = {};
+      for (const m of explosaoDados) {
+        const qtd = Number(produtosParaProduzir[m.massa_id] ?? m.sugestao_producao ?? 0);
+        if (!qtd || qtd <= 0) continue;
+        const numeroOp = Math.floor(10000 + Math.random() * 90000).toString();
+        const { data: opData, error: opErr } = await supabase
+          .from('ordens_producao')
+          .insert({
+            numero_op: numeroOp,
+            produto_final_id: m.massa_id,
+            quantidade_prevista: qtd,
+            data_prevista: dataProducao,
+            status: 'pendente',
+            organization_id: profile?.organization_id,
+            created_by: profile?.id,
+            // origem e destino da OP de massa = fábrica
+            local_origem_id: fabricaId,
+            local_destino_id: fabricaId,
+          })
+          .select()
+          .single();
+        if (opErr) throw opErr;
+        massOpMap[m.massa_id] = opData.id;
+      }
+
+      // 2) Para cada produto final no plano, criar OP e distribuições, vinculando ao OP pai quando aplicável
+      for (const prodId of Object.keys(produtos)) {
+        const qtds = plano[prodId] || {};
+        const totalUnidades = Object.values(qtds).reduce((acc, q) => acc + q, 0);
+        if (totalUnidades <= 0) continue;
+
+        const numeroOp = Math.floor(10000 + Math.random() * 90000).toString();
+        // tentar descobrir op_pai pela composicao (relacionamento produto->massa)
+        const { data: compData } = await supabase
+          .from('composicao_produto')
+          .select('item_id')
+          .eq('produto_pai_id', prodId)
+          .limit(1);
+        const massaRelacionado = compData && compData[0] ? compData[0].item_id : null;
+        const opPaiId = massaRelacionado ? (massOpMap[massaRelacionado] ?? null) : null;
+
+        const { data: opFinal, error: errOpFinal } = await supabase
+          .from('ordens_producao')
+          .insert({
+            numero_op: numeroOp,
+            produto_final_id: prodId,
+            quantidade_prevista: totalUnidades,
+            data_prevista: dataProducao,
+            status: 'pendente',
+            organization_id: profile?.organization_id,
+            created_by: profile?.id,
+            // garantir origem (fábrica) para produto final quando aplicável
+            local_origem_id: fabricaId,
+            local_destino_id: getActiveLocal() ?? null,
+            op_pai_id: opPaiId,
+          })
+          .select()
+          .single();
+        if (errOpFinal) throw errOpFinal;
+
+        const itemsDistribuicao = Object.keys(qtds).flatMap((localId) => {
+          const qtd = qtds[localId] || 0;
+          if (qtd > 0) {
+            return {
+              ordem_producao_id: opFinal.id,
+              local_destino_id: localId,
+              quantidade_solicitada: qtd,
+              status: 'pendente',
+              organization_id: profile?.organization_id,
+            };
+          }
+          return [] as any[];
+        });
+
+        if (itemsDistribuicao.length > 0) {
+          const { error: errDist } = await supabase
+            .from('distribuicao_pedidos')
+            .insert(itemsDistribuicao);
+          if (errDist) throw errDist;
+        }
+      }
+
+      toast({ title: 'OPs geradas com sucesso', variant: 'success' });
+      setPlano({});
+      setExplosaoDados(null);
+      setMostrarExplosao(false);
+    } catch (err: any) {
+      console.error('Erro ao gerar OPs explodidas:', err);
+      toast({
+        title: 'Erro ao gerar OPs',
+        description: err?.message || String(err),
+        variant: 'error',
+      });
     } finally {
       setSalvando(false);
     }
@@ -303,6 +477,15 @@ export default function PlanejamentoPage() {
             className="w-full sm:w-auto"
           >
             Gerar Ordens
+          </Button>
+          <Button
+            onClick={calcularExplosao}
+            disabled={explosaoLoading}
+            loading={explosaoLoading}
+            icon={Sparkles}
+            className="w-full sm:w-auto"
+          >
+            Calcular Massas
           </Button>
         </div>
       </PageHeader>
@@ -510,6 +693,24 @@ export default function PlanejamentoPage() {
           );
         })}
       </div>
+      {/* Painel de Explosão (quando calculado) */}
+      {mostrarExplosao && explosaoDados && (
+        <div className="p-4 md:p-6">
+          <TabelaResumoExplosao
+            dados={explosaoDados}
+            valores={produtosParaProduzir}
+            onChange={handleChangeProducao}
+          />
+          <div className="flex gap-3 mt-4">
+            <Button onClick={() => setMostrarExplosao(false)} variant="secondary">
+              Fechar
+            </Button>
+            <Button onClick={gerarOPsExplodidas} loading={salvando}>
+              Gerar OPs Explodidas
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

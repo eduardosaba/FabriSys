@@ -463,7 +463,13 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
           <div className="flex items-center gap-4 p-4 border border-dashed border-gray-300 rounded-xl bg-gray-50">
             {imagePreview ? (
               <div className="relative w-20 h-20 rounded-lg overflow-hidden shadow-sm border border-gray-200">
-                <Image src={imagePreview} alt="Preview" fill className="object-cover" />
+                <Image
+                  src={imagePreview}
+                  alt="Preview"
+                  fill
+                  className="object-cover"
+                  style={{ width: 'auto', height: 'auto' }}
+                />
               </div>
             ) : (
               <div className="w-20 h-20 rounded-lg bg-gray-200 flex items-center justify-center text-gray-400">

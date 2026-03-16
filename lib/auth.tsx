@@ -34,6 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
+  const [authTimeout, setAuthTimeout] = useState(false);
+  const AUTH_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_AUTH_TIMEOUT_MS) || 20000;
 
   // Ref para evitar chamadas duplicadas ao fetchProfile
   const fetchingProfile = useRef(false);
@@ -77,13 +79,87 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // 2) Tentativa em profiles (clientes/administradores) — se existir, mesclar com base
       try {
+        // Buscar profile incluindo relacionamento com organizations
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
-          .select('*')
+          .select(`*, organizations(id, name, logo_url)`)
           .eq('id', userId)
           .maybeSingle();
-        if (profErr) console.warn('[AuthProvider] ⚠️ profiles query erro:', profErr);
+
+        if (profErr) {
+          // Se a query com relacionamento falhar (PostgREST 400), tentamos um fallback simples
+          console.warn('[AuthProvider] ⚠️ profiles query erro (relacionamento):', profErr);
+          try {
+            const { data: profSimple, error: profSimpleErr } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userId)
+              .maybeSingle();
+            if (profSimpleErr) {
+              console.warn('[AuthProvider] ⚠️ fallback profiles query erro:', profSimpleErr);
+            }
+
+            if (profSimple) {
+              // tentar buscar organização manualmente se existir organization_id
+              let org = undefined;
+              try {
+                if (profSimple.organization_id) {
+                  const { data: orgData } = await supabase
+                    .from('organizations')
+                    .select('id,name,logo_url')
+                    .eq('id', profSimple.organization_id)
+                    .maybeSingle();
+                  org = orgData;
+                }
+              } catch (orgErr) {
+                void orgErr;
+              }
+
+              const profileData = {
+                id: profSimple.id,
+                role: (profSimple.role as UserRole) || (baseProfile?.role as UserRole) || 'user',
+                nome:
+                  profSimple.nome ||
+                  profSimple.full_name ||
+                  profSimple.username ||
+                  baseProfile?.nome ||
+                  userEmail?.split('@')[0],
+                full_name:
+                  profSimple.full_name ||
+                  profSimple.username ||
+                  baseProfile?.full_name ||
+                  undefined,
+                email: userEmail ?? baseProfile?.email,
+                avatar_url:
+                  profSimple.avatar_url ?? profSimple.foto_url ?? baseProfile?.avatar_url ?? null,
+                organization_id:
+                  profSimple.organization_id ?? baseProfile?.organization_id ?? undefined,
+                organizations: org ?? undefined,
+                company_logo_url:
+                  (org && (org as any).logo_url) ??
+                  profSimple.company_logo_url ??
+                  baseProfile?.company_logo_url ??
+                  undefined,
+                ativo: profSimple.ativo ?? baseProfile?.ativo ?? undefined,
+                status_conta: profSimple.status_conta ?? baseProfile?.status_conta ?? undefined,
+              } as Profile & { organizations?: any };
+              console.log(
+                '[AuthProvider] ✅ Perfil vindo de profiles (fallback simples)',
+                profileData
+              );
+              setProfile(profileData as any);
+              return;
+            }
+          } catch (fallbackErr) {
+            console.warn('[AuthProvider] ⚠️ Falha no fallback profiles query:', fallbackErr);
+          }
+        }
+
         if (prof) {
+          // organizations pode vir como objeto ou array dependendo do relacionamento
+          const orgRaw: any = prof.organizations;
+          const org = Array.isArray(orgRaw) ? orgRaw[0] : orgRaw;
+
           const profileData = {
             id: prof.id,
             role: (prof.role as UserRole) || (baseProfile?.role as UserRole) || 'user',
@@ -97,11 +173,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: userEmail ?? baseProfile?.email,
             avatar_url: prof.avatar_url ?? prof.foto_url ?? baseProfile?.avatar_url ?? null,
             organization_id: prof.organization_id ?? baseProfile?.organization_id ?? undefined,
+            organizations: org ?? undefined,
+            // Prioriza logo da organização quando disponível
+            company_logo_url:
+              (org && org.logo_url) ??
+              prof.company_logo_url ??
+              baseProfile?.company_logo_url ??
+              undefined,
             ativo: prof.ativo ?? baseProfile?.ativo ?? undefined,
             status_conta: prof.status_conta ?? baseProfile?.status_conta ?? undefined,
-          } as Profile;
+          } as Profile & { organizations?: any };
           console.log('[AuthProvider] ✅ Perfil vindo de profiles (mesclado)', profileData);
-          setProfile(profileData);
+          setProfile(profileData as any);
           return;
         }
       } catch (e) {
@@ -133,15 +216,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Timeout de segurança: evita loading infinito se houver problemas de rede
-    // Se o profile não carregar em 10s, força loading=false e emite aviso
+    // Se o profile não carregar dentro de `AUTH_TIMEOUT_MS`, marca timeout e avisa o usuário.
     const timeoutOccurred = { value: false } as { value: boolean };
     const _timeout = setTimeout(() => {
       timeoutOccurred.value = true;
+      setAuthTimeout(true);
       setLoading(false);
       console.warn(
-        '⚠️ Auth: Timeout de 20s atingido. O carregamento do perfil pode continuar em segundo plano; algumas informações podem demorar a aparecer.'
+        `⚠️ Auth: Timeout de ${AUTH_TIMEOUT_MS}ms atingido. O carregamento do perfil pode continuar em segundo plano; algumas informações podem demorar a aparecer.`
       );
-    }, 20000);
+      try {
+        toast({
+          title: 'Atenção: demora no login',
+          description:
+            'O carregamento do perfil está demorando. Algumas informações podem aparecer em seguida.',
+          variant: 'warning',
+          duration: 8000,
+        });
+      } catch (e) {
+        void e;
+      }
+    }, AUTH_TIMEOUT_MS);
 
     const getInitialSession = async () => {
       try {

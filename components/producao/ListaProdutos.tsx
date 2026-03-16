@@ -111,6 +111,7 @@ export default function ListaProdutos({ produtos, onUpdate }: ListaProdutosProps
                           width={64}
                           height={64}
                           className="object-cover h-16 w-16 rounded-md"
+                          style={{ width: 'auto', height: 'auto' }}
                         />
                       ) : (
                         <div className="h-16 w-16 bg-gray-200 rounded-md" />
@@ -218,6 +219,7 @@ export default function ListaProdutos({ produtos, onUpdate }: ListaProdutosProps
                                 width={40}
                                 height={40}
                                 className="rounded-full object-cover"
+                                style={{ width: 'auto', height: 'auto' }}
                               />
                             </div>
                           ) : (

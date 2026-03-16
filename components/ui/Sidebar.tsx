@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -56,6 +56,8 @@ interface SidebarChild {
   // Se definido, apenas roles listados terão acesso ao sub-item
   allowedRoles?: string[];
   id?: string;
+  // opcionalmente um ícone (ex.: usado em atalhos/favoritos)
+  icon?: React.ReactNode;
 }
 
 interface SidebarItem {
@@ -95,6 +97,7 @@ const sidebarItems: SidebarItem[] = [
     icon: <Factory className="h-5 w-5" />,
     allowedRoles: ['fabrica', 'admin', 'master'],
     children: [
+      { id: 'fabrica_dashboard', name: 'Dashboard Fábrica', href: '/dashboard/producao/fabrica' },
       {
         id: 'producao_kanban',
         name: 'Chão de Fábrica (Kanban)',
@@ -158,16 +161,10 @@ const sidebarItems: SidebarItem[] = [
     allowedRoles: ['admin', 'master'],
     children: [
       { name: 'Painel Gerencial', href: '/dashboard/relatorios' },
-      { name: 'Vendas Detalhadas', href: '/dashboard/relatorios/vendas' },
+      { name: 'Vendas Consolidadas', href: '/dashboard/relatorios/vendas' },
+      { name: 'Histórico de Fechamentos', href: '/dashboard/pdv/historico-caixa' },
       { name: 'Posição de Estoque', href: '/dashboard/relatorios/estoque' },
       { name: 'Validade & Perdas', href: '/dashboard/relatorios/validade' },
-      { name: 'Acompanhamento de Metas', href: '/dashboard/relatorios/metas' },
-      { name: 'Histórico de Caixas', href: '/dashboard/relatorios/fechamentos' },
-      {
-        id: 'relatorios_dre',
-        name: 'DRE - Demonstrativo (Financeiro)',
-        href: '/dashboard/relatorios/dre',
-      },
     ],
   },
   {
@@ -178,19 +175,20 @@ const sidebarItems: SidebarItem[] = [
     allowedRoles: ['admin', 'master'],
     children: [
       {
-        id: 'financeiro_contas_pagar',
-        name: 'Contas a Pagar',
-        href: '/dashboard/financeiro/contas-pagar',
-      },
-      {
         id: 'financeiro_conferencia',
         name: 'Conferência de Caixas',
         href: '/dashboard/financeiro/conferencia',
       },
       {
-        id: 'financeiro_relatorios',
-        name: 'Relatórios Financeiros',
-        href: '/dashboard/relatorios/dre',
+        id: 'financeiro_historico_caixas',
+        name: 'Histórico de Caixas',
+        href: '/dashboard/relatorios/fechamentos',
+      },
+      { id: 'financeiro_dre', name: 'DRE - Financeiro', href: '/dashboard/relatorios/dre' },
+      {
+        id: 'financeiro_contas_pagar',
+        name: 'Contas a Pagar',
+        href: '/dashboard/financeiro/contas-pagar',
       },
       {
         id: 'financeiro_categorias',
@@ -286,6 +284,7 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
   const SHOW_SIDEBAR_FOOTER = false;
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState(false);
   const pathname = usePathname();
 
   const { pinnedPages, togglePinPage, isPagePinned } = usePageTracking();
@@ -361,17 +360,27 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
   }, [profile?.organization_id]);
 
   const logoSrc = ((): string | null => {
-    // Preferência: se o servidor enviou uma URL, use-a imediatamente
+    // 1. Prioridade Máxima: Logo da Organização do Usuário (Upload em Configurações)
+    // Buscamos primeiro no profile que vem do hook useAuth
+    const orgLogo = (profile as any)?.organizations?.logo_url || profile?.company_logo_url;
+
+    if (orgLogo) {
+      const url = getImageUrl(orgLogo.toString());
+      if (url) return url;
+    }
+
+    // 2. Segunda Prioridade: URL enviada via Props (se houver)
     if (logoUrl) return getImageUrl(logoUrl) || logoUrl;
 
-    // Prioriza a logo da empresa no profile (logo do usuário/cliente)
-    const profileCompany = profile?.company_logo_url?.toString?.().trim();
-    if (profileCompany) return getImageUrl(profileCompany) || profileCompany;
+    // 3. Terceira Prioridade: Logo vinda do tema (Configurações globais)
+    const themeLogo = theme?.company_logo_url || theme?.logo_url;
+    if (themeLogo) {
+      const url = getImageUrl(themeLogo.toString());
+      if (url) return url;
+    }
 
-    const company = theme?.company_logo_url?.toString?.().trim();
-    const logo = theme?.logo_url?.toString?.().trim();
-    const raw = company || logo || '/logo.png';
-    return getImageUrl(raw) || raw;
+    // 4. Fallback: Logo padrão do sistema
+    return '/logo.png';
   })();
 
   const toggleSidebar = () => {
@@ -438,6 +447,72 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
     return rolePerms.includes(moduleId);
   };
 
+  // helpers para cores semânticas
+  const getModuleId = (item: SidebarItem) => {
+    if ((item as any).id) return (item as any).id as string;
+    try {
+      const parts = item.href.split('/').filter(Boolean);
+      return parts[parts.length - 1];
+    } catch {
+      return item.name.toLowerCase();
+    }
+  };
+
+  const getIconColor = (id: string) => {
+    const colors: Record<string, string> = {
+      producao: 'text-amber-500',
+      fabrica: 'text-amber-500',
+      pdv: 'text-emerald-500',
+      vendas: 'text-emerald-500',
+      logistica: 'text-blue-500',
+      suprimentos: 'text-purple-500',
+      financeiro: 'text-cyan-500',
+      relatorios: 'text-rose-500',
+      configuracoes: 'text-slate-500',
+    };
+    return colors[id] || 'text-slate-400';
+  };
+
+  // Memoiza o menu visível para evitar recalculos desnecessários
+  const visibleMenu = useMemo(() => {
+    return sidebarItems
+      .filter((item) => hasAccess(item))
+      .map((item) => {
+        const children = (item.children || []).filter((child) => {
+          if (child.allowedRoles && !child.allowedRoles.includes(profile?.role ?? '')) return false;
+          const hasConfig = Object.keys(permissoes).length > 0;
+          if (hasConfig && profile?.role !== 'master') {
+            const role = profile?.role ?? '';
+            const rolePerms = permissoes[role] || DEFAULT_PERMISSOES[role] || [];
+            if (!rolePerms.includes('all')) {
+              const childModuleId =
+                (child as any).id ??
+                (() => {
+                  try {
+                    const parts = child.href.split('/').filter(Boolean);
+                    return parts[parts.length - 1];
+                  } catch {
+                    return child.href;
+                  }
+                })();
+              const parentModuleId = (item as any).id;
+              if (
+                !(
+                  rolePerms.includes(childModuleId) ||
+                  (parentModuleId && rolePerms.includes(parentModuleId))
+                )
+              ) {
+                return false;
+              }
+            }
+          }
+          return true;
+        });
+
+        return { ...item, children } as SidebarItem;
+      });
+  }, [profile?.role, permissoes]);
+
   return (
     <aside
       className={`
@@ -459,34 +534,28 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
         <div className="flex items-center justify-between">
           <div className={`flex flex-1 ${isCollapsed ? 'justify-center' : 'justify-start'}`}>
             <div className="flex items-center gap-3">
-              {/* Logo da empresa */}
-              {!isCollapsed && logoSrc && (
-                <img
-                  src={logoSrc}
-                  alt="Logo"
-                  className="h-8 w-auto object-contain"
-                  style={{
-                    maxHeight: 32,
-                    transform: `scale(var(--company-logo-scale, var(--logo-scale, ${theme?.company_logo_scale ?? theme?.logo_scale ?? 1})))`,
-                    transformOrigin: 'left center',
-                  }}
-                  onError={(e) => {
-                    // tenta fallback para logo padrão do sistema
-                    try {
-                      // evita loop infinito caso /logo.png falhe
-                      (e.currentTarget as HTMLImageElement).onerror = null;
-                      (e.currentTarget as HTMLImageElement).src = '/logo.png';
-                    } catch (err) {
-                      void err;
-                      e.currentTarget.style.display = 'none';
-                    }
-                  }}
-                />
-              )}
-
-              {(isCollapsed || (!theme?.logo_url && !theme?.company_logo_url && !loading)) && (
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-pink-500 to-pink-600 text-white font-bold shadow-lg shadow-pink-500/20">
-                  {isCollapsed ? 'C' : <ChefHat size={20} />}
+              {/* Logo da empresa com fallback para iniciais */}
+              {!isCollapsed ? (
+                logoSrc && !logoError ? (
+                  <img
+                    src={logoSrc}
+                    alt="Logo"
+                    className="h-8 w-auto object-contain"
+                    style={{
+                      maxHeight: 64,
+                      width: 'auto',
+                    }}
+                    onError={() => setLogoError(true)}
+                  />
+                ) : (
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-pink-600 text-white font-bold shadow-lg">
+                    {(profile as any)?.organizations?.name?.substring(0, 1) ||
+                      (profile?.nome ? profile.nome.substring(0, 1) : 'L')}
+                  </div>
+                )
+              ) : (
+                <div className="mx-auto h-10 w-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+                  <ChefHat size={20} />
                 </div>
               )}
 
@@ -525,55 +594,69 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
             </h3>
           )}
           <div className={`space-y-1 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
-            {pinnedPages.slice(0, isCollapsed ? 5 : 10).map((href) => {
-              const item =
-                sidebarItems.find((si) => si.href === href) ||
-                sidebarItems.find((si) => si.children?.some((c) => c.href === href));
-              if (!item) return null;
+            {permissoesLoading
+              ? // Skeleton para favoritos enquanto permissões carregam
+                Array.from({ length: isCollapsed ? 3 : 5 }).map((_, i) => (
+                  <div
+                    key={`fav-skel-${i}`}
+                    className={`h-3 ${isCollapsed ? 'w-3' : 'w-full'} rounded bg-slate-200 animate-pulse`}
+                  />
+                ))
+              : pinnedPages.slice(0, isCollapsed ? 5 : 10).map((href) => {
+                  const item =
+                    visibleMenu.find((si) => si.href === href) ||
+                    visibleMenu.find((si) => si.children?.some((c) => c.href === href));
+                  if (!item) return null;
 
-              // ocultar favoritos que o usuário não tem acesso
-              if (!hasAccess(item)) return null;
+                  const childItem = item.children?.find((c) => c.href === href);
+                  if (
+                    childItem &&
+                    childItem.allowedRoles &&
+                    !childItem.allowedRoles.includes(profile?.role ?? '')
+                  )
+                    return null;
+                  const displayItem = childItem || item;
 
-              const childItem = item.children?.find((c) => c.href === href);
-              // Se o sub-item tiver restrição de roles e o usuário não tiver, ocultar
-              if (
-                childItem &&
-                childItem.allowedRoles &&
-                !childItem.allowedRoles.includes(profile?.role ?? '')
-              )
-                return null;
-              const displayItem = childItem || item;
+                  const moduleId = getModuleId(displayItem as SidebarItem);
+                  const iconEl = React.isValidElement(displayItem.icon)
+                    ? React.cloneElement(displayItem.icon as React.ReactElement<any>, {
+                        className: `h-4 w-4 ${getIconColor(moduleId)}`,
+                      })
+                    : displayItem.icon;
 
-              return (
-                <Link
-                  key={`fav-${displayItem.href}`}
-                  href={displayItem.href}
-                  onClick={handleNavClick}
-                  onMouseEnter={() => setHoveredItem(displayItem.href)}
-                  onMouseLeave={() => setHoveredItem(null)}
-                  className={`flex items-center rounded-md p-2 text-sm transition-colors text-slate-600 ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
-                  title={isCollapsed ? displayItem.name : undefined}
-                  style={
-                    hoveredItem === displayItem.href
-                      ? {
-                          backgroundColor: 'var(--sidebar-hover-bg)',
-                          color: 'var(--sidebar-active-text)',
-                          opacity: 0.92,
-                        }
-                      : undefined
-                  }
-                >
-                  <span style={{ color: 'var(--sidebar-text)' }}>
-                    {childItem ? <ChevronRight size={14} /> : item.icon}
-                  </span>
-                  {!isCollapsed && (
-                    <span className="truncate font-medium" style={{ color: 'var(--sidebar-text)' }}>
-                      {displayItem.name}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
+                  return (
+                    <Link
+                      key={`fav-${displayItem.href}`}
+                      href={displayItem.href}
+                      onClick={handleNavClick}
+                      onMouseEnter={() =>
+                        setHoveredItem((displayItem as any).id ?? displayItem.href)
+                      }
+                      onMouseLeave={() => setHoveredItem(null)}
+                      className={`flex items-center rounded-md p-2 text-sm transition-colors text-slate-600 ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
+                      title={isCollapsed ? displayItem.name : undefined}
+                      style={
+                        hoveredItem === ((displayItem as any).id ?? displayItem.href)
+                          ? {
+                              backgroundColor: 'var(--sidebar-hover-bg)',
+                              color: 'var(--sidebar-active-text)',
+                              opacity: 0.92,
+                            }
+                          : undefined
+                      }
+                    >
+                      <span style={{ color: 'var(--sidebar-text)' }}>{iconEl}</span>
+                      {!isCollapsed && (
+                        <span
+                          className="truncate font-medium"
+                          style={{ color: 'var(--sidebar-text)' }}
+                        >
+                          {displayItem.name}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
           </div>
         </div>
       )}
@@ -583,204 +666,187 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
         className="custom-scrollbar flex-1 overflow-y-auto p-3"
         style={{ color: 'var(--sidebar-text)' }}
       >
-        <ul className="space-y-1">
-          {sidebarItems.map((item) => {
-            if (!hasAccess(item)) return null;
+        {permissoesLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={`skel-${i}`} className="h-4 w-full rounded bg-slate-200 animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <ul className="space-y-1">
+            {visibleMenu.map((item) => {
+              // item já foi filtrado por hasAccess via visibleMenu
+              const moduleId = getModuleId(item);
+              const active = isActive(item.href) || isSubmenuActive(item);
+              const isHovered = hoveredItem === ((item as any).id ?? item.href);
 
-            // calcula subitens visíveis de acordo com permissões e allowedRoles
-            const visibleChildren = (item.children || []).filter((child) => {
-              if (child.allowedRoles && !child.allowedRoles.includes(profile?.role ?? ''))
-                return false;
-              const hasConfig = Object.keys(permissoes).length > 0;
-              if (hasConfig && profile?.role !== 'master') {
-                const role = profile?.role ?? '';
-                const rolePerms = permissoes[role] || DEFAULT_PERMISSOES[role] || [];
-                if (!rolePerms.includes('all')) {
-                  const childModuleId =
-                    (child as any).id ??
-                    (() => {
-                      try {
-                        const parts = child.href.split('/').filter(Boolean);
-                        return parts[parts.length - 1];
-                      } catch {
-                        return child.href;
-                      }
-                    })();
-                  const parentModuleId = (item as any).id;
-                  if (
-                    !(
-                      rolePerms.includes(childModuleId) ||
-                      (parentModuleId && rolePerms.includes(parentModuleId))
-                    )
-                  ) {
-                    return false;
-                  }
-                }
-              }
-              return true;
-            });
-
-            const active = isActive(item.href) || isSubmenuActive(item);
-            const isHovered = hoveredItem === item.href;
-
-            const itemStyle = active
-              ? {
-                  backgroundColor: 'var(--sidebar-active-bg, rgba(59,130,246,0.08))',
-                  color: 'var(--sidebar-active-text, #0f172a)',
-                  boxShadow: 'inset 4px 0 0 var(--sidebar-accent, #f59e0b)',
-                }
-              : isHovered
+              const itemStyle = active
                 ? {
-                    backgroundColor: 'var(--sidebar-hover-bg, rgba(15,23,42,0.06))',
+                    backgroundColor: 'var(--sidebar-active-bg, rgba(59,130,246,0.08))',
                     color: 'var(--sidebar-active-text, #0f172a)',
-                    opacity: 0.98,
+                    boxShadow: 'inset 4px 0 0 var(--sidebar-accent, #f59e0b)',
                   }
-                : undefined;
+                : isHovered
+                  ? {
+                      backgroundColor: 'var(--sidebar-hover-bg, rgba(15,23,42,0.06))',
+                      color: 'var(--sidebar-active-text, #0f172a)',
+                      opacity: 0.98,
+                    }
+                  : undefined;
 
-            return (
-              <li key={item.name} className={`${(item as any).mobileOnly ? 'lg:hidden' : ''}`}>
-                <div
-                  className={`group relative flex cursor-pointer items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200`}
-                  onClick={() => (visibleChildren.length > 0 ? toggleSubmenu(item.name) : null)}
-                  onMouseEnter={() => setHoveredItem(item.href)}
-                  onMouseLeave={() => setHoveredItem(null)}
-                  style={itemStyle}
-                >
-                  {/* Se não houver subitens visíveis, renderiza o link dentro do container */}
-                  {!visibleChildren || visibleChildren.length === 0 ? (
-                    <Link
-                      href={item.href}
-                      onClick={handleNavClick}
-                      className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
-                    >
-                      <span
-                        style={{
-                          color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
-                        }}
+              const visibleChildren = item.children || [];
+
+              const iconEl = React.isValidElement(item.icon)
+                ? React.cloneElement(item.icon as React.ReactElement<any>, {
+                    className: `h-5 w-5 ${getIconColor(moduleId)}`,
+                  })
+                : item.icon;
+
+              return (
+                <li key={item.name} className={`${(item as any).mobileOnly ? 'lg:hidden' : ''}`}>
+                  <div
+                    className={`group relative flex cursor-pointer items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200`}
+                    onClick={() => (visibleChildren.length > 0 ? toggleSubmenu(item.name) : null)}
+                    onMouseEnter={() => setHoveredItem((item as any).id ?? item.href)}
+                    onMouseLeave={() => setHoveredItem(null)}
+                    style={itemStyle}
+                  >
+                    {!visibleChildren || visibleChildren.length === 0 ? (
+                      <Link
+                        href={item.href}
+                        onClick={handleNavClick}
+                        className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
                       >
-                        {item.icon}
-                      </span>
-                      {!isCollapsed && <span className="flex-1">{item.name}</span>}
-                    </Link>
-                  ) : (
-                    <div
-                      className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
-                    >
-                      <span
-                        style={{
-                          color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
-                        }}
+                        <span
+                          style={{
+                            color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+                          }}
+                        >
+                          {iconEl}
+                        </span>
+                        {!isCollapsed && <span className="flex-1">{item.name}</span>}
+                      </Link>
+                    ) : (
+                      <div
+                        className={`flex flex-1 items-center ${!isCollapsed ? 'gap-3' : 'justify-center'}`}
                       >
-                        {item.icon}
-                      </span>
-                      {!isCollapsed && (
-                        <>
-                          <span className="flex-1">{item.name}</span>
-                          <ChevronRight
-                            className={`h-4 w-4 transition-transform duration-200 ${openSubmenu === item.name ? 'rotate-90' : ''}`}
-                            style={{ color: 'var(--sidebar-text)' }}
-                          />
-                        </>
-                      )}
-                    </div>
-                  )}
+                        <span
+                          style={{
+                            color: active ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+                          }}
+                        >
+                          {iconEl}
+                        </span>
+                        {!isCollapsed && (
+                          <>
+                            <span className="flex-1">{item.name}</span>
+                            <ChevronRight
+                              className={`h-4 w-4 transition-transform duration-200 ${openSubmenu === item.name ? 'rotate-90' : ''}`}
+                              style={{ color: 'var(--sidebar-text)' }}
+                            />
+                          </>
+                        )}
+                      </div>
+                    )}
 
-                  {!isCollapsed && !item.children && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        togglePinPage(item.href);
-                      }}
-                      className={`ml-2 opacity-60 transition-opacity group-hover:opacity-100 ${isPagePinned(item.href) ? 'opacity-100' : ''}`}
-                      style={
-                        isPagePinned(item.href)
-                          ? { color: 'var(--yellow-400, #f6c90a)' }
-                          : { color: 'var(--sidebar-active-text)' }
-                      }
-                    >
-                      <Star
-                        size={14}
-                        fill={isPagePinned(item.href) ? 'currentColor' : 'none'}
-                        stroke={'var(--sidebar-active-text)'}
-                        strokeWidth={1.5}
-                      />
-                    </button>
-                  )}
+                    {!isCollapsed && !item.children && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          togglePinPage(item.href);
+                        }}
+                        className={`ml-2 opacity-60 transition-opacity group-hover:opacity-100 ${isPagePinned(item.href) ? 'opacity-100' : ''}`}
+                        style={
+                          isPagePinned(item.href)
+                            ? { color: 'var(--yellow-400, #f6c90a)' }
+                            : { color: 'var(--sidebar-active-text)' }
+                        }
+                      >
+                        <Star
+                          size={14}
+                          fill={isPagePinned(item.href) ? 'currentColor' : 'none'}
+                          stroke={'var(--sidebar-active-text)'}
+                          strokeWidth={1.5}
+                        />
+                      </button>
+                    )}
 
-                  {isCollapsed && (
-                    <div className="pointer-events-none absolute left-14 top-1/2 z-50 ml-2 w-max -translate-y-1/2 rounded-md bg-slate-800 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-                      {item.name}
-                    </div>
-                  )}
-                </div>
+                    {isCollapsed &&
+                      (hoveredItem === ((item as any).id ?? item.href) ? (
+                        <div className="absolute left-14 top-1/2 z-50 ml-2 w-max -translate-y-1/2 rounded-md bg-slate-800 px-2 py-1 text-xs text-white shadow-lg whitespace-nowrap">
+                          {item.name}
+                        </div>
+                      ) : null)}
+                  </div>
 
-                {!isCollapsed &&
-                  visibleChildren &&
-                  visibleChildren.length > 0 &&
-                  openSubmenu === item.name && (
-                    <ul className="mt-1 ml-9 animate-fade-up space-y-1 border-l border-slate-200 pl-2">
-                      {visibleChildren.map((child) => {
-                        const childActive = isActive(child.href);
-                        const childIsHovered = hoveredItem === child.href;
-                        return (
-                          <li key={child.name}>
-                            <div className="group/sub flex items-center justify-between">
-                              <Link
-                                href={child.href}
-                                onMouseEnter={() => setHoveredItem(child.href)}
-                                onMouseLeave={() => setHoveredItem(null)}
-                                className={`flex-1 block rounded-md px-3 py-2 text-sm transition-colors`}
-                                style={
-                                  childActive
-                                    ? {
-                                        backgroundColor:
-                                          'var(--sidebar-active-bg, rgba(59,130,246,0.08))',
-                                        color: 'var(--sidebar-active-text, #0f172a)',
-                                        boxShadow: 'inset 4px 0 0 var(--sidebar-accent, #f59e0b)',
-                                      }
-                                    : childIsHovered
+                  {!isCollapsed &&
+                    visibleChildren &&
+                    visibleChildren.length > 0 &&
+                    openSubmenu === item.name && (
+                      <ul className="mt-1 ml-9 animate-fade-up space-y-1 border-l border-slate-200 pl-2">
+                        {visibleChildren.map((child) => {
+                          const childActive = isActive(child.href);
+                          const childIsHovered = hoveredItem === child.href;
+                          return (
+                            <li key={child.name}>
+                              <div className="group/sub flex items-center justify-between">
+                                <Link
+                                  href={child.href}
+                                  onMouseEnter={() => setHoveredItem(child.href)}
+                                  onMouseLeave={() => setHoveredItem(null)}
+                                  className={`flex-1 block rounded-md px-3 py-2 text-sm transition-colors`}
+                                  style={
+                                    childActive
                                       ? {
                                           backgroundColor:
-                                            'var(--sidebar-hover-bg, rgba(15,23,42,0.06))',
+                                            'var(--sidebar-active-bg, rgba(59,130,246,0.08))',
                                           color: 'var(--sidebar-active-text, #0f172a)',
-                                          opacity: 0.98,
+                                          boxShadow: 'inset 4px 0 0 var(--sidebar-accent, #f59e0b)',
                                         }
-                                      : undefined
-                                }
-                              >
-                                {child.name}
-                              </Link>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault();
-                                  togglePinPage(child.href);
-                                }}
-                                className={`pr-2 opacity-60 transition-opacity group-hover/sub:opacity-100 ${isPagePinned(child.href) ? 'opacity-100' : ''}`}
-                                style={
-                                  isPagePinned(child.href)
-                                    ? { color: 'var(--yellow-400, #f6c90a)' }
-                                    : { color: 'var(--sidebar-active-text)' }
-                                }
-                              >
-                                <Star
-                                  size={12}
-                                  fill={isPagePinned(child.href) ? 'currentColor' : 'none'}
-                                  stroke={'var(--sidebar-active-text)'}
-                                  strokeWidth={1.2}
-                                />
-                              </button>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-              </li>
-            );
-          })}
-        </ul>
+                                      : childIsHovered
+                                        ? {
+                                            backgroundColor:
+                                              'var(--sidebar-hover-bg, rgba(15,23,42,0.06))',
+                                            color: 'var(--sidebar-active-text, #0f172a)',
+                                            opacity: 0.98,
+                                          }
+                                        : undefined
+                                  }
+                                >
+                                  {child.name}
+                                </Link>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    togglePinPage(child.href);
+                                  }}
+                                  className={`pr-2 opacity-60 transition-opacity group-hover/sub:opacity-100 ${isPagePinned(child.href) ? 'opacity-100' : ''}`}
+                                  style={
+                                    isPagePinned(child.href)
+                                      ? { color: 'var(--yellow-400, #f6c90a)' }
+                                      : { color: 'var(--sidebar-active-text)' }
+                                  }
+                                >
+                                  <Star
+                                    size={12}
+                                    fill={isPagePinned(child.href) ? 'currentColor' : 'none'}
+                                    stroke={'var(--sidebar-active-text)'}
+                                    strokeWidth={1.2}
+                                  />
+                                </button>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </nav>
 
       {/* Footer do Sidebar (Perfil) - desativado temporariamente */}

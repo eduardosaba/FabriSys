@@ -629,6 +629,7 @@ export default function KanbanPage() {
             if (produtoId) upsertBody.produto_final_id = produtoId;
 
             const onConflict = localId ? 'ordem_producao_id,local_destino_id' : 'ordem_producao_id';
+            console.log('Upsert distribuicao_pedidos ->', { upsertBody, onConflict });
             const { error: upErr } = await supabase
               .from('distribuicao_pedidos')
               .upsert(upsertBody, { onConflict });
@@ -740,6 +741,7 @@ export default function KanbanPage() {
           };
 
           const onConflict = localId ? 'ordem_producao_id,local_destino_id' : 'ordem_producao_id';
+          console.log('Upsert distribuicao_pedidos (finalizar) ->', { upsertBody, onConflict });
           const { error: upErr } = await supabase
             .from('distribuicao_pedidos')
             .upsert(upsertBody, { onConflict });

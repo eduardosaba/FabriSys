@@ -275,7 +275,7 @@ export default function SugestaoComprasPage() {
         </div>
         <div
           className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm flex items-center justify-between cursor-pointer hover:bg-blue-100 transition-colors"
-          onClick={() => (window.location.href = '/dashboard/compras/pedidos')}
+          onClick={() => (window.location.href = '/dashboard/insumos/pedidos-compra')}
         >
           <div>
             <p className="text-sm text-blue-700 font-medium">Ir para Pedidos</p>

@@ -5,20 +5,21 @@ import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
 import { useAuth } from '@/lib/auth';
-import { BarChart3, Filter, DollarSign, CreditCard } from 'lucide-react';
+import { BarChart3, Filter } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import ModalDetalhesCaixa from '@/components/ModalDetalhesCaixa';
 
-interface Venda {
+interface Caixa {
   id: string;
-  created_at: string;
-  total_venda: number;
-  metodo_pagamento: string;
-  local?: { nome: string };
+  data_fechamento: string;
+  total_vendas_sistema: number;
+  diferenca: number;
+  loja?: { nome: string };
 }
 
 export default function RelatorioVendasPage() {
   const { profile, loading: authLoading } = useAuth();
-  const [vendas, setVendas] = useState<Venda[]>([]);
+  const [caixasConfirmados, setCaixasConfirmados] = useState<Caixa[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filtros
@@ -28,6 +29,7 @@ export default function RelatorioVendasPage() {
   const [dataFim, setDataFim] = useState(new Date().toISOString().split('T')[0]);
   const [localId, setLocalId] = useState<string>('');
   const [locais, setLocais] = useState<{ id: string; nome: string }[]>([]);
+  const [caixaSelecionado, setCaixaSelecionado] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -40,49 +42,41 @@ export default function RelatorioVendasPage() {
     void fetchLocais();
   }, []);
 
-  const carregarVendas = useCallback(async () => {
+  const carregarRelatorioConsolidado = useCallback(async () => {
     try {
       setLoading(true);
 
-      const { data, error } = await supabase
-        .from('vendas')
-        .select(
-          `
-            id,
-            created_at,
-            total_venda,
-            metodo_pagamento,
-            local:locais!local_id(nome)
-          `
-        )
-        .gte('created_at', `${dataInicio}T00:00:00`)
-        .lte('created_at', `${dataFim}T23:59:59`)
-        .order('created_at', { ascending: false });
+      let query = supabase
+        .from('caixa_sessao')
+        .select('*, loja:locais(nome)')
+        .eq('status_conferencia', 'confirmado')
+        .gte('data_fechamento', `${dataInicio}T00:00:00`)
+        .lte('data_fechamento', `${dataFim}T23:59:59`)
+        .order('data_fechamento', { ascending: false });
+
+      if (localId) query = (query as any).eq('loja', localId);
+
+      const { data, error } = await query;
 
       if (error) throw error;
-      setVendas((data as any) || []);
+      setCaixasConfirmados((data as any) || []);
     } catch (err: any) {
-      console.error('Erro ao carregar vendas:', err);
+      console.error('Erro ao carregar relatório consolidado:', err);
       toast.error('Erro ao carregar relatório.');
     } finally {
       setLoading(false);
     }
-  }, [dataInicio, dataFim]);
+  }, [dataInicio, dataFim, localId]);
 
   useEffect(() => {
-    void carregarVendas();
-  }, [carregarVendas]);
+    void carregarRelatorioConsolidado();
+  }, [carregarRelatorioConsolidado]);
 
-  const totalPeriodo = vendas.reduce((acc, v) => acc + (v.total_venda || 0), 0);
-  const totalPix = vendas
-    .filter((v) => v.metodo_pagamento === 'pix')
-    .reduce((acc, v) => acc + (v.total_venda || 0), 0);
-  const totalDinheiro = vendas
-    .filter((v) => v.metodo_pagamento === 'dinheiro')
-    .reduce((acc, v) => acc + (v.total_venda || 0), 0);
-  const totalCartao = vendas
-    .filter((v) => v.metodo_pagamento === 'cartao')
-    .reduce((acc, v) => acc + (v.total_venda || 0), 0);
+  const faturamentoTotal = caixasConfirmados.reduce(
+    (acc, c) => acc + (c.total_vendas_sistema || 0),
+    0
+  );
+  const diferencaTotal = caixasConfirmados.reduce((acc, c) => acc + (c.diferenca || 0), 0);
 
   if (loading) return <Loading />;
 
@@ -90,7 +84,7 @@ export default function RelatorioVendasPage() {
     <div className="flex flex-col gap-6 p-6 animate-fade-up">
       <PageHeader
         title="Relatório de Vendas"
-        description="Acompanhe o desempenho financeiro dos PDVs."
+        description="Relatório consolidado por fechamento de caixa (apenas conferidos)."
         icon={BarChart3}
       />
 
@@ -134,7 +128,7 @@ export default function RelatorioVendasPage() {
           </select>
         </div>
         <button
-          onClick={carregarVendas}
+          onClick={carregarRelatorioConsolidado}
           className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold"
         >
           <Filter size={16} /> Filtrar
@@ -144,64 +138,79 @@ export default function RelatorioVendasPage() {
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-slate-500 text-xs font-bold uppercase mb-1">Total Geral</p>
-          <p className="text-2xl font-bold text-slate-800">R$ {totalPeriodo.toFixed(2)}</p>
-        </div>
-        <div className="bg-green-50 p-4 rounded-xl border border-green-100 shadow-sm">
-          <p className="text-green-600 text-xs font-bold uppercase mb-1 flex items-center gap-1">
-            <DollarSign size={14} /> Pix
+          <p className="text-slate-500 text-xs font-bold uppercase mb-1">
+            Faturamento (confirmado)
           </p>
-          <p className="text-2xl font-bold text-green-700">R$ {totalPix.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-slate-800">R$ {faturamentoTotal.toFixed(2)}</p>
         </div>
         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm">
-          <p className="text-blue-600 text-xs font-bold uppercase mb-1 flex items-center gap-1">
-            <CreditCard size={14} /> Cartão
-          </p>
-          <p className="text-2xl font-bold text-blue-700">R$ {totalCartao.toFixed(2)}</p>
+          <p className="text-blue-600 text-xs font-bold uppercase mb-1">Caixas Confirmados</p>
+          <p className="text-2xl font-bold text-blue-700">{caixasConfirmados.length}</p>
         </div>
-        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 shadow-sm">
-          <p className="text-orange-600 text-xs font-bold uppercase mb-1 flex items-center gap-1">
-            <DollarSign size={14} /> Dinheiro
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-slate-500 text-xs font-bold uppercase mb-1">Diferença Total</p>
+          <p
+            className={`text-2xl font-bold ${diferencaTotal < 0 ? 'text-red-600' : 'text-green-600'}`}
+          >
+            R$ {diferencaTotal.toFixed(2)}
           </p>
-          <p className="text-2xl font-bold text-orange-700">R$ {totalDinheiro.toFixed(2)}</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-slate-500 text-xs font-bold uppercase mb-1">Visão</p>
+          <p className="text-2xl font-bold text-slate-800">Por PDV / Geral</p>
         </div>
       </div>
 
-      {/* Tabela Detalhada */}
+      {/* Tabela de Fechamentos */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-700 font-bold uppercase text-xs">
               <tr>
-                <th className="px-4 py-3">Data / Hora</th>
+                <th className="px-4 py-3">Data</th>
                 <th className="px-4 py-3">Loja</th>
-                <th className="px-4 py-3">Pagamento</th>
-                <th className="px-4 py-3 text-right">Valor</th>
+                <th className="px-4 py-3">Total</th>
+                <th className="px-4 py-3">Diferença</th>
+                <th className="px-4 py-3">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {vendas.map((venda) => (
-                <tr key={venda.id} className="hover:bg-slate-50">
+              {caixasConfirmados.map((caixa) => (
+                <tr key={caixa.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 text-slate-600">
-                    {new Date(venda.created_at).toLocaleString('pt-BR')}
+                    {new Date(caixa.data_fechamento).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-800">
-                    {venda.local?.nome || '-'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-bold uppercase">
-                      {venda.metodo_pagamento}
-                    </span>
+                    {caixa.loja?.nome || '-'}
                   </td>
                   <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">
-                    R$ {(venda.total_venda || 0).toFixed(2)}
+                    R$ {(caixa.total_vendas_sistema || 0).toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={
+                        (caixa.diferenca || 0) < 0
+                          ? 'text-red-600 font-bold'
+                          : 'text-green-600 font-bold'
+                      }
+                    >
+                      R$ {(caixa.diferenca || 0).toFixed(2)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => setCaixaSelecionado(caixa.id)}
+                      className="text-xs bg-slate-100 p-1 rounded px-2 hover:bg-slate-200"
+                    >
+                      Ver Detalhes do Dia
+                    </button>
                   </td>
                 </tr>
               ))}
-              {vendas.length === 0 && (
+              {caixasConfirmados.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-slate-400">
-                    Nenhuma venda encontrada neste período.
+                  <td colSpan={5} className="p-8 text-center text-slate-400">
+                    Nenhum fechamento encontrado neste período.
                   </td>
                 </tr>
               )}
@@ -209,6 +218,11 @@ export default function RelatorioVendasPage() {
           </table>
         </div>
       </div>
+
+      {/* Modal de detalhes */}
+      {caixaSelecionado && (
+        <ModalDetalhesCaixa caixaId={caixaSelecionado} onClose={() => setCaixaSelecionado(null)} />
+      )}
     </div>
   );
 }

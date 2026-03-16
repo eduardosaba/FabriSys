@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
+import { useTheme } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/Button';
 import { Save, AlertTriangle, DollarSign, Package, Store } from 'lucide-react';
@@ -21,6 +22,7 @@ export default function SistemaTab() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoScale, setLogoScale] = useState<number>(1);
   const { profile } = useAuth();
+  const { updateTheme } = useTheme();
 
   // Carregar configurações do banco
   async function loadConfigs() {
@@ -161,6 +163,12 @@ export default function SistemaTab() {
       if (upsertErr) throw upsertErr;
 
       toast.success('Configurações visuais salvas com sucesso');
+      // Atualiza o ThemeContext para aplicar a nova logo/escala imediatamente
+      try {
+        await updateTheme({ logo_url: urlPublica, logo_scale: logoScale });
+      } catch (e) {
+        // non-blocking
+      }
       await loadConfigs();
       setLogoFile(null);
       setLogoPreview(null);
@@ -291,7 +299,11 @@ export default function SistemaTab() {
                   max="2"
                   step="0.05"
                   value={logoScale}
-                  onChange={(e) => setLogoScale(Number(e.target.value))}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setLogoScale(v);
+                    handleChange('logo_scale', String(v));
+                  }}
                 />
                 <span className="text-sm text-slate-500">{logoScale.toFixed(2)}x</span>
               </div>

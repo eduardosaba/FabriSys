@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { getOperationalContext } from '@/lib/operationalLocal';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
 import { ClipboardList, Save, AlertTriangle, CheckCircle2, Search } from 'lucide-react';
@@ -23,117 +22,115 @@ export default function InventarioPDVPage() {
   const [filtro, setFiltro] = useState('');
   const [recebimentosRecentes, setRecebimentosRecentes] = useState<any[]>([]);
 
-  // 1. Carrega o contexto da loja
-  const carregarDados = useCallback(
-    async (forLocalId?: string | null) => {
-      try {
-        setLoading(true);
-        const ctx = await getOperationalContext(profile);
-        const idLoja = forLocalId ?? ctx.caixa?.local_id ?? ctx.localId;
+  // 1. Função de carregamento centralizada
+  const carregarDados = useCallback(async (idParaCarregar: string) => {
+    try {
+      setLoading(true);
 
-        if (!idLoja) {
-          toast.error('Loja não identificada.');
-          return;
-        }
-        setLocalId(idLoja);
+      // Query de produtos vinculada ao local específico
+      const { data: produtos, error } = await supabase
+        .from('produtos_finais')
+        .select(`id, nome, categoria_id, estoque:estoque_produtos!inner(quantidade, local_id)`)
+        .eq('estoque.local_id', idParaCarregar)
+        .order('nome');
 
-        // Query otimizada: especifica a relação correta de categoria e usa !inner
-        // para trazer apenas produtos que possuem estoque no local.
-        const { data: produtos, error } = await supabase
-          .from('produtos_finais')
-          .select(`id, nome, categoria_id, estoque:estoque_produtos!inner(quantidade, local_id)`)
-          .eq('estoque.local_id', idLoja)
-          .order('nome');
+      if (error) throw error;
 
-        if (error) throw error;
-
-        // carregar nomes de categorias separadamente para evitar ambiguidades no embed
-        const categoriaIds = Array.from(
-          new Set((produtos || []).map((p: any) => p.categoria_id).filter(Boolean))
-        );
-        const categoriasMap: Record<string, string> = {};
-        if (categoriaIds.length) {
-          const { data: cats } = await supabase
-            .from('categorias')
-            .select('id,nome')
-            .in('id', categoriaIds);
-          (cats || []).forEach((c: any) => (categoriasMap[c.id] = c.nome));
-        }
-
-        const formatted = (produtos || [])
-          .map((p: any) => {
-            const est = p.estoque && p.estoque.length ? p.estoque[0] : null;
-            if (!est) return null;
-            return {
-              id: String(p.id),
-              quantidade: Number(est.quantidade || 0),
-              produto_id: p.id,
-              produtos_finais: {
-                id: p.id,
-                nome: p.nome,
-                categoria: categoriasMap[p.categoria_id] || '',
-              },
-            };
-          })
-          .filter(Boolean);
-
-        setEstoque(formatted);
-
-        // Inicializa o estado de contagem com o que tem no sistema
-        const initialContagem: Record<string, number> = {};
-        formatted.forEach((item: any) => {
-          initialContagem[item.id] = item.quantidade;
-        });
-        setContagens(initialContagem);
-      } catch (err) {
-        console.error(err);
-        toast.error('Erro ao carregar estoque.');
-      } finally {
-        setLoading(false);
+      // Categorias
+      const categoriaIds = Array.from(
+        new Set((produtos || []).map((p: any) => p.categoria_id).filter(Boolean))
+      );
+      const categoriasMap: Record<string, string> = {};
+      if (categoriaIds.length) {
+        const { data: cats } = await supabase
+          .from('categorias')
+          .select('id,nome')
+          .in('id', categoriaIds);
+        (cats || []).forEach((c: any) => (categoriasMap[c.id] = c.nome));
       }
-    },
-    [profile]
-  );
 
+      const formatted = (produtos || []).map((p: any) => {
+        const est = p.estoque && p.estoque.length ? p.estoque[0] : null;
+        return {
+          id: String(p.id),
+          quantidade: Number(est?.quantidade || 0),
+          produto_id: p.id,
+          produtos_finais: {
+            id: p.id,
+            nome: p.nome,
+            categoria: categoriasMap[p.categoria_id] || '',
+          },
+        };
+      });
+
+      setEstoque(formatted);
+
+      // Resetar contagens ao mudar de PDV
+      const initialContagem: Record<string, number> = {};
+      formatted.forEach((item: any) => {
+        initialContagem[item.id] = item.quantidade;
+      });
+      setContagens(initialContagem);
+
+      // Carregar recebimentos recentes
+      const { data: recs } = await supabase
+        .from('v_pdv_envios')
+        .select('*')
+        .eq('local_destino_id', idParaCarregar)
+        .order('enviado_em', { ascending: false })
+        .limit(10);
+      setRecebimentosRecentes(recs || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao carregar dados do local.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 2. Inicialização e Controle de Acesso
   useEffect(() => {
     const init = async () => {
-      if (authLoading) return;
-      // carregar opções de PDV caso seja admin/master
-      try {
-        if (profile?.role === 'admin' || profile?.role === 'master') {
-          const { data: locais } = await supabase
-            .from('locais')
-            .select('id, nome')
-            .eq('tipo', 'pdv')
-            .order('nome');
-          setPdvOptions((locais || []).map((l: any) => ({ id: l.id, nome: l.nome })));
-          if (locais && locais.length > 0) setSelectedPdv(locais[0].id);
-        }
-      } catch (err) {
-        console.error('Erro ao carregar lista de PDVs', err);
-      }
+      if (authLoading || !profile) return;
 
-      const toLoad =
-        profile?.role === 'admin' || profile?.role === 'master' ? (selectedPdv ?? null) : undefined;
-      await carregarDados(toLoad ?? undefined);
-      // carregar recebimentos recentes do PDV
-      try {
-        const idToQuery = toLoad ?? undefined;
-        if (idToQuery) {
-          const { data: recs, error: recErr } = await supabase
-            .from('v_pdv_envios')
-            .select('*')
-            .eq('local_destino_id', idToQuery)
-            .order('enviado_em', { ascending: false })
-            .limit(20);
-          if (!recErr) setRecebimentosRecentes(recs || []);
+      const isAdmin = profile.role === 'admin' || profile.role === 'master';
+
+      if (isAdmin) {
+        // Carrega lista de PDVs para o Admin escolher
+        const { data: locais } = await supabase
+          .from('locais')
+          .select('id, nome')
+          .eq('tipo', 'pdv')
+          .eq('organization_id', profile.organization_id)
+          .order('nome');
+
+        const options = locais || [];
+        setPdvOptions(options);
+
+        // Define qual PDV carregar inicialmente para o admin
+        const paramId = searchParams?.get('local');
+        const defaultId = paramId || (options.length > 0 ? options[0].id : null);
+
+        if (defaultId) {
+          setSelectedPdv(defaultId);
+          setLocalId(defaultId);
+          carregarDados(defaultId);
         }
-      } catch (e) {
-        // ignore
+      } else {
+        // Usuário Comum: Força o local_id do perfil dele
+        const meuLocal = profile.local_id;
+        if (meuLocal) {
+          setLocalId(meuLocal);
+          carregarDados(meuLocal);
+        } else {
+          toast.error('Seu usuário não está vinculado a nenhum PDV.');
+          setLoading(false);
+        }
       }
     };
+
     void init();
-  }, [carregarDados, authLoading, profile?.role, selectedPdv]);
+  }, [authLoading, profile]);
 
   // Se a URL vier com ?local=ID, pré-seleciona esse PDV (útil para links diretos)
   useEffect(() => {
@@ -145,18 +142,22 @@ export default function InventarioPDVPage() {
     }
   }, [searchParams]);
 
-  // Quando admin muda o PDV selecionado, recarrega
-  useEffect(() => {
-    if (profile?.role === 'admin' || profile?.role === 'master') {
-      if (selectedPdv) {
-        void carregarDados(selectedPdv);
-        setLocalId(selectedPdv);
-      }
+  // 3. Admin troca de PDV no Select
+  const handlePdvChange = (id: string | null) => {
+    setSelectedPdv(id);
+    if (!id) {
+      setLocalId(null);
+      setEstoque([]);
+      setContagens({});
+      return;
     }
-  }, [selectedPdv, profile?.role, carregarDados]);
+    setLocalId(id);
+    carregarDados(id);
+  };
 
   // 2. Salva o Inventário e ajusta divergências
   const salvarInventario = async () => {
+    if (!localId) return toast.error('Local não identificado.');
     const divergencias = estoque.filter((item) => contagens[item.id] !== item.quantidade);
 
     if (divergencias.length === 0) {
@@ -208,7 +209,7 @@ export default function InventarioPDVPage() {
       }
 
       toast.success('Inventário atualizado com sucesso!', { id: toastId });
-      carregarDados();
+      carregarDados(localId);
     } catch (err) {
       console.error(err);
       toast.error('Erro ao salvar inventário.', { id: toastId });
@@ -236,7 +237,7 @@ export default function InventarioPDVPage() {
             <select
               className="p-2 border rounded"
               value={selectedPdv ?? ''}
-              onChange={(e) => setSelectedPdv(e.target.value || null)}
+              onChange={(e) => handlePdvChange(e.target.value || null)}
             >
               <option value="">Selecionar PDV</option>
               {pdvOptions.map((p) => (

@@ -72,14 +72,32 @@ export default function DashboardHeader({
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const { theme, resolvedTheme, updateTheme } = useTheme();
+  const { profile, signOut } = useAuth();
+
   const finalLogoUrl = useMemo(() => {
+    // 1. Prioridade Máxima: Logo da Empresa (Upload da Larissa)
+    const companyLogo = profile?.company_logo_url || theme?.company_logo_url;
+    if (companyLogo && typeof companyLogo === 'string' && companyLogo.trim() !== '') {
+      return getImageUrl(companyLogo) || companyLogo;
+    }
+
+    // 2. Segunda Prioridade: URL enviada via Props
     if (logoUrl) return logoUrl;
-    const _rawLogo = String(theme?.logo_url ?? '').trim();
-    return getImageUrl(_rawLogo) || _rawLogo;
-  }, [logoUrl, theme?.logo_url]);
+
+    // 3. Terceira Prioridade: Logo do Sistema (Master)
+    const systemLogo = theme?.logo_url;
+    if (systemLogo && typeof systemLogo === 'string' && systemLogo.trim() !== '') {
+      return getImageUrl(systemLogo) || systemLogo;
+    }
+
+    // Fallback final
+    return '/logo.png';
+  }, [logoUrl, theme?.logo_url, theme?.company_logo_url, profile?.company_logo_url]);
+
+  const logoScale = Number(theme?.company_logo_scale ?? theme?.logo_scale ?? 1) || 1;
 
   const [logoLoaded, setLogoLoaded] = useState(false);
-  const { profile, signOut } = useAuth();
+  const [logoError, setLogoError] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const effectiveMode = theme.theme_mode === 'system' ? resolvedTheme : theme.theme_mode;
@@ -217,20 +235,26 @@ export default function DashboardHeader({
   ];
 
   const quickActions = [
-    { icon: Package, label: 'Novo Insumo', href: '/dashboard/insumos/cadastro' },
-    { icon: Plus, label: 'Nova Categoria', href: '/dashboard/categorias/novo' },
-    { icon: ShoppingCart, label: 'Nova Ordem', href: '/dashboard/producao/nova-ordem' },
-    { icon: Store, label: 'Novo PDV', href: '/dashboard/pdv/novo' },
+    { icon: Lightbulb, label: 'Planejamento', href: '/dashboard/producao/planejamento' },
+    { icon: MapPin, label: 'Kanban', href: '/dashboard/producao/kanban' },
+    { icon: Package, label: 'Expedição', href: '/dashboard/logistica/expedicao' },
+    { icon: ShoppingCart, label: 'Estoque Fábrica', href: '/dashboard/producao/estoque-fabrica' },
+    {
+      icon: CheckCircle,
+      label: 'Financeiro: Conferência de Caixas',
+      href: '/dashboard/financeiro/conferencia',
+    },
+    {
+      icon: Clock,
+      label: 'Financeiro: Contas a Pagar',
+      href: '/dashboard/financeiro/contas-a-pagar',
+    },
   ];
 
   // Filtrar ações baseado no role do usuário
   const roleVal = profile?.role ?? '';
   const allowedRoles = ['admin', 'fabrica', 'master'];
-  const filteredActions = quickActions.filter((action) => {
-    if (allowedRoles.includes(roleVal)) return true;
-    if (roleVal === 'fabrica') return action.label !== 'Novo PDV';
-    return false;
-  });
+  const filteredActions = quickActions.filter((action) => allowedRoles.includes(roleVal));
 
   const isAdmin = roleVal === 'admin' || roleVal === 'master';
   const isPdv = roleVal === 'pdv';
@@ -404,6 +428,11 @@ export default function DashboardHeader({
   useEffect(() => {
     if (showNotifications) void fetchRecentNotifications();
   }, [showNotifications, opLocalId]);
+
+  // reset logoError when resolved logo changes
+  useEffect(() => {
+    setLogoError(false);
+  }, [finalLogoUrl]);
 
   useEffect(() => {
     // Subscribes to realtime events for vendas, caixa_sessao and notificacoes_pedido (condicional)
@@ -727,27 +756,36 @@ export default function DashboardHeader({
       <div className="flex flex-1 items-center gap-4">
         <Link href="/dashboard" className="flex items-center gap-2 relative">
           {/* Logo do Sistema (prioriza URL enviada pelo servidor) */}
-          {finalLogoUrl ? (
+          {finalLogoUrl && !logoError ? (
             <>
               {!logoLoaded && <BrandSkeleton />}
               <img
                 src={finalLogoUrl}
                 alt={theme.name || 'Sistema'}
                 onLoad={() => setLogoLoaded(true)}
+                onError={() => setLogoError(true)}
                 className={`rounded-md object-contain transition-opacity duration-300 ${
                   logoLoaded ? 'opacity-100' : 'opacity-0 absolute'
                 }`}
                 style={{
-                  width: `calc(32px * var(--logo-scale, ${theme?.logo_scale ?? 1}))`,
-                  height: 'auto',
-                  imageRendering: 'auto',
+                  width: `${64 * logoScale}px`,
+                  height: `${64 * logoScale}px`,
                 }}
                 loading="eager"
               />
             </>
           ) : (
+            // Fallback elegante: inicial da empresa
+            <div
+              className="flex items-center justify-center rounded-xl bg-primary text-white font-black shadow-sm"
+              style={{ width: `${32 * logoScale}px`, height: `${32 * logoScale}px` }}
+            >
+              {(profile as any)?.organizations?.name?.substring(0, 1) || 'L'}
+            </div>
+          )}
+          {!finalLogoUrl && (
             <span className="hidden text-lg font-semibold sm:inline">
-              {theme.name || 'SistemaLari'}
+              {theme.name || 'Confectio'}
             </span>
           )}
         </Link>
@@ -1106,7 +1144,14 @@ export default function DashboardHeader({
                     </span>
 
                     {activeLocalName && (
-                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[9px] font-black uppercase tracking-tighter border border-blue-200 dark:border-blue-800">
+                      <span
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter"
+                        style={{
+                          background: 'var(--secondary)',
+                          color: 'var(--primary)',
+                          border: '1px solid var(--primary)',
+                        }}
+                      >
                         <MapPin className="h-3 w-3" />
                         {activeLocalName}
                       </span>

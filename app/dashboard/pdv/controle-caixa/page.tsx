@@ -23,6 +23,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useAuth } from '@/lib/auth';
 import PromocaoLauncher from '@/components/pdv/PromocaoLauncher';
+import { ItemContagemProjetado } from '@/lib/types/pdv';
 
 interface CaixaSessao {
   id: string;
@@ -38,6 +39,7 @@ interface ProdutoContagem {
   preco_venda: number;
   estoque_sistema: number;
   estoque_contado: number | '';
+  estoque_perda: number | '';
   imagem_url?: string;
 }
 
@@ -170,6 +172,7 @@ export default function ControleCaixaPage() {
             preco_venda: p.preco_venda,
             estoque_sistema: est ? est.quantidade : 0,
             estoque_contado: '' as unknown as number | '',
+            estoque_perda: '' as unknown as number | '',
             imagem_url: p.imagem_url,
           };
         });
@@ -344,74 +347,7 @@ export default function ControleCaixaPage() {
 
   const resumo = calcularResumo();
 
-  // Retornar sobras para a fábrica (exige confirmação do usuário)
-  const retornarSobra = async () => {
-    if (modoPdv !== 'inventario') return;
-
-    const itensParaDevolver = produtosParaContar
-      .filter((p) => p.estoque_contado !== '' && p.estoque_contado > 0)
-      .map((p) => ({ produto_id: p.id, quantidade: Number(p.estoque_contado), nome: p.nome }));
-
-    if (itensParaDevolver.length === 0) {
-      toast('Nenhuma sobra para devolver.');
-      return;
-    }
-
-    const confirmed = await confirmDialog.confirm({
-      title: 'Confirmar Devolução das Sobras',
-      message: `Deseja devolver ${itensParaDevolver.length} item(ns) para a fábrica? Esta ação atualizará os saldos.`,
-      confirmText: 'Devolver',
-      cancelText: 'Cancelar',
-      variant: 'warning',
-    });
-
-    if (!confirmed) return;
-
-    setLoading(true);
-    try {
-      // Localiza a fábrica da organização
-      const { data: fabrica, error: fabErr } = await supabase
-        .from('locais')
-        .select('id')
-        .eq('organization_id', profile?.organization_id)
-        .eq('tipo', 'fabrica')
-        .limit(1)
-        .maybeSingle();
-
-      if (fabErr) throw fabErr;
-      if (!fabrica?.id) {
-        toast.error('Fábrica não encontrada para esta organização.');
-        return;
-      }
-
-      for (const sobra of itensParaDevolver) {
-        try {
-          const { error: insErr } = await supabase.from('envios_historico').insert({
-            produto_id: sobra.produto_id,
-            quantidade: sobra.quantidade,
-            local_origem_id: localId,
-            local_destino_id: fabrica.id,
-            enviado_por: profile?.id,
-            enviado_em: new Date().toISOString(),
-            status: 'retorno_pendente',
-            observacao: 'Solicitação de retorno via fechamento de caixa',
-            organization_id: profile?.organization_id,
-          });
-
-          if (insErr) throw insErr;
-          toast.success(`Solicitado retorno: ${sobra.nome}`);
-        } catch (err) {
-          console.error('Erro ao registrar solicitação de devolução:', sobra, err);
-          toast.error(`Falha ao solicitar devolução de ${sobra.nome}`);
-        }
-      }
-
-      // Recarrega estado para refletir que as solicitações foram criadas
-      await carregarEstado();
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Nota: retorno manual removido — o fechamento processa sobras/perdas automaticamente
 
   const fecharCaixa = async () => {
     if (!valoresFechamento.dinheiro) return toast.error('Informe o dinheiro em caixa');
@@ -435,58 +371,23 @@ export default function ControleCaixaPage() {
     try {
       setLoading(true);
 
-      // A. Se for Modo Inventário, gerar a venda consolidada agora
+      // A. Se for Modo Inventário, processa automaticamente sobras e perdas via RPC
       if (modoPdv === 'inventario') {
-        const itensVendidos = produtosParaContar
-          .filter((p) => p.estoque_contado !== '' && p.estoque_sistema > p.estoque_contado)
-          .map((p) => ({
-            produto_id: p.id,
-            quantidade: p.estoque_sistema - (p.estoque_contado as number),
-            preco_unitario: p.preco_venda,
-            subtotal: (p.estoque_sistema - (p.estoque_contado as number)) * p.preco_venda,
-          }));
+        const contagemParaSql: ItemContagemProjetado[] = produtosParaContar.map((p) => ({
+          produto_id: p.id,
+          sobra: Number(p.estoque_contado || 0),
+          perda: Number((p as any).estoque_perda || 0),
+        }));
 
-        if (itensVendidos.length > 0) {
-          // 1. Gera uma venda consolidada única do dia (marcada como consolidado_inventario)
-          const { data: vendaConsolidada, error: errVenda } = await supabase
-            .from('vendas')
-            .insert({
-              local_id: localId,
-              caixa_id: caixaAberto?.id,
-              organization_id: profile?.organization_id,
-              total_venda: resumo.vendaBruta - valorTotalDescontos,
-              metodo_pagamento: 'consolidado_inventario',
-              status: 'concluida',
-              observacoes: 'Venda gerada automaticamente via contagem de sobras.',
-            })
-            .select()
-            .single();
+        const { error: rpcError } = await supabase.rpc('processar_fechamento_caixa_inventario', {
+          p_caixa_id: caixaAberto?.id,
+          p_local_pdv_id: localId,
+          p_usuario_id: profile?.id,
+          p_organization_id: profile?.organization_id,
+          p_itens_contagem: contagemParaSql as any,
+        });
 
-          if (errVenda) throw errVenda;
-
-          // 2. Insere os detalhes (itens_venda) com subtotal
-          const itensInsert = itensVendidos.map((i) => ({
-            venda_id: vendaConsolidada.id,
-            produto_id: i.produto_id,
-            quantidade: i.quantidade,
-            preco_unitario: i.preco_unitario,
-            subtotal: i.subtotal,
-          }));
-          await supabase.from('itens_venda').insert(itensInsert);
-
-          // 3. Baixa o estoque real via RPC
-          for (const item of itensVendidos) {
-            try {
-              await supabase.rpc('decrementar_estoque_loja_numeric', {
-                p_local_id: localId,
-                p_produto_id: item.produto_id,
-                p_qtd: item.quantidade,
-              });
-            } catch (rpcErr) {
-              console.warn('Falha ao decrementar estoque via RPC para', item.produto_id, rpcErr);
-            }
-          }
-        }
+        if (rpcError) throw rpcError;
       }
 
       // B. Fechar Caixa
@@ -511,6 +412,8 @@ export default function ControleCaixaPage() {
 
       toast.success('Dia Encerrado!');
       setCaixaAberto(null);
+      // redireciona para histórico para limpar estado da tela
+      window.location.href = '/dashboard/pdv/historico-caixa';
     } catch (err) {
       console.error(err);
       toast.error('Erro ao fechar caixa');
@@ -672,20 +575,39 @@ export default function ControleCaixaPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500 uppercase font-bold">Sobrou:</span>
-                        <input
-                          type="number"
-                          className="w-16 sm:w-20 p-2 text-center border rounded font-bold focus:border-blue-500 outline-none"
-                          placeholder="0"
-                          value={prod.estoque_contado}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? '' : parseInt(e.target.value);
-                            const novo = [...produtosParaContar];
-                            novo[idx].estoque_contado = val;
-                            setProdutosParaContar(novo);
-                          }}
-                        />
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-blue-600 uppercase">
+                            Sobrou (Retorno):
+                          </span>
+                          <input
+                            type="number"
+                            className="w-16 p-1 border rounded text-center font-bold"
+                            value={prod.estoque_contado}
+                            onChange={(e) => {
+                              const novo = [...produtosParaContar];
+                              novo[idx].estoque_contado =
+                                e.target.value === '' ? '' : parseInt(e.target.value);
+                              setProdutosParaContar(novo);
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-red-600 uppercase">
+                            Perda (Baixa):
+                          </span>
+                          <input
+                            type="number"
+                            className="w-16 p-1 border border-red-200 rounded text-center text-red-600 font-bold"
+                            value={(prod as any).estoque_perda}
+                            onChange={(e) => {
+                              const novo = [...produtosParaContar];
+                              novo[idx].estoque_perda =
+                                e.target.value === '' ? '' : parseInt(e.target.value);
+                              setProdutosParaContar(novo);
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -821,16 +743,7 @@ export default function ControleCaixaPage() {
                 </div>
               </div>
 
-              {modoPdv === 'inventario' && (
-                <div className="flex gap-3">
-                  <Button
-                    onClick={retornarSobra}
-                    className="w-full py-3 mt-4 bg-yellow-500 hover:bg-yellow-600 text-white"
-                  >
-                    Retornar Sobra (para Fábrica)
-                  </Button>
-                </div>
-              )}
+              {modoPdv === 'inventario' && <div />}
 
               <Button
                 variant="danger"

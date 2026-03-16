@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { useTheme } from '../lib/theme';
 import { useAuth } from '@/lib/auth';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase-client';
 import getImageUrl from '@/lib/getImageUrl';
 import Text from '../components/ui/Text';
@@ -15,6 +16,60 @@ export default function Header({ onMenuClick }: Props) {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const [orgName, setOrgName] = useState<string | null>(null);
+  const [lowStockCount, setLowStockCount] = useState<number>(0);
+  const LOW_THRESHOLD = 10;
+
+  useEffect(() => {
+    let channel: any = null;
+    async function fetchLowCount() {
+      try {
+        if (!profile?.organization_id) return;
+        // localizar fábrica
+        const { data: fab } = await supabase
+          .from('locais')
+          .select('id')
+          .eq('organization_id', profile.organization_id)
+          .eq('tipo', 'fabrica')
+          .maybeSingle();
+        if (!fab?.id) {
+          setLowStockCount(0);
+          return;
+        }
+
+        const res = await supabase
+          .from('estoque_produtos')
+          .select('produto_id', { count: 'exact' })
+          .eq('local_id', fab.id)
+          .lt('quantidade', LOW_THRESHOLD);
+
+        const count = (res as any).count ?? 0;
+        setLowStockCount(Number(count || 0));
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    void fetchLowCount();
+
+    try {
+      channel = supabase
+        .channel('header_lowstock')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'estoque_produtos' }, () => {
+          void fetchLowCount();
+        })
+        .subscribe();
+    } catch (e) {
+      // ignore
+    }
+
+    return () => {
+      try {
+        if (channel) supabase.removeChannel(channel);
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, [profile?.organization_id]);
 
   useEffect(() => {
     async function loadOrg() {
@@ -133,6 +188,22 @@ export default function Header({ onMenuClick }: Props) {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Low stock badge */}
+          {lowStockCount > 0 && (
+            <Link href="/dashboard/producao/estoque-fabrica">
+              <a className="relative inline-flex items-center rounded px-2 py-1 bg-red-50 text-red-800 text-sm font-medium hover:bg-red-100">
+                <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 8v4l3 3"
+                  />
+                </svg>
+                <span>{lowStockCount}</span>
+              </a>
+            </Link>
+          )}
           {profile ? (
             <>
               {/* Avatar do usuário (com fallback para iniciais) */}

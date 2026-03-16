@@ -120,16 +120,49 @@ export default function ControleEstoquePage() {
 
       // 1. Buscar histórico (VIEW `historico_estoque`) — selecionar colunas de compatibilidade
       // Algumas implantações expõem `created_at`/`tipo`/`nf`, outras usam `data_movimento`/`tipo_movimento`/`observacoes`.
-      const { data: dataHistRaw, error: errHist } = await supabase
+      let dataHistRaw: any = null;
+      const { data: initialData, error: errHist } = await supabase
         .from('historico_estoque')
-        .select(
-          `id, created_at, data_movimento, tipo, tipo_movimento, quantidade, nf, observacoes, fornecedor, insumo, lote, validade`
-        )
+        .select(`id, created_at, tipo, quantidade, nf, fornecedor, insumo, lote, validade`)
         .limit(50);
 
       if (errHist) {
         console.error('Erro ao buscar historico_estoque:', errHist);
-        throw errHist;
+        try {
+          console.error('Detalhes do erro historico_estoque:', JSON.stringify(errHist));
+        } catch (e) {
+          void e;
+        }
+
+        // Tentar consulta de verificação mais simples para diagnosticar se é problema de colunas/permissões
+        try {
+          const { data: testData, error: testErr } = await supabase
+            .from('historico_estoque')
+            .select('id')
+            .limit(1);
+          console.log('historico_estoque test select id result:', testData, testErr);
+        } catch (testCatch) {
+          console.error('Erro no teste simples de historico_estoque:', testCatch);
+        }
+
+        // Se a seleção com colunas falhou, tentar um select('*') para contornar nomes de colunas diferentes
+        try {
+          const { data: altData, error: altErr } = await supabase
+            .from('historico_estoque')
+            .select('*')
+            .limit(50);
+          console.log('historico_estoque fallback select * result:', altData, altErr);
+          if (altErr) {
+            // fallback também falhou: repassa o erro original para tratamento superior
+            throw errHist;
+          }
+          dataHistRaw = altData;
+        } catch (altCatch) {
+          console.error('Erro no fallback select * para historico_estoque:', altCatch);
+          throw errHist;
+        }
+      } else {
+        dataHistRaw = initialData;
       }
 
       // Normalizar resultados: garantir campos usados pelo frontend e ordenar localmente pela data

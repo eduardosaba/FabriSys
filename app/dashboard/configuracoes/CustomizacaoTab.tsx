@@ -684,21 +684,21 @@ export default function CustomizacaoTab() {
         <div className="space-y-6">
           {/* Seção de Logo */}
           <div className="mb-6">
-            <Text className="mb-3 font-medium">Logo Personalizado</Text>
+            <Text className="mb-3 font-medium">Logos</Text>
 
-            {/* Nome do Sistema (apenas master) */}
+            {/* Logo da Plataforma (apenas master) */}
             {isMasterAdmin && (
               <>
                 <SystemNameSection settings={settings} onFieldChange={handleFieldChange} />
 
                 <LogoUploadSection
-                  title="Upload de Logo"
-                  description="Máximo 2MB. Formatos: PNG, JPG, SVG"
+                  title="Logo da Plataforma"
+                  description="Máximo 2MB. Formatos: PNG, JPG, SVG. Usada como logo da plataforma (padrão para novos clientes e 'Powered by')."
                   logoUrl={settings.logo_url as string}
                   logoScale={(settings.logo_scale as number) || 1}
                   onLogoUrlChange={(url) => handleFieldChange('logo_url', url)}
                   onLogoScaleChange={(scale) => handleFieldChange('logo_scale', scale)}
-                  storagePath="user-logo"
+                  storagePath="logo-plataforma"
                 />
               </>
             )}
@@ -708,8 +708,7 @@ export default function CustomizacaoTab() {
           <div className="mb-6">
             <Text className="mb-3 font-medium">Logo da Empresa</Text>
             <p className="mb-3 text-sm text-gray-600">
-              Este logo aparecerá ao lado do logo do sistema no cabeçalho para identificação da sua
-              empresa.
+              Este logo aparecerá no cabeçalho e na página de login para identificar sua empresa.
             </p>
 
             <LogoUploadSection
@@ -719,7 +718,7 @@ export default function CustomizacaoTab() {
               logoScale={(settings.company_logo_scale as number) || 1}
               onLogoUrlChange={(url) => handleFieldChange('company_logo_url', url)}
               onLogoScaleChange={(scale) => handleFieldChange('company_logo_scale', scale)}
-              storagePath="company-logo"
+              storagePath="logos-clientes"
             />
           </div>
         </div>

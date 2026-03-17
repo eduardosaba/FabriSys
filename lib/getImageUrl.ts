@@ -25,13 +25,20 @@ export default function getImageUrl(
 
   // If value looks like: bucket/path/to/file.jpg or logos/file.png
   if (!v.startsWith('/') && v.includes('/')) {
-    // treat as storage path
-    return SUPABASE_URL ? `${SUPABASE_URL}/storage/v1/object/public/${v}` : `/${v}`;
+    // treat as storage path (prefix inside default bucket)
+    // If the value already includes the bucket prefix (e.g. 'logos/...'), keep as-is,
+    // otherwise assume it's a path inside the default bucket and prepend the bucket.
+    if (v.startsWith(`${bucket}/`)) {
+      return SUPABASE_URL ? `${SUPABASE_URL}/storage/v1/object/public/${v}` : `/${v}`;
+    }
+    return SUPABASE_URL ? `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${v}` : `/${v}`;
   }
 
   // Fallback: if it's a plain filename, assume it's stored in the bucket
   if (!v.includes('/')) {
-    return SUPABASE_URL ? `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${v}` : `/uploads/${v}`;
+    return SUPABASE_URL
+      ? `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${v}`
+      : `/uploads/${v}`;
   }
 
   return v;

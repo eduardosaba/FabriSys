@@ -75,16 +75,19 @@ export default function DashboardHeader({
   const { profile, signOut } = useAuth();
 
   const finalLogoUrl = useMemo(() => {
-    // 1. Prioridade Máxima: Logo da Empresa (Upload da Larissa)
-    const companyLogo = profile?.company_logo_url || theme?.company_logo_url;
-    if (companyLogo && typeof companyLogo === 'string' && companyLogo.trim() !== '') {
-      return getImageUrl(companyLogo) || companyLogo;
+    // 1. Prioridade Máxima: Logo do Perfil/Usuário (avatar ou empresa vinculada ao perfil)
+    const profileLogo =
+      (profile as any)?.company_logo_url || (profile as any)?.organizations?.logo_url;
+    if (profileLogo && typeof profileLogo === 'string' && profileLogo.trim() !== '') {
+      return getImageUrl(profileLogo) || profileLogo;
     }
 
     // 2. Segunda Prioridade: URL enviada via Props
     if (logoUrl) return logoUrl;
 
     // 3. Terceira Prioridade: Logo do Sistema (Master)
+    // NOTE: intentionally do NOT use theme.company_logo_url here — Sidebar is responsible
+    // for showing the system/company logo. Header should prefer user/profile logos.
     const systemLogo = theme?.logo_url;
     if (systemLogo && typeof systemLogo === 'string' && systemLogo.trim() !== '') {
       return getImageUrl(systemLogo) || systemLogo;
@@ -93,8 +96,6 @@ export default function DashboardHeader({
     // Fallback final
     return '/logo.png';
   }, [logoUrl, theme?.logo_url, theme?.company_logo_url, profile?.company_logo_url]);
-
-  const logoScale = Number(theme?.company_logo_scale ?? theme?.logo_scale ?? 1) || 1;
 
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [logoError, setLogoError] = useState(false);
@@ -766,21 +767,16 @@ export default function DashboardHeader({
                 onError={() => setLogoError(true)}
                 className={`rounded-md object-contain transition-opacity duration-300 ${
                   logoLoaded ? 'opacity-100' : 'opacity-0 absolute'
-                }`}
-                style={{
-                  width: `${64 * logoScale}px`,
-                  height: `${64 * logoScale}px`,
-                }}
+                } h-20 w-auto`}
                 loading="eager"
               />
             </>
           ) : (
             // Fallback elegante: inicial da empresa
-            <div
-              className="flex items-center justify-center rounded-xl bg-primary text-white font-black shadow-sm"
-              style={{ width: `${32 * logoScale}px`, height: `${32 * logoScale}px` }}
-            >
-              {(profile as any)?.organizations?.name?.substring(0, 1) || 'L'}
+            <div className="flex items-center justify-center rounded-xl bg-primary text-white font-black shadow-sm h-9 w-9">
+              {(profile as any)?.organizations?.nome?.substring(0, 1) ||
+                (profile as any)?.organizations?.name?.substring(0, 1) ||
+                'L'}
             </div>
           )}
           {!finalLogoUrl && (

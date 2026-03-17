@@ -155,11 +155,26 @@ export default function ThemeConfigurator() {
                     if (file.size > 2 * 1024 * 1024) return toast.error('Máximo de 2MB');
                     const fileExt = file.name.split('.').pop();
                     const fileName = `${Date.now()}.${fileExt}`;
-                    const res = await supabase.storage
-                      .from('logos')
-                      .upload(fileName, file, { upsert: true });
+
+                    // Primeiro, tente enviar para o bucket dedicado 'logo-plataforma'
+                    let bucket = 'logo-plataforma';
+                    let path = fileName;
+                    let res = await supabase.storage
+                      .from(bucket)
+                      .upload(path, file, { upsert: true });
+
+                    // Se falhar (bucket não encontrado), faça fallback para o bucket 'logos' com prefixo
+                    if (res.error) {
+                      bucket = 'logos';
+                      path = `logo-plataforma/${fileName}`;
+                      res = await supabase.storage
+                        .from(bucket)
+                        .upload(path, file, { upsert: true });
+                    }
+
                     if (res.error) return toast.error('Erro ao enviar logo');
-                    const urlRes = supabase.storage.from('logos').getPublicUrl(res.data.path);
+
+                    const urlRes = supabase.storage.from(bucket).getPublicUrl(path);
                     setValue('logo_url', urlRes.data.publicUrl);
                     setPreviewImageError(false);
                     toast.success('Logo atualizada!');

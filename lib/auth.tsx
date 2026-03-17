@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Buscar profile incluindo relacionamento com organizations
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
-          .select(`*, organizations(id, name, logo_url)`)
+          .select(`*, organizations(id, nome, logo_url)`)
           .eq('id', userId)
           .maybeSingle();
 
@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (profSimple.organization_id) {
                   const { data: orgData } = await supabase
                     .from('organizations')
-                    .select('id,name,logo_url')
+                    .select('id,nome,logo_url')
                     .eq('id', profSimple.organization_id)
                     .maybeSingle();
                   org = orgData;

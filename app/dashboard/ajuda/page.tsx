@@ -10,6 +10,7 @@ import {
   Calendar,
   ChefHat,
   ShoppingCart,
+  Star,
   ArrowRight,
   CheckCircle,
   AlertTriangle,
@@ -21,23 +22,25 @@ import {
 
 export default function AjudaPage() {
   const [activeTab, setActiveTab] = useState('primeiros-passos');
-
   const tabs = [
     { id: 'primeiros-passos', label: '1. Primeiros Passos', icon: BookOpen },
-    { id: 'fluxo-diario', label: '2. Fluxo Diário', icon: Calendar },
-    { id: 'producao', label: '3. Na Cozinha (Kanban)', icon: ChefHat },
+    { id: 'planejamento', label: '2. Planejamento (MRP)', icon: Calendar },
+    { id: 'kanban', label: '3. Produção (Kanban)', icon: ChefHat },
     { id: 'compras', label: '4. Compras & Estoque', icon: ShoppingCart },
     { id: 'pdv', label: '5. PDV (Caixa)', icon: Calculator },
     { id: 'meta-fidelidade', label: '6. Meta & Clube Fidelidade', icon: Gift },
     { id: 'avisos', label: '7. Avisos Administrativos', icon: Bell },
-    { id: 'ferramentas-pdv', label: '8. Ferramentas PDV', icon: MessageSquare },
+    { id: 'favoritos', label: '8. Favoritos & Atalhos', icon: Star },
+    { id: 'ferramentas-pdv', label: '9. Ferramentas PDV', icon: MessageSquare },
+    { id: 'notificacoes', label: '10. Notificações', icon: Bell },
+    { id: 'ajuda-geral', label: '11. Ajuda Geral', icon: BookOpen },
   ];
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-5xl mx-auto animate-fade-up">
       <PageHeader
-        title="Central de Ajuda Confectio"
-        description="Manuais passo a passo para operar o sistema da fábrica."
+        title="Central de Ajuda"
+        description="Manuais passo a passo para operar o sistema: planejamento, kanban, PDV, compras e funções administrativas."
         icon={BookOpen}
       />
 
@@ -69,50 +72,89 @@ export default function AjudaPage() {
           {activeTab === 'primeiros-passos' && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
-                Configuração Inicial (Engenharia)
+                Configuração Inicial
+              </h2>
+              <p className="text-slate-600">Checklist mínimo para começar a operar:</p>
+              <ol className="list-decimal list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  Cadastre Produtos Finais: nome, preço, peso unitário (g). Caminho:{' '}
+                  <strong>Produção &gt; Produtos Finais</strong>.
+                </li>
+                <li>
+                  Crie Fichas Técnicas (receitas) com ingredientes e informe o{' '}
+                  <strong>peso final da receita</strong> (massa pronta).
+                </li>
+                <li>Configure Unidades e PDVs: cadastre pontos de venda e estoques associados.</li>
+                <li>
+                  Permissões iniciais: crie roles e verifique se sua organização tem configurações
+                  em <strong>Configurações</strong>.
+                </li>
+                <li>
+                  Teste fluxo com um pedido fictício para validar cálculos de rendimento e estoque.
+                </li>
+              </ol>
+            </div>
+          )}
+
+          {activeTab === 'planejamento' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
+                Planejamento (MRP)
               </h2>
               <p className="text-slate-600">
-                Para que o sistema calcule quantas panelas fazer automaticamente, ele precisa
-                aprender sobre os seus produtos. Isso é feito apenas uma vez.
+                Use o módulo de Planejamento para definir vendas previstas e gerar sugestões de
+                compras.
               </p>
+              <h3 className="font-semibold">Como usar</h3>
+              <ol className="list-decimal list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  Abra <strong>Planejamento</strong> e adicione suas previsões por PDV.
+                </li>
+                <li>
+                  Revise quantidades por produto; o sistema converte para massa e calcula panelas
+                  necessárias.
+                </li>
+                <li>
+                  Gere relatório MRP para obter sugestão de compras — exportável e copiável para
+                  fornecedores.
+                </li>
+              </ol>
+            </div>
+          )}
 
-              <div className="space-y-4">
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                  <h3 className="font-bold text-blue-800 flex items-center gap-2">
-                    <Package size={18} /> Passo 1: Cadastrar o Produto Final
-                  </h3>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Vá em <strong>Produção &gt; Produtos Finais</strong>.
-                  </p>
-                  <ul className="list-disc list-inside text-sm text-slate-700 mt-2 ml-2 space-y-1">
-                    <li>
-                      Nome: <strong>Brigadeiro Tradicional</strong>
-                    </li>
-                    <li>Preço de Venda: R$ 3,50</li>
-                    <li className="font-bold text-pink-600">Peso Unitário: 20g (Fundamental!)</li>
-                  </ul>
-                  <p className="text-xs text-slate-500 mt-2 italic">
-                    * Sem o peso unitário, o sistema não sabe calcular a massa total.
-                  </p>
-                </div>
-
-                <div className="bg-orange-50 p-4 rounded-lg border border-orange-100">
-                  <h3 className="font-bold text-orange-800 flex items-center gap-2">
-                    <ChefHat size={18} /> Passo 2: Criar a Ficha Técnica
-                  </h3>
-                  <p className="text-sm text-orange-700 mt-1">
-                    Vá em <strong>Produção &gt; Fichas Técnicas</strong> e vincule ao produto.
-                  </p>
-                  <ul className="list-disc list-inside text-sm text-slate-700 mt-2 ml-2 space-y-1">
-                    <li>Adicione os ingredientes (Leite Condensado, Chocolate, etc).</li>
-                    <li className="font-bold text-pink-600">Peso Final da Receita (Massa): 450g</li>
-                  </ul>
-                  <p className="text-xs text-slate-500 mt-2 italic">
-                    * Informe quanto pesa a massa DEPOIS de sair do fogo. É esse número que define o
-                    rendimento da panela.
-                  </p>
-                </div>
-              </div>
+          {activeTab === 'kanban' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">Produção — Kanban</h2>
+              <p className="text-slate-600">Termos usados no quadro Kanban e como operá-lo.</p>
+              <h3 className="font-semibold">Colunas e significados</h3>
+              <ul className="list-disc list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  <strong>Backlog / Planejado</strong>: Ordens planejadas aguardando liberação.
+                </li>
+                <li>
+                  <strong>Pronto / To Do</strong>: Ordens prontas para iniciar no turno.
+                </li>
+                <li>
+                  <strong>Em Produção / In Progress</strong>: Ordens em preparo (no fogão).
+                </li>
+                <li>
+                  <strong>Em Espera / QA</strong>: Ordens aguardando conferência ou ajuste.
+                </li>
+                <li>
+                  <strong>Finalizado / Done</strong>: Ordens concluídas e prontas para expedição.
+                </li>
+              </ul>
+              <h3 className="font-semibold">Boas práticas</h3>
+              <ul className="list-disc list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  Ao clicar em <strong>Iniciar</strong>, o sistema consome ingredientes do estoque.
+                </li>
+                <li>
+                  Se faltar insumo, crie uma solicitação de reposição imediatamente (link direto
+                  disponível no PDV/kanban).
+                </li>
+                <li>Use etiquetas de romaneio para separar destinos (Shopping, Centro, etc.).</li>
+              </ul>
             </div>
           )}
 
@@ -186,7 +228,7 @@ export default function AjudaPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div className="border p-4 rounded-lg hover:bg-slate-50">
                   <h4 className="font-bold text-slate-700 flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-gray-300"></div> 1. A Fazer
+                    <div className="w-3 h-3 rounded-full bg-gray-300"></div> 1. A Fazer / OP
                   </h4>
                   <p className="text-xs text-slate-500 mt-1">
                     Ordens planejadas aguardando início.
@@ -213,13 +255,21 @@ export default function AjudaPage() {
                   </p>
                 </div>
 
-                <div className="border p-4 rounded-lg hover:bg-slate-50 border-green-200 bg-green-50/30">
-                  <h4 className="font-bold text-green-800 flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div> 5. Finalização 📦
+                <div className="border p-4 rounded-lg hover:bg-slate-50 border-pink-200 bg-pink-50/30">
+                  <h4 className="font-bold text-pink-800 flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-pink-500"></div> 4. ✨ Confeitagem 🍬
                   </h4>
                   <p className="text-xs text-slate-600 mt-1">
-                    Aqui você finaliza a produção e gera a etiqueta de saída (romaneio) que diz:
-                    &quot;100 para Shopping, 50 para Centro&quot;.
+                    Etapa de finalização visual e decoração dos produtos.
+                  </p>
+                </div>
+
+                <div className="border p-4 rounded-lg hover:bg-slate-50 border-green-200 bg-green-50/30">
+                  <h4 className="font-bold text-green-800 flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div> 5. ✅ Concluído 🚚
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-1">
+                    Ordens concluídas e prontas para expedição.
                   </p>
                 </div>
               </div>
@@ -243,53 +293,16 @@ export default function AjudaPage() {
           {/* ABA 4: COMPRAS */}
           {activeTab === 'compras' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
-                MRP: Sugestão de Compras
-              </h2>
-              <p className="text-slate-600">
-                Não compre &quot;no chute&quot;. O sistema diz exatamente o que você precisa baseado
-                no planejamento.
-              </p>
-
-              <div className="space-y-4">
-                <div className="flex items-center gap-4 p-4 border rounded-lg">
-                  <div className="bg-pink-100 p-3 rounded-full text-pink-600">
-                    <ArrowRight size={24} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800">1. Planeje Primeiro</h3>
-                    <p className="text-sm text-slate-500">
-                      Faça o planejamento da semana na tela de Planejamento.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 p-4 border rounded-lg">
-                  <div className="bg-pink-100 p-3 rounded-full text-pink-600">
-                    <ShoppingCart size={24} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800">2. Consulte a Sugestão</h3>
-                    <p className="text-sm text-slate-500">
-                      Vá em <strong>Suprimentos &gt; Sugestão de Compras</strong>. O sistema vai
-                      listar tudo o que vai faltar.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 p-4 border rounded-lg">
-                  <div className="bg-pink-100 p-3 rounded-full text-pink-600">
-                    <CheckCircle size={24} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800">3. Copie a Lista</h3>
-                    <p className="text-sm text-slate-500">
-                      Use o botão <strong>Copiar Lista</strong> para mandar direto no WhatsApp do
-                      fornecedor.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">Compras & Estoque</h2>
+              <p className="text-slate-600">Como gerar e usar a sugestão de compras (MRP).</p>
+              <ol className="list-decimal list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  Abra <strong>Suprimentos &gt; Sugestão de Compras</strong> para ver itens
+                  faltantes.
+                </li>
+                <li>Filtre por centro de custo, fornecedor ou prioridade.</li>
+                <li>Exporte ou copie a lista para comunicação com fornecedores.</li>
+              </ol>
             </div>
           )}
 
@@ -297,23 +310,21 @@ export default function AjudaPage() {
           {activeTab === 'pdv' && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">PDV (Caixa)</h2>
-              <p className="text-slate-600">
-                O PDV suporta dois modos: <strong>Padrão</strong> (baixa estoque por venda) e
-                <strong> Inventário/Fechamento</strong> (consolida em fechamento). Escolha o modo no
-                canto superior do PDV.
-              </p>
-
-              <div className="bg-slate-50 p-4 rounded border border-slate-100">
-                <h3 className="font-bold text-slate-800">Como funciona a baixa de estoque</h3>
-                <p className="text-sm text-slate-600 mt-1">
-                  As vendas no PDV acionam uma função atômica no banco que decrementa o estoque por
-                  item. Se houver erro, verifique se a loja está com a configuração correta e se as
-                  migrations do banco foram aplicadas.
-                </p>
-                <p className="text-xs text-slate-500 mt-2 italic">
-                  Dica: use o relatório de itens vendidos para reconciliar diferenças.
-                </p>
-              </div>
+              <p className="text-slate-600">Operação do PDV e modos de funcionamento.</p>
+              <h3 className="font-semibold">Modos</h3>
+              <ul className="list-disc list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  <strong>Padrão</strong>: baixa estoque automaticamente por venda.
+                </li>
+                <li>
+                  <strong>Inventário/Fechamento</strong>: consolida movimentos ao fechar turno.
+                </li>
+              </ul>
+              <h3 className="font-semibold">Dicas</h3>
+              <ul className="list-disc list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>Verifique configurações de PDV por loja para evitar diferenças na contagem.</li>
+                <li>Use relatórios de vendas para conciliar vendas e estoque.</li>
+              </ul>
             </div>
           )}
 
@@ -321,30 +332,18 @@ export default function AjudaPage() {
           {activeTab === 'meta-fidelidade' && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
-                Meta do Dia & Clube
+                Meta do Dia & Fidelidade
               </h2>
-              <p className="text-slate-600">
-                Use <strong>Meta do Dia</strong> para definir objetivos de vendas por PDV e motivar
-                a equipe. O <strong>Clube Fidelidade</strong> acumula pontos automaticamente para
-                clientes cadastrados.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 border rounded-lg bg-pink-50">
-                  <h4 className="font-bold text-pink-700">Configurar Meta do Dia</h4>
-                  <p className="text-sm text-pink-700 mt-1">
-                    Vá em Dashboard → Metas e adicione metas diárias por PDV.
-                  </p>
-                </div>
-
-                <div className="p-4 border rounded-lg bg-green-50">
-                  <h4 className="font-bold text-green-700">Clube Fidelidade</h4>
-                  <p className="text-sm text-green-700 mt-1">
-                    Ative o programa em Clientes → Fidelidade e veja os pontos no cadastro do
-                    cliente.
-                  </p>
-                </div>
-              </div>
+              <p className="text-slate-600">Como definir metas e utilizar o clube de fidelidade.</p>
+              <ul className="list-disc list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  Defina metas por PDV em <strong>Dashboard → Metas</strong>.
+                </li>
+                <li>
+                  Ative o Clube Fidelidade em <strong>Clientes → Fidelidade</strong> para acumular
+                  pontos.
+                </li>
+              </ul>
             </div>
           )}
 
@@ -354,47 +353,90 @@ export default function AjudaPage() {
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
                 Avisos Administrativos
               </h2>
-              <p className="text-slate-600">
-                Administradores podem criar avisos que aparecem como popup para todos os usuários.
-                Os avisos podem ser marcados como lidos e serão ocultados para quem já visualizou.
-              </p>
+              <p className="text-slate-600">Como criar e gerenciar avisos globais para usuários.</p>
+              <ul className="list-disc list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  Crie avisos em <strong>Admin → Avisos</strong> com período de validade.
+                </li>
+                <li>Usuários podem marcar como lido; avisos lidos são ocultados por usuário.</li>
+              </ul>
+            </div>
+          )}
 
-              <div className="p-4 border rounded-lg bg-yellow-50">
-                <h4 className="font-bold text-yellow-800">Onde criar</h4>
-                <p className="text-sm text-yellow-700 mt-1">
-                  Acesse Admin → Avisos. Defina título, mensagem e período de validade.
-                </p>
-              </div>
+          {activeTab === 'favoritos' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
+                Favoritos & Atalhos
+              </h2>
+              <p className="text-slate-600">
+                Fixe páginas importantes para acesso rápido no Sidebar e no Header.
+              </p>
+              <ol className="list-decimal list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  Use o ícone de estrela ao lado dos itens do menu para Fixar/Desfixar uma página.
+                </li>
+                <li>
+                  Páginas fixadas aparecem na área de Favoritos do Sidebar e no Header — facilite
+                  acessos frequentes.
+                </li>
+                <li>
+                  Gerencie preferências em <strong>Configurações → Atalhos</strong> (se disponível).
+                </li>
+              </ol>
             </div>
           )}
 
           {/* ABA 8: FERRAMENTAS PDV (Calculadora, Reposição) */}
           {activeTab === 'ferramentas-pdv' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
-                Ferramentas do PDV
-              </h2>
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">Ferramentas PDV</h2>
+              <ul className="list-disc list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>Calculadora flutuante para descontos e troco.</li>
+                <li>Solicitação de reposição integrada ao painel de compras.</li>
+                <li>Atalhos rápidos para fechar turno e imprimir relatórios de vendas.</li>
+              </ul>
+            </div>
+          )}
+
+          {activeTab === 'notificacoes' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">Notificações</h2>
               <p className="text-slate-600">
-                Pequenas ferramentas ajudam no dia a dia do caixa e agilizam vendas.
+                Como funcionam alertas e assinaturas dentro do sistema.
               </p>
+              <ul className="list-disc list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  Notificações em tempo real para eventos críticos (ex: falta de estoque, ordens com
+                  erro).
+                </li>
+                <li>
+                  Assine relatórios e recibos para receber atualizações por e-mail (quando
+                  configurado).
+                </li>
+                <li>
+                  Controle visibilidade e preferências em{' '}
+                  <strong>Configurações → Notificações</strong>.
+                </li>
+              </ul>
+            </div>
+          )}
 
-              <div className="space-y-3">
-                <div className="p-4 border rounded-lg bg-white">
-                  <h4 className="font-bold">Calculadora Flutuante</h4>
-                  <p className="text-sm text-slate-600 mt-1">
-                    Use a calculadora para montar descontos rápidos e calcular troco — ela fica
-                    sobreposta ao PDV.
-                  </p>
-                </div>
-
-                <div className="p-4 border rounded-lg bg-white">
-                  <h4 className="font-bold">Solicitação de Reposição</h4>
-                  <p className="text-sm text-slate-600 mt-1">
-                    Se um produto acabar no PDV, crie uma solicitação de reposição que vai para o
-                    painel de compras/estoque.
-                  </p>
-                </div>
-              </div>
+          {activeTab === 'ajuda-geral' && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">Ajuda Geral</h2>
+              <p className="text-slate-600">Recursos adicionais e contato de suporte.</p>
+              <ul className="list-disc list-inside ml-4 space-y-2 text-sm text-slate-700">
+                <li>
+                  Documentação técnica: consulte a pasta <strong>/docs</strong> no repositório.
+                </li>
+                <li>
+                  Para problemas de permissão ou erros 403/42703, valide a coluna de organizações
+                  (use <strong>nome</strong> em seleções).
+                </li>
+                <li>
+                  Se precisar, abra uma issue interna com logs de erro e passos para reproduzir.
+                </li>
+              </ul>
             </div>
           )}
         </main>

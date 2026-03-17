@@ -41,15 +41,36 @@ export function LogoUploadSection({
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `${storagePath}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage.from('logos').upload(filePath, file);
+      // Primeiro, tratamos `storagePath` como o nome do bucket (cada logo em bucket separado)
+      const primaryBucket = storagePath;
+      let bucketName = primaryBucket;
+      let filePath = fileName; // guarda o caminho efetivo dentro do bucket
 
-      if (uploadError) {
-        throw uploadError;
+      // Tenta enviar para o bucket específico
+      let uploadResult = await supabase.storage.from(bucketName).upload(filePath, file);
+
+      // Se falhar por bucket não encontrado, faz fallback para o bucket 'logos' usando storagePath como prefixo
+      if (uploadResult.error) {
+        // tentar fallback
+        const fallbackBucket = 'logos';
+        const fallbackPath = `${storagePath}/${fileName}`;
+        const fallbackResult = await supabase.storage
+          .from(fallbackBucket)
+          .upload(fallbackPath, file);
+
+        if (fallbackResult.error) {
+          // nenhum dos dois funcionou
+          throw fallbackResult.error;
+        }
+
+        // fallback funcionou
+        bucketName = fallbackBucket;
+        filePath = fallbackPath;
+        uploadResult = fallbackResult;
       }
 
-      const { data } = supabase.storage.from('logos').getPublicUrl(filePath);
+      const { data } = supabase.storage.from(bucketName).getPublicUrl(filePath);
 
       if (data?.publicUrl) {
         onLogoUrlChange(data.publicUrl);
@@ -130,57 +151,7 @@ export function LogoUploadSection({
         </div>
       </div>
 
-      {/* Escala do Logo */}
-      <div className="mt-6">
-        <label className="mb-3 block text-sm font-medium">Escala do {title}</label>
-        <div className="flex items-center gap-6 p-4 bg-gray-50 rounded-lg">
-          <div className="flex-1">
-            <input
-              type="range"
-              min="0.5"
-              max="5"
-              step="0.1"
-              value={logoScale}
-              onChange={(e) => {
-                const newScale = parseFloat(e.target.value);
-                onLogoScaleChange(newScale);
-                try {
-                  setPreviewVars?.({ logo_scale: newScale, company_logo_scale: newScale });
-                } catch (err) {
-                  // não bloquear a UI se preview falhar
-                  console.error('Erro ao atualizar preview das variáveis de tema:', err);
-                }
-              }}
-              className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>0.5x</span>
-              <span className="font-medium">{logoScale.toFixed(1)}x</span>
-              <span>5.0x</span>
-            </div>
-          </div>
-          <div className="flex items-center justify-center w-32 h-20 border-2 border-gray-200 rounded-lg bg-white overflow-hidden shadow-sm">
-            {logoUrl ? (
-              <img
-                src={logoUrl}
-                alt={`Preview escala ${title.toLowerCase()}`}
-                className="rounded object-contain"
-                style={{
-                  width: `${64 * logoScale}px`,
-                  height: `${64 * logoScale}px`,
-                  maxWidth: '320px',
-                  maxHeight: '80px',
-                }}
-              />
-            ) : (
-              <span className="text-sm text-gray-400">{title.split(' ')[0]}</span>
-            )}
-          </div>
-        </div>
-        <p className="text-sm text-gray-600 mt-2 text-center">
-          Preview em tempo real - Ajuste a escala do {title.toLowerCase()}
-        </p>
-      </div>
+      {/* Escala removida: usar tamanho fixo nos componentes (h-20) */}
     </div>
   );
 }

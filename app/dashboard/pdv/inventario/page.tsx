@@ -193,13 +193,11 @@ export default function InventarioPDVPage() {
         }
 
         // Opicional: Registrar log de ajuste de inventário
-        const { error: movErr } = await supabase.from('movimentacoes_estoque').insert({
+        const { error: movErr } = await supabase.from('movimentacao_estoque').insert({
           produto_id: item.produto_id,
-          local_id: localId,
           quantidade: novaQtd - item.quantidade, // A diferença
-          tipo: 'ajuste_inventario',
-          observacao: `Ajuste manual via Inventário PDV por ${profile?.full_name || profile?.nome || profile?.email}`,
-          organization_id: profile?.organization_id ?? null,
+          tipo_movimento: 'ajuste_inventario',
+          observacoes: `Ajuste manual via Inventário PDV por ${profile?.full_name || profile?.nome || profile?.email}`,
         });
 
         if (movErr) console.error('Erro ao registrar movimentacao_estoque', movErr);

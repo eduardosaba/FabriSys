@@ -17,6 +17,7 @@ interface ThemeContextType {
     userId?: string
   ) => Promise<void>;
   resetToSystemTheme: () => void;
+  loadThemeByOrg: (organizationId: string) => Promise<void>;
   // Atualiza variáveis CSS de preview em tempo real (não persiste no banco)
   setPreviewVars?: (partial: Partial<ThemeSettings>) => void;
 }
@@ -283,14 +284,41 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           const { data: orgData, error: orgErr } = await supabase
             .from('user_theme_colors')
             .select(
-              'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family, sidebar_bg, sidebar_hover_bg, sidebar_text, sidebar_active_text, colors_json, company_name, name'
+              'primary_color, titulo_paginas_color, logo_url, logo_scale, company_logo_url, company_logo_scale, font_family, sidebar_bg, sidebar_hover_bg, sidebar_text, sidebar_active_text, colors_json'
             )
             .eq('organization_id', options.organizationId)
             .eq('theme_mode', resolvedTheme)
+            .limit(1)
             .maybeSingle();
 
           if (orgErr) {
-            console.error('Erro ao buscar cores da organização:', orgErr);
+            try {
+              console.error('Erro ao buscar cores da organização:', JSON.stringify(orgErr));
+            } catch (e) {
+              console.error('Erro ao buscar cores da organização (não pôde serializar):', orgErr);
+            }
+
+            // Fallback para ajudar debugging: tentar buscar sem filtro de theme_mode
+            try {
+              const { data: fbData, error: fbErr } = await supabase
+                .from('user_theme_colors')
+                .select('*')
+                .eq('organization_id', options.organizationId)
+                .limit(1)
+                .maybeSingle();
+
+              if (fbErr) {
+                try {
+                  console.error('Fallback select * também falhou:', JSON.stringify(fbErr));
+                } catch (e) {
+                  console.error('Fallback select * também falhou:', fbErr);
+                }
+              } else if (fbData) {
+                console.warn('Fallback select * retornou dados (sem filtro theme_mode):', fbData);
+              }
+            } catch (e) {
+              console.error('Erro no fallback de cores da organização:', e);
+            }
           } else if (orgData) {
             const extra = parseExtra(orgData);
             return {
@@ -305,8 +333,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
               sidebar_hover_bg: orgData.sidebar_hover_bg as string,
               sidebar_text: orgData.sidebar_text as string,
               sidebar_active_text: orgData.sidebar_active_text as string,
-              name: extra.name || orgData.name,
-              footer_company_name: extra.footer_company_name || orgData.company_name || undefined,
+              footer_company_name: extra.footer_company_name || undefined,
               footer_system_version: extra.footer_system_version || undefined,
             } as unknown as Partial<ThemeColors>;
           }
@@ -321,6 +348,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             )
             .eq('user_id', options.userId)
             .eq('theme_mode', resolvedTheme)
+            .limit(1)
             .maybeSingle();
 
           if (error) {
@@ -403,6 +431,91 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
   }, []);
+
+  const loadThemeByOrg = useCallback(
+    async (organizationId: string) => {
+      try {
+        if (!organizationId) return;
+        setLoading(true);
+
+        // 1) try to load scoped theme colors (organization)
+        const orgColors = await fetchScopedThemeColors({ organizationId });
+
+        // 2) load system_settings for the organization
+        const sys = await fetchSystemSettings(organizationId);
+
+        // Start from systemTheme as base
+        let activeTheme = systemTheme || defaultTheme;
+
+        if (orgColors) {
+          const mode = activeTheme.theme_mode === 'system' ? resolvedTheme : activeTheme.theme_mode;
+          activeTheme = {
+            ...activeTheme,
+            logo_url: orgColors.logo_url || activeTheme.logo_url,
+            company_logo_url: orgColors.company_logo_url || activeTheme.company_logo_url,
+            font_family: orgColors.font_family || activeTheme.font_family,
+            colors: {
+              ...activeTheme.colors,
+              [mode]: {
+                ...((activeTheme.colors as any)[mode] || {}),
+                ...orgColors,
+              },
+            },
+          } as ThemeSettings;
+        }
+
+        if (sys) {
+          const themeMode = sys.theme_mode || activeTheme.theme_mode;
+          const sysColors = sys.colors_json || sys.theme || {};
+          const mode = themeMode === 'system' ? resolvedTheme : (themeMode as 'light' | 'dark');
+          activeTheme = {
+            ...activeTheme,
+            logo_url: sys.logo_url || activeTheme.logo_url,
+            company_logo_url: sys.company_logo_url || activeTheme.company_logo_url,
+            footer_company_name: sys.company_name || activeTheme.footer_company_name,
+            font_family: sys.font_family || activeTheme.font_family,
+            theme_mode: themeMode,
+            colors: {
+              ...activeTheme.colors,
+              [mode]: {
+                ...((activeTheme.colors as any)[mode] || {}),
+                ...(sysColors || {}),
+              },
+            },
+          } as ThemeSettings;
+        }
+
+        setTheme(activeTheme);
+        applyTheme(activeTheme);
+
+        // Persist a lightweight copy to avoid FOUC on next loads
+        if (typeof window !== 'undefined') {
+          try {
+            const lite = {
+              logo_url: activeTheme.logo_url,
+              logo_scale: activeTheme.logo_scale,
+              company_logo_url: activeTheme.company_logo_url,
+              theme_mode: activeTheme.theme_mode,
+              colors: {
+                [activeTheme.theme_mode === 'system' ? resolvedTheme : activeTheme.theme_mode]:
+                  activeTheme.colors[
+                    activeTheme.theme_mode === 'system' ? resolvedTheme : activeTheme.theme_mode
+                  ],
+              },
+            } as Partial<ThemeSettings>;
+            window.localStorage.setItem('theme-preference', JSON.stringify(lite));
+          } catch (e) {
+            void e;
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar tema por organização:', err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchScopedThemeColors, fetchSystemSettings, applyTheme, resolvedTheme, systemTheme]
+  );
 
   const saveScopedThemeColors = useCallback(
     async (options: { userId?: string; organizationId?: string }, colors: Partial<ThemeColors>) => {
@@ -928,6 +1041,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     systemTheme,
     updateTheme,
     resetToSystemTheme,
+    loadThemeByOrg,
     setPreviewVars,
   };
 

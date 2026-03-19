@@ -29,6 +29,13 @@ export default function RecebimentoPage() {
   // 1. Identificar a Loja Atual (prefere caixa aberto do usuário)
   const carregarLocal = useCallback(async () => {
     try {
+      // Prioridade absoluta: se o profile do usuário já possui `local_id`, use-o
+      if (profile?.local_id) {
+        setLocalId(profile.local_id);
+        setSelectedPdv(profile.local_id);
+        await setActiveLocal(profile.local_id);
+        return profile.local_id;
+      }
       const ctx = await getOperationalContext(profile);
       if (ctx.caixa) {
         setLocalId(ctx.caixa.local_id ?? ctx.localId);

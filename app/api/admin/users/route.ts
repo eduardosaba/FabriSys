@@ -159,6 +159,44 @@ export async function POST(request: Request) {
       console.warn('[api/admin/users] exception while upserting profiles:', e);
     }
 
+    // Atualizar também raw_user_meta_data na tabela auth.users para que os JWT claims
+    // contenham organization_id, role e local_id (quando fornecido).
+    try {
+      const { data: existingMetaData, error: selectErr } = await supabaseAdmin
+        .from('auth.users')
+        .select('raw_user_meta_data')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (selectErr) {
+        console.warn('[api/admin/users] warning reading auth.users.raw_user_meta_data:', selectErr);
+      } else {
+        const currentMeta = (existingMetaData && existingMetaData.raw_user_meta_data) || {};
+        const newMeta = {
+          ...currentMeta,
+          organization_id: criador.organization_id,
+          role: role,
+        };
+
+        // Se o payload incluir local_id, garantir que ele seja propagado; caso contrário,
+        // não sobrescreveremos um valor já existente com undefined.
+        if (body.local_id) newMeta.local_id = body.local_id;
+
+        const { error: updErr } = await supabaseAdmin
+          .from('auth.users')
+          .update({ raw_user_meta_data: newMeta })
+          .eq('id', userId);
+
+        if (updErr) {
+          console.warn('[api/admin/users] warning updating auth.users.raw_user_meta_data:', updErr);
+        } else {
+          console.log('[api/admin/users] updated auth.users.raw_user_meta_data for', userId);
+        }
+      }
+    } catch (e) {
+      console.warn('[api/admin/users] exception while syncing auth.users.raw_user_meta_data:', e);
+    }
+
     return NextResponse.json({ success: true, userId: userId });
   } catch (error: any) {
     console.error('[api/admin/users] exception:', error);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -138,7 +138,9 @@ const sidebarItems: SidebarItem[] = [
     name: 'Logística',
     href: '/dashboard/logistica',
     icon: <Truck className="h-5 w-5" />,
-    children: [{ name: 'Expedição', href: '/dashboard/logistica/expedicao' }],
+    children: [
+      { id: 'logistica_expedicao', name: 'Expedição', href: '/dashboard/logistica/expedicao' },
+    ],
   },
   {
     id: 'suprimentos',
@@ -147,13 +149,21 @@ const sidebarItems: SidebarItem[] = [
     icon: <Package className="h-5 w-5" />,
     allowedRoles: ['admin', 'fabrica', 'master'],
     children: [
-      { name: 'Sugestão de Compras (MRP)', href: '/dashboard/compras/sugestao' },
-      { name: 'Pedidos de Compra', href: '/dashboard/insumos/pedidos-compra' },
-      { name: 'Estoque', href: '/dashboard/insumos/lotes' },
-      { name: 'Monitor de Riscos', href: '/dashboard/insumos/alertas' },
-      { name: 'Cadastro de Insumos', href: '/dashboard/insumos/cadastro' },
-      { name: 'Categorias', href: '/dashboard/insumos/categorias' },
-      { name: 'Fornecedores', href: '/dashboard/fornecedores' },
+      {
+        id: 'compras_sugestao',
+        name: 'Sugestão de Compras (MRP)',
+        href: '/dashboard/compras/sugestao',
+      },
+      {
+        id: 'pedidos_compra',
+        name: 'Pedidos de Compra',
+        href: '/dashboard/insumos/pedidos-compra',
+      },
+      { id: 'insumos_estoque', name: 'Estoque', href: '/dashboard/insumos/lotes' },
+      { id: 'insumos_alertas', name: 'Monitor de Riscos', href: '/dashboard/insumos/alertas' },
+      { id: 'insumos_cadastro', name: 'Cadastro de Insumos', href: '/dashboard/insumos/cadastro' },
+      { id: 'insumos_categorias', name: 'Categorias', href: '/dashboard/insumos/categorias' },
+      { id: 'fornecedores', name: 'Fornecedores', href: '/dashboard/fornecedores' },
     ],
   },
   {
@@ -186,13 +196,29 @@ const sidebarItems: SidebarItem[] = [
     name: 'Relatórios',
     href: '/dashboard/relatorios',
     icon: <BarChart2 className="h-5 w-5" />,
-    allowedRoles: ['admin', 'master'],
+    allowedRoles: ['admin', 'master', 'pdv'],
     children: [
-      { name: 'Painel Gerencial', href: '/dashboard/relatorios' },
-      { name: 'Vendas Consolidadas', href: '/dashboard/relatorios/vendas' },
-      { name: 'Histórico de Fechamentos', href: '/dashboard/pdv/historico-caixa' },
-      { name: 'Posição de Estoque', href: '/dashboard/relatorios/estoque' },
-      { name: 'Validade & Perdas', href: '/dashboard/relatorios/validade' },
+      { id: 'relatorios_painel', name: 'Painel Gerencial', href: '/dashboard/relatorios' },
+      {
+        id: 'relatorios_vendas',
+        name: 'Vendas Consolidadas',
+        href: '/dashboard/relatorios/vendas',
+      },
+      {
+        id: 'relatorios_historico_caixa',
+        name: 'Histórico de Fechamentos',
+        href: '/dashboard/pdv/historico-caixa',
+      },
+      {
+        id: 'relatorios_estoque',
+        name: 'Posição de Estoque',
+        href: '/dashboard/relatorios/estoque',
+      },
+      {
+        id: 'relatorios_validade',
+        name: 'Validade & Perdas',
+        href: '/dashboard/relatorios/validade',
+      },
     ],
   },
   {
@@ -200,12 +226,71 @@ const sidebarItems: SidebarItem[] = [
     name: 'Configurações',
     href: '/dashboard/configuracoes',
     icon: <Settings className="h-5 w-5" />,
+    allowedRoles: ['admin', 'master'],
+    children: [
+      {
+        id: 'configuracoes_sistema',
+        name: 'Sistema & Regras',
+        href: '/dashboard/configuracoes/sistema',
+      },
+      {
+        id: 'configuracoes_permissoes',
+        name: 'Permissões',
+        href: '/dashboard/configuracoes/permissoes',
+        allowedRoles: ['admin', 'master'],
+      },
+      {
+        id: 'configuracoes_customizacao',
+        name: 'Aparência & Tema',
+        href: '/dashboard/configuracoes/customizacao',
+      },
+      {
+        id: 'configuracoes_lojas',
+        name: 'Cadastro de Lojas',
+        href: '/dashboard/configuracoes/lojas',
+      },
+      {
+        id: 'configuracoes_promocoes',
+        name: 'Promoções & Combos',
+        href: '/dashboard/configuracoes/promocoes',
+      },
+      {
+        id: 'configuracoes_usuarios',
+        name: 'Equipe & Usuários',
+        href: '/dashboard/configuracoes/usuarios',
+      },
+      {
+        id: 'configuracoes_metas',
+        name: 'Gestão de Metas',
+        href: '/dashboard/configuracoes/metas',
+      },
+      {
+        id: 'configuracoes_fidelidade',
+        name: 'Gestão de Fidelidade',
+        href: '/dashboard/configuracoes/fidelidade',
+      },
+    ],
   },
   {
     id: 'ajuda',
     name: 'Ajuda',
     href: '/dashboard/ajuda',
     icon: <HelpCircle className="h-5 w-5" />,
+  },
+  {
+    id: 'admin',
+    name: 'Admin Master',
+    href: '/dashboard/admin',
+    icon: <Shield className="h-5 w-5 text-purple-500" />,
+    adminOnly: true,
+    children: [
+      { id: 'admin_novo_cliente', name: 'Novo Cliente', href: '/dashboard/admin/novo-cliente' },
+      {
+        id: 'admin_usuarios',
+        name: 'Equipe & Usuários',
+        href: '/dashboard/configuracoes/usuarios',
+      },
+    ],
   },
 ];
 
@@ -226,6 +311,13 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
     async function carregarPermissoes() {
       if (!profile?.organization_id) return setPermissoesLoading(false);
       try {
+        const { data: globalData } = await supabase
+          .from('configuracoes_sistema')
+          .select('valor')
+          .eq('chave', 'permissoes_acesso')
+          .is('organization_id', null)
+          .maybeSingle();
+
         const { data: orgData } = await supabase
           .from('configuracoes_sistema')
           .select('valor')
@@ -233,18 +325,32 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
           .eq('organization_id', profile.organization_id)
           .maybeSingle();
 
+        const parseValor = (valor: unknown): Record<string, string[]> => {
+          if (!valor) return {};
+          if (typeof valor === 'string') {
+            try {
+              return JSON.parse(valor);
+            } catch {
+              return {};
+            }
+          }
+          if (typeof valor === 'object') return valor as Record<string, string[]>;
+          return {};
+        };
+
         const merged = {
           ...DEFAULT_PERMISSOES,
-          ...(orgData?.valor ? JSON.parse(orgData.valor) : {}),
+          ...parseValor(globalData?.valor),
+          ...parseValor(orgData?.valor),
         };
         setPermissoes(merged);
-      } catch (err) {
+      } catch {
         setPermissoes(DEFAULT_PERMISSOES);
       } finally {
         setPermissoesLoading(false);
       }
     }
-    carregarPermissoes();
+    void carregarPermissoes();
   }, [profile?.organization_id]);
 
   const logoSrc = useMemo(() => {
@@ -281,26 +387,55 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
     }
   };
 
-  const hasAccess = (item: SidebarItem) => {
-    if (profile?.role === 'master') return true;
-    if (item.adminOnly && profile?.role !== 'admin') return false;
-    if (item.allowedRoles && !item.allowedRoles.includes(profile?.role ?? '')) return false;
-    const rolePerms =
-      permissoes[profile?.role ?? ''] || DEFAULT_PERMISSOES[profile?.role ?? ''] || [];
-    if (rolePerms.includes('all')) return true;
-    const moduleId = item.id || item.href.split('/').pop() || '';
-    return rolePerms.includes(moduleId);
-  };
+  const hasAccess = useCallback(
+    (item: SidebarItem) => {
+      // 'admin'/'master' elevated privileges; compare as string to avoid TS literal type issues
+      const roleStr = String(profile?.role ?? '');
+      if (item.adminOnly) return roleStr === 'master';
+      if (roleStr === 'admin' || roleStr === 'master') return true;
+      if (item.allowedRoles && !item.allowedRoles.includes(profile?.role ?? '')) return false;
+
+      const rolePerms =
+        permissoes[profile?.role ?? ''] || DEFAULT_PERMISSOES[profile?.role ?? ''] || [];
+      if (rolePerms.includes('all')) return true;
+
+      const moduleId = item.id || item.href.split('/').pop() || '';
+
+      const hasModuleAccess = (id: string | undefined, allowedRoles?: string[]) => {
+        if (!id) return false;
+        if (allowedRoles && !allowedRoles.includes(profile?.role ?? '')) return false;
+        return rolePerms.includes(id);
+      };
+
+      if (hasModuleAccess(moduleId, item.allowedRoles)) return true;
+
+      if (item.children?.length) {
+        return item.children.some((child) => {
+          const childId = child.id || child.href.split('/').pop() || '';
+          return hasModuleAccess(childId, child.allowedRoles);
+        });
+      }
+
+      return false;
+    },
+    [permissoes, profile?.role]
+  );
 
   const visibleMenu = useMemo(() => {
     return sidebarItems.filter(hasAccess).map((item) => ({
       ...item,
       children: item.children?.filter((child) => {
+        const roleStr = String(profile?.role ?? '');
+        if (roleStr === 'admin' || roleStr === 'master') return true;
         if (child.allowedRoles && !child.allowedRoles.includes(profile?.role ?? '')) return false;
-        return true;
+        const rolePerms =
+          permissoes[profile?.role ?? ''] || DEFAULT_PERMISSOES[profile?.role ?? ''] || [];
+        if (rolePerms.includes('all')) return true;
+        const childId = child.id || child.href.split('/').pop() || '';
+        return rolePerms.includes(childId);
       }),
     }));
-  }, [profile?.role, permissoes]);
+  }, [hasAccess, profile?.role, permissoes]);
 
   const handleNavClick = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 1024 && onClose) onClose();

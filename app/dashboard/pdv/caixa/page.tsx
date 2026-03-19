@@ -303,7 +303,17 @@ export default function CaixaPDVPage() {
         }
 
         // 1. Descobrir qual loja é essa (prefere contexto operacional: caixa aberto do usuário ou seleção ativa do Admin)
+        const persistedBefore = getActiveLocal();
+        console.debug('[diagnose][caixa] iniciando initPDV', {
+          profileId: profile?.id ?? null,
+          profileLocal: (profile as any)?.local_id ?? null,
+          persistedBefore,
+        });
         const opCtx = await getOperationalContext(profile);
+        console.debug('[diagnose][caixa] opCtx retornado', {
+          opCtx,
+          persistedAfter: getActiveLocal(),
+        });
         let meuLocalId =
           opCtx.localId ??
           opCtx.caixa?.local_id ??
@@ -665,7 +675,9 @@ export default function CaixaPDVPage() {
   // --- FINALIZAR VENDA ---
   const finalizarVenda = async () => {
     if (carrinho.length === 0) return;
-    if (!localId) return toast.error('Erro de configuração da loja');
+    // Determinar local final: prioridade Profile > localStorage > state
+    const finalLocalId = (profile as any)?.local_id || getActiveLocal() || localId;
+    if (!finalLocalId) return toast.error('Erro de configuração da loja');
 
     const toastId = toast.loading('Processando venda...');
 
@@ -686,7 +698,7 @@ export default function CaixaPDVPage() {
       let caixaQuery: any = supabase
         .from('caixa_sessao')
         .select('id')
-        .eq('local_id', localId)
+        .eq('local_id', finalLocalId)
         .eq('status', 'aberto');
 
       if ((profile as any)?.role !== 'admin' && (profile as any)?.role !== 'master') {
@@ -702,7 +714,10 @@ export default function CaixaPDVPage() {
 
       // Determinar contexto operacional (prefere caixa aberto do usuário)
       const opCtx = await getOperationalContext(profile);
-      const opLocalId = opCtx.caixa?.local_id ?? opCtx.localId ?? localId;
+      const opLocalId =
+        (profile as any)?.local_id ||
+        getActiveLocal() ||
+        (opCtx.caixa?.local_id ?? opCtx.localId ?? localId);
       const opCaixa = opCtx.caixa ?? caixa;
 
       // 1. Criar Cabeçalho da Venda usando contexto operacional
@@ -777,7 +792,7 @@ export default function CaixaPDVPage() {
             let caixaQueryRef: any = supabase
               .from('caixa_sessao')
               .select('id')
-              .eq('local_id', localId)
+              .eq('local_id', opLocalId)
               .eq('status', 'aberto');
             if ((profile as any)?.role !== 'admin' && (profile as any)?.role !== 'master') {
               caixaQueryRef = caixaQueryRef.eq('usuario_abertura', (profile as any)?.id);

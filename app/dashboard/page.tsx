@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation'; // Importação correta para App Router
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import { getActiveLocal } from '@/lib/activeLocal';
+import { getOperationalContext } from '@/lib/operationalLocal';
 import {
   TrendingUp,
   ShoppingCart,
@@ -76,6 +78,27 @@ interface ProdutoRanking {
 export default function DashboardPage() {
   const router = useRouter(); // Hook de navegação
   const { profile, loading: authLoading } = useAuth();
+  // Contexto operacional: local selecionado (ID) ou null para Visão Geral
+  const selectedLocalId = profile?.local_id || getActiveLocal();
+
+  useEffect(() => {
+    const diagnose = async () => {
+      try {
+        const persisted = getActiveLocal();
+        const ctx = await getOperationalContext(profile);
+        console.debug(
+          '[diagnose][dashboard] profile:',
+          profile?.id ?? null,
+          'profile.local_id:',
+          profile?.local_id ?? null
+        );
+        console.debug('[diagnose][dashboard] persisted:', persisted, 'opCtx:', ctx);
+      } catch (e) {
+        console.warn('[diagnose][dashboard] erro ao obter contexto operacional', e);
+      }
+    };
+    void diagnose();
+  }, [profile?.id]);
   // NOTE: não redirecionar automaticamente PDV; mostramos um botão para ir ao caixa
 
   // --- ESTADOS DE FILTRO ---
@@ -795,6 +818,7 @@ export default function DashboardPage() {
                             auxFiltro={auxFiltro}
                             organizationId={profile?.organization_id}
                             profile={profile}
+                            localId={selectedLocalId}
                           />
                         </div>
                       </SortableWidget>
@@ -819,12 +843,14 @@ export default function DashboardPage() {
               auxFiltro={auxFiltro}
               organizationId={profile?.organization_id}
               profile={profile}
+              localId={selectedLocalId}
             />
             <SalesChartWidget
               filtros={filtros}
               auxFiltro={auxFiltro}
               organizationId={profile?.organization_id}
               profile={profile}
+              localId={selectedLocalId}
             />
           </div>
           <LowStockWidget
@@ -832,6 +858,7 @@ export default function DashboardPage() {
             auxFiltro={auxFiltro}
             organizationId={profile?.organization_id}
             profile={profile}
+            localId={selectedLocalId}
           />
         </div>
       ) : role === 'compras' ? (
@@ -849,6 +876,7 @@ export default function DashboardPage() {
             auxFiltro={auxFiltro}
             organizationId={profile?.organization_id}
             profile={profile}
+            localId={selectedLocalId}
           />
         </div>
       ) : (

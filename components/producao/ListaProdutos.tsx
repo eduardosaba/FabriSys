@@ -103,15 +103,13 @@ export default function ListaProdutos({ produtos, onUpdate }: ListaProdutosProps
                     key={produto.id}
                     className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex items-start gap-4"
                   >
-                    <div className="flex-shrink-0 h-16 w-16 rounded-md overflow-hidden bg-gray-100">
+                    <div className="relative flex-shrink-0 h-16 w-16 rounded-md overflow-hidden bg-gray-100">
                       {produto.imagem_url ? (
                         <Image
                           src={produto.imagem_url}
                           alt={produto.nome}
-                          width={64}
-                          height={64}
-                          className="object-cover h-16 w-16 rounded-md"
-                          style={{ width: 'auto', height: 'auto' }}
+                          fill
+                          className="object-cover"
                         />
                       ) : (
                         <div className="h-16 w-16 bg-gray-200 rounded-md" />
@@ -212,14 +210,12 @@ export default function ListaProdutos({ produtos, onUpdate }: ListaProdutosProps
                       <td className="whitespace-nowrap px-6 py-4">
                         <div className="flex items-center">
                           {produto.imagem_url ? (
-                            <div className="relative h-10 w-10 flex-shrink-0">
+                            <div className="relative h-10 w-10 flex-shrink-0 rounded-full overflow-hidden">
                               <Image
                                 src={produto.imagem_url}
                                 alt={produto.nome}
-                                width={40}
-                                height={40}
-                                className="rounded-full object-cover"
-                                style={{ width: 'auto', height: 'auto' }}
+                                fill
+                                className="object-cover"
                               />
                             </div>
                           ) : (

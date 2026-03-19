@@ -142,8 +142,8 @@ export default function RelatorioValidadePage() {
         </div>
       </div>
 
-      {/* ÁREA IMPRESSA (Overlay que cobre tudo) */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden print:fixed print:inset-0 print:z-[9999] print:bg-white print:p-8 print:w-screen print:h-auto print:overflow-visible print:border-0 print:shadow-none">
+      {/* ÁREA IMPRESSA */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden print:bg-white print:p-0 print:overflow-visible print:border-0 print:shadow-none">
         {/* Cabeçalho Exclusivo para Impressão */}
         <div className="hidden print:flex justify-between items-start mb-8 border-b-2 border-black pb-4">
           <div className="flex items-center gap-4">
@@ -182,81 +182,83 @@ export default function RelatorioValidadePage() {
         </div>
 
         {/* Tabela */}
-        <table className="w-full text-sm text-left">
-          <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-200 uppercase text-xs print:bg-gray-100 print:text-black print:border-black">
-            <tr>
-              <th className="px-6 py-3 print:px-2 print:py-1">Status</th>
-              <th className="px-6 py-3 print:px-2 print:py-1">Produto</th>
-              <th className="px-6 py-3 print:px-2 print:py-1">Lote</th>
-              <th className="px-6 py-3 print:px-2 print:py-1">Vencimento</th>
-              <th className="px-6 py-3 text-right print:px-2 print:py-1">Qtd Orig.</th>
-              <th className="px-6 py-3 text-right print:px-2 print:py-1">Valor em Risco</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 print:divide-gray-300">
-            {lotes.map((item) => {
-              // Estilização condicional
-              let rowClass = '';
-              let badgeClass = 'bg-slate-100 text-slate-600';
-              let label = 'Em dia';
-              let printStatus = '';
+        <div className="w-full overflow-x-auto touch-pan-x">
+          <table className="min-w-[860px] w-full text-sm text-left md:min-w-0 print:min-w-0">
+            <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-200 uppercase text-xs print:table-header-group print:bg-gray-100 print:text-black print:border-black">
+              <tr>
+                <th className="px-6 py-3 print:px-2 print:py-1 print:bg-gray-100">Status</th>
+                <th className="px-6 py-3 print:px-2 print:py-1">Produto</th>
+                <th className="px-6 py-3 print:px-2 print:py-1">Lote</th>
+                <th className="px-6 py-3 print:px-2 print:py-1">Vencimento</th>
+                <th className="px-6 py-3 text-right print:px-2 print:py-1">Qtd Orig.</th>
+                <th className="px-6 py-3 text-right print:px-2 print:py-1">Valor em Risco</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 print:divide-gray-300">
+              {lotes.map((item) => {
+                // Estilização condicional
+                let rowClass = '';
+                let badgeClass = 'bg-slate-100 text-slate-600';
+                let label = 'Em dia';
+                let printStatus = '';
 
-              if (item.status === 'vencido') {
-                rowClass = 'bg-red-50/50 hover:bg-red-50';
-                badgeClass = 'bg-red-100 text-red-700 font-bold';
-                label = `VENCIDO (${Math.abs(item.dias_para_vencer)} dias)`;
-                printStatus = 'font-bold text-black underline'; // Destaque na impressão P&B
-              } else if (item.status === 'critico') {
-                rowClass = 'bg-orange-50/30 hover:bg-orange-50';
-                badgeClass = 'bg-orange-100 text-orange-700 font-bold';
-                label = `Vence em ${item.dias_para_vencer} dias`;
-              } else if (item.status === 'atencao') {
-                badgeClass = 'bg-yellow-100 text-yellow-700';
-                label = `Vence em ${item.dias_para_vencer} dias`;
-              }
+                if (item.status === 'vencido') {
+                  rowClass = 'bg-red-50/50 hover:bg-red-50';
+                  badgeClass = 'bg-red-100 text-red-700 font-bold';
+                  label = `VENCIDO (${Math.abs(item.dias_para_vencer)} dias)`;
+                  printStatus = 'font-bold text-black underline'; // Destaque na impressão P&B
+                } else if (item.status === 'critico') {
+                  rowClass = 'bg-orange-50/30 hover:bg-orange-50';
+                  badgeClass = 'bg-orange-100 text-orange-700 font-bold';
+                  label = `Vence em ${item.dias_para_vencer} dias`;
+                } else if (item.status === 'atencao') {
+                  badgeClass = 'bg-yellow-100 text-yellow-700';
+                  label = `Vence em ${item.dias_para_vencer} dias`;
+                }
 
-              return (
-                <tr
-                  key={item.id}
-                  className={`transition-colors ${rowClass} print:break-inside-avoid`}
-                >
-                  <td className="px-6 py-3 print:px-2 print:py-1">
-                    <span
-                      className={`inline-block px-2 py-1 rounded text-[10px] uppercase tracking-wider border border-transparent ${badgeClass} print:border-gray-400 print:bg-white print:text-black ${printStatus}`}
-                    >
-                      {label}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3 font-medium text-slate-800 print:text-black print:px-2 print:py-1">
-                    {item.insumo_nome}
-                  </td>
-                  <td className="px-6 py-3 font-mono text-slate-500 print:text-black print:px-2 print:py-1">
-                    {item.lote}
-                  </td>
-                  <td className="px-6 py-3 print:text-black print:px-2 print:py-1">
-                    {new Date(item.validade).toLocaleDateString('pt-BR')}
-                  </td>
-                  <td className="px-6 py-3 text-right print:text-black print:px-2 print:py-1">
-                    {item.quantidade_entrada} {item.unidade}
-                  </td>
-                  <td className="px-6 py-3 text-right text-slate-600 font-mono print:text-black print:px-2 print:py-1">
-                    {item.valor_em_risco.toLocaleString('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL',
-                    })}
+                return (
+                  <tr
+                    key={item.id}
+                    className={`transition-colors ${rowClass} print:break-inside-avoid-page`}
+                  >
+                    <td className="px-6 py-3 print:px-2 print:py-1 print:bg-transparent">
+                      <span
+                        className={`inline-block px-2 py-1 rounded text-[10px] uppercase tracking-wider border border-transparent ${badgeClass} print:border-gray-400 print:bg-white print:text-black ${printStatus}`}
+                      >
+                        {label}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 font-medium text-slate-800 print:text-black print:px-2 print:py-1">
+                      {item.insumo_nome}
+                    </td>
+                    <td className="px-6 py-3 font-mono text-slate-500 print:text-black print:px-2 print:py-1">
+                      {item.lote}
+                    </td>
+                    <td className="px-6 py-3 print:text-black print:px-2 print:py-1">
+                      {new Date(item.validade).toLocaleDateString('pt-BR')}
+                    </td>
+                    <td className="px-6 py-3 text-right print:text-black print:px-2 print:py-1">
+                      {item.quantidade_entrada} {item.unidade}
+                    </td>
+                    <td className="px-6 py-3 text-right text-slate-600 font-mono print:text-black print:px-2 print:py-1">
+                      {item.valor_em_risco.toLocaleString('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL',
+                      })}
+                    </td>
+                  </tr>
+                );
+              })}
+              {lotes.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-slate-400">
+                    Nenhum lote com validade próxima encontrado.
                   </td>
                 </tr>
-              );
-            })}
-            {lotes.length === 0 && (
-              <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-400">
-                  Nenhum lote com validade próxima encontrado.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
 
         <div className="hidden print:block mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-500">
           <p>Atenção: Itens vencidos devem ser descartados conforme normas sanitárias.</p>

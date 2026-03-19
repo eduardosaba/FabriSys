@@ -34,13 +34,32 @@ const supabaseMock = {
 // Helper para extrair mensagem de erro de forma segura
 function getErrorMessage(err: unknown) {
   if (!err) return 'Erro desconhecido';
-  if (typeof err === 'string') return err;
-  if (err instanceof Error) return err.message;
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return String(err);
-  }
+
+  const originalMessage =
+    typeof err === 'string'
+      ? err
+      : err instanceof Error
+        ? err.message
+        : (() => {
+            try {
+              return JSON.stringify(err);
+            } catch {
+              return String(err);
+            }
+          })();
+
+  const translations: Record<string, string> = {
+    'Invalid login credentials': 'E-mail ou senha incorretos.',
+    'Email not confirmed': 'Por favor, confirme seu e-mail antes de acessar.',
+    'User not found': 'Usuário não encontrado.',
+    'Password should be at least 6 characters': 'A senha deve ter pelo menos 6 caracteres.',
+    'Email rate limit exceeded': 'Muitas tentativas. Aguarde alguns minutos e tente novamente.',
+    'Too many requests': 'Muitas tentativas. Tente novamente em instantes.',
+    'Token has expired or is invalid': 'Sua sessão expirou. Faça login novamente.',
+    'Network request failed': 'Falha de conexão. Verifique sua internet e tente novamente.',
+  };
+
+  return translations[originalMessage] || originalMessage;
 }
 const Button: React.FC<
   React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -444,7 +463,7 @@ export default function App() {
             (window as any).supabase = m.supabase;
 
             console.log('[dev] window.supabase disponível para debugging');
-          } catch (_) {
+          } catch {
             // ignore
           }
         })

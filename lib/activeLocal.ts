@@ -6,6 +6,12 @@ export function setActiveLocal(localId: string | null) {
     } else {
       window.localStorage.removeItem('pdv_active_local');
     }
+    // Dispara um evento para notificar a própria aba da mudança
+    try {
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {
+      // noop
+    }
   } catch (e) {
     // noop
   }

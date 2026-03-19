@@ -101,9 +101,9 @@ export default function FidelidadeConfigPage() {
       />
 
       <div className="bg-gradient-to-r from-purple-50 to-white p-6 rounded-xl border border-purple-100 shadow-sm">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-4">
           <h3 className="text-lg font-bold text-purple-800">Configurações Gerais</h3>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-slate-600">Campanha de Fidelidade</span>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -142,16 +142,18 @@ export default function FidelidadeConfigPage() {
               </span>
             </div>
           </div>
-          <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm p-3 border-t border-slate-200 shadow-lg z-40 md:static md:bg-transparent md:backdrop-blur-0 md:p-0 md:border-t-0 md:shadow-none flex md:justify-end">
-            <Button
-              type="button"
-              variant="primary"
-              onClick={salvarConfig}
-              icon={Save}
-              className="w-full md:w-auto"
-            >
-              Salvar Configurações
-            </Button>
+          <div className="fixed bottom-0 left-0 right-0 px-3 md:px-0 box-border bg-white/95 backdrop-blur-sm p-3 border-t border-slate-200 shadow-lg z-40 md:static md:bg-transparent md:backdrop-blur-0 md:p-0 md:border-t-0 md:shadow-none flex flex-col md:flex-row md:justify-end items-center">
+            <div className="w-full md:w-auto max-w-full md:max-w-none">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={salvarConfig}
+                icon={Save}
+                className="w-full md:w-auto"
+              >
+                Salvar Configurações
+              </Button>
+            </div>
           </div>
         </div>
       </div>

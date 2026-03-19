@@ -467,8 +467,8 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
                   src={imagePreview}
                   alt="Preview"
                   fill
+                  sizes="80px"
                   className="object-cover"
-                  style={{ width: 'auto', height: 'auto' }}
                 />
               </div>
             ) : (

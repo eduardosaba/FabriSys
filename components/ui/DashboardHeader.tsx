@@ -121,12 +121,33 @@ export default function DashboardHeader({
   const [lojasAdmin, setLojasAdmin] = useState<any[]>([]);
 
   const handleTrocarLoja = (id: string | null) => {
+    // Prevent PDV users (with a fixed profile.local_id) from changing the unit
     try {
+      if ((profile as any)?.local_id) {
+        console.warn('Usuário com local fixo não pode alterar unidade.');
+        setShowUserMenu(false);
+        return;
+      }
+
+      const currentLocal = getActiveLocal();
+
+      // Se clicar no que já está selecionado, apenas fecha o menu
+      if (id === currentLocal) {
+        setShowUserMenu(false);
+        return;
+      }
+
+      // Persiste a nova escolha (ou limpa se id for null)
       setActiveLocal(id);
-      // reload to apply context across the app
+
+      // Feedback visual imediato
+      setActiveLocalName(id === null ? null : activeLocalName);
+      setShowUserMenu(false);
+
+      // Recarrega a página para resetar hooks e contexto
       window.location.reload();
     } catch (e) {
-      void e;
+      console.error('Erro ao trocar de unidade:', e);
     }
   };
 
@@ -685,30 +706,80 @@ export default function DashboardHeader({
   const displayName = profile?.nome || (profile as any)?.full_name || profile?.email || 'Usuário';
 
   useEffect(() => {
-    // Debug logging removed in production.
-  }, [profile?.id, _avatarRaw, avatarSrc, avatarResolvedSrc]);
+    const syncLocal = async () => {
+      // 1. Aguarda o perfil carregar
+      if (!profile?.id) return;
 
-  useEffect(() => {
-    const checkLocal = async () => {
       try {
-        const id = getActiveLocal();
-        if (id) {
-          const { data } = await supabase.from('locais').select('nome').eq('id', id).maybeSingle();
-          if (data) setActiveLocalName(data.nome);
-          else setActiveLocalName(null);
+        const profileLocalId = (profile as any)?.local_id;
+        const persisted = getActiveLocal();
+
+        // 2. SE O USUÁRIO FOR PDV (Tem local fixo no banco): atropela localStorage
+        if (profileLocalId) {
+          if (persisted !== profileLocalId) {
+            try {
+              setActiveLocal(profileLocalId);
+            } catch (e) {
+              void e;
+            }
+
+            // Reforço: se em 300ms o valor ainda não foi atualizado (race), reaplica e recarrega.
+            setTimeout(() => {
+              try {
+                const now = getActiveLocal();
+                if (now !== profileLocalId) {
+                  try {
+                    setActiveLocal(profileLocalId);
+                  } catch (e) {
+                    void e;
+                  }
+                  // reload para garantir que todos os hooks leiam o novo valor
+                  setTimeout(() => window.location.reload(), 250);
+                }
+              } catch (e) {
+                void e;
+              }
+            }, 300);
+          }
+
+          try {
+            const { data } = await supabase
+              .from('locais')
+              .select('nome')
+              .eq('id', profileLocalId)
+              .maybeSingle();
+            setActiveLocalName(data?.nome || null);
+          } catch (e) {
+            setActiveLocalName(null);
+          }
+
+          // encerra aqui para PDV — não deixa o restante da lógica rodar
+          return;
+        }
+
+        // 3. SE FOR ADMIN (Sem local fixo): usa persisted se existir
+        if (persisted) {
+          try {
+            const { data } = await supabase
+              .from('locais')
+              .select('nome')
+              .eq('id', persisted)
+              .maybeSingle();
+            setActiveLocalName(data?.nome || null);
+          } catch (e) {
+            setActiveLocalName(null);
+          }
         } else {
           setActiveLocalName(null);
         }
       } catch (e) {
+        // garante que não quebre a renderização
         setActiveLocalName(null);
       }
     };
 
-    checkLocal();
-    const onStorage = () => void checkLocal();
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+    void syncLocal();
+  }, [profile?.id, (profile as any)?.local_id]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -1217,7 +1288,7 @@ export default function DashboardHeader({
                   </Link>
                 )}
                 {/* Seção exclusiva para Admin trocar de unidade */}
-                {isAdmin && lojasAdmin.length > 0 && (
+                {(isAdmin || roleVal === 'gerente') && lojasAdmin.length > 0 && (
                   <div className="border-b border-gray-200 dark:border-gray-700 bg-blue-50/30 dark:bg-blue-900/10 p-2">
                     <p className="px-2 mb-1 text-[9px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-1">
                       <Store className="h-3 w-3" /> Trocar Unidade
@@ -1243,7 +1314,7 @@ export default function DashboardHeader({
                         }}
                         className="w-full text-left px-2 py-1 text-[10px] text-gray-400 hover:text-red-500 transition-colors italic"
                       >
-                        Limpar seleção (Modo Administrador)
+                        Limpar filtro (Visão Geral)
                       </button>
                     </div>
                   </div>

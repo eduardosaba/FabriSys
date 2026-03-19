@@ -47,21 +47,60 @@ export function LogoUploadSection({
       let bucketName = primaryBucket;
       let filePath = fileName; // guarda o caminho efetivo dentro do bucket
 
-      // Tenta enviar para o bucket específico
-      let uploadResult = await supabase.storage.from(bucketName).upload(filePath, file);
+      // Tenta enviar para o bucket específico (fornecendo contentType e sem upsert)
+      let uploadResult = await supabase.storage
+        .from(bucketName)
+        .upload(filePath, file, { contentType: file.type || undefined, upsert: false });
 
-      // Se falhar por bucket não encontrado, faz fallback para o bucket 'logos' usando storagePath como prefixo
+      // Se falhar, log detalhado e tentar fallback para bucket 'logos'
       if (uploadResult.error) {
-        // tentar fallback
+        console.warn('Upload primário falhou:', {
+          bucket: bucketName,
+          path: filePath,
+          error: uploadResult.error,
+          fullResult: uploadResult,
+        });
+
         const fallbackBucket = 'logos';
-        const fallbackPath = `${storagePath}/${fileName}`;
-        const fallbackResult = await supabase.storage
+
+        // Tentativa 1 de fallback: mesmo fileName no bucket de fallback (sem prefixo)
+        let fallbackPath = fileName;
+        let fallbackResult = await supabase.storage
           .from(fallbackBucket)
-          .upload(fallbackPath, file);
+          .upload(fallbackPath, file, { contentType: file.type || undefined, upsert: false });
+
+        // Se ainda falhar, tentar com prefixo storagePath/fileName (último recurso)
+        if (fallbackResult.error) {
+          console.warn('Fallback sem prefixo falhou:', {
+            bucket: fallbackBucket,
+            path: fallbackPath,
+            error: fallbackResult.error,
+            fullResult: fallbackResult,
+          });
+
+          fallbackPath = `${storagePath}/${fileName}`;
+          fallbackResult = await supabase.storage
+            .from(fallbackBucket)
+            .upload(fallbackPath, file, { contentType: file.type || undefined, upsert: false });
+        }
 
         if (fallbackResult.error) {
-          // nenhum dos dois funcionou
-          throw fallbackResult.error;
+          // nenhum dos tentativas de fallback funcionou — lançar erro com contexto
+          const err = fallbackResult.error;
+          console.error('Fallback upload falhou (todos):', {
+            primary: { bucket: bucketName, path: filePath },
+            fallback: { bucket: fallbackBucket, path: fallbackPath },
+            error: err,
+            primaryResult: uploadResult,
+            fallbackResult: fallbackResult,
+          });
+          // anexar mensagem amigável ao objeto de erro
+          const e = new Error(
+            `Upload falhou. primary:${bucketName}/${filePath} fallback:${fallbackBucket}/${fallbackPath} - ${err?.message || JSON.stringify(err)}`
+          );
+          // preservar detalhes no campo extra
+          (e as any).details = { primaryResult: uploadResult, fallbackResult };
+          throw e;
         }
 
         // fallback funcionou
@@ -70,11 +109,18 @@ export function LogoUploadSection({
         uploadResult = fallbackResult;
       }
 
-      const { data } = supabase.storage.from(bucketName).getPublicUrl(filePath);
-
-      if (data?.publicUrl) {
-        onLogoUrlChange(data.publicUrl);
-        toast.success(`${title} atualizado com sucesso!`);
+      // Obter URL pública (getPublicUrl é síncrono)
+      try {
+        const { data } = supabase.storage.from(bucketName).getPublicUrl(filePath);
+        const publicUrl = data?.publicUrl || (data as any)?.public_url || null;
+        if (publicUrl) {
+          onLogoUrlChange(publicUrl);
+          toast.success(`${title} atualizado com sucesso!`);
+        } else {
+          console.warn('Nenhuma publicUrl retornada para upload:', { bucketName, filePath, data });
+        }
+      } catch (e) {
+        console.error('Erro ao obter publicUrl do storage:', e);
       }
     } catch (error) {
       console.error('Erro ao fazer upload:', error);

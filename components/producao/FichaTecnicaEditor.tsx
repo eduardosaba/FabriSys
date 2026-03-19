@@ -218,7 +218,7 @@ export function FichaTecnicaEditor({
               type="number"
               min="1"
               value={rendimentoUnidades}
-              onChange={(e) => setRendimentoUnidades(parseInt(e.target.value) || 1)}
+              onChange={(e) => setRendimentoUnidades(Math.max(1, parseInt(e.target.value) || 1))}
               placeholder="1"
               className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-lg font-semibold transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             />
@@ -238,7 +238,7 @@ export function FichaTecnicaEditor({
                 type="number"
                 step="0.01"
                 value={rendimentoTotalG}
-                onChange={(e) => setRendimentoTotalG(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setRendimentoTotalG(Math.max(0, parseFloat(e.target.value) || 0))}
                 placeholder="Ex: 450"
                 className="w-full rounded-xl border-2 border-gray-200 px-4 py-3 text-lg font-semibold transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               />
@@ -334,9 +334,23 @@ export function FichaTecnicaEditor({
                         id={`composed-${insumo.idLocal}`}
                         type="checkbox"
                         checked={Boolean(insumo.isComposto)}
-                        onChange={(e) =>
-                          updateInsumo(insumo.idLocal, 'isComposto', e.target.checked)
-                        }
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          if (checked) {
+                            updateInsumoFull(insumo.idLocal, {
+                              isComposto: true,
+                              insumoId: null,
+                              nomeInsumo: '',
+                            });
+                            return;
+                          }
+
+                          updateInsumoFull(insumo.idLocal, {
+                            isComposto: false,
+                            compostoProdutoId: null,
+                            nomeInsumo: '',
+                          });
+                        }}
                         className="h-4 w-4 rounded border-gray-300 text-blue-600"
                       />
                       <label

@@ -23,6 +23,7 @@ interface WidgetProps {
   auxFiltro?: any;
   organizationId?: string;
   profile?: any;
+  localId?: string | null;
 }
 
 export default function ProductionQueueWidget({

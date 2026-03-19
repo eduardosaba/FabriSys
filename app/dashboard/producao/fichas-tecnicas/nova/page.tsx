@@ -47,6 +47,8 @@ export default function NovaFichaTecnicaPage() {
     let mounted = true;
 
     async function carregarProdutos() {
+      if (authLoading) return;
+
       try {
         setLoading(true);
 
@@ -99,7 +101,11 @@ export default function NovaFichaTecnicaPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authLoading, produtoTipo, toast]);
+
+  useEffect(() => {
+    setProdutoSelecionado('');
+  }, [produtoTipo]);
 
   const handleSave = async (
     insumos: InsumoFicha[],
@@ -118,14 +124,6 @@ export default function NovaFichaTecnicaPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      console.log('👤 Usuário:', user?.id);
-      console.log('🎭 Role do JWT:', session?.user?.user_metadata?.role);
-      console.log('📧 Email:', user?.email);
-      console.log('🍰 Rendimento:', rendimento, 'unidades');
 
       // Gerar nome da ficha técnica: FT + nome do produto
       const nomeFichaTecnica = produtoAtual ? `FT ${produtoAtual.nome}` : '';
@@ -155,57 +153,40 @@ export default function NovaFichaTecnicaPage() {
 
       const slugFichaTecnica = await ensureUniqueSlug(slugFichaTecnicaBase);
 
-      // Inserir nova ficha técnica
-      const novaFichaTecnica = insumos
-        .filter((insumo) => insumo.insumoId) // Apenas insumos com ID válido
-        .map((insumo, index) => ({
-          produto_final_id: produtoSelecionado,
-          insumo_id: insumo.insumoId,
-          quantidade: insumo.quantidade,
-          unidade_medida: insumo.unidadeMedida,
-          perda_padrao: insumo.perdaPadrao,
-          rendimento_unidades: rendimento,
-          ordem_producao: index + 1,
-          versao: 1,
-          ativo: true,
-          created_by: user?.id,
-          nome: nomeFichaTecnica,
-          slug: slugFichaTecnica,
-        }));
-
-      console.log('🔍 Dados a serem inseridos:', novaFichaTecnica);
-      console.log('📦 Total de insumos (local):', novaFichaTecnica.length);
-      console.log('📋 Detalhes dos insumos (local):', JSON.stringify(novaFichaTecnica, null, 2));
-
-      // Sanitize insumos payload to server: accept multiple id keys and normalize quantities
+      // Sanitize insumos payload to server: accept múltiplos formatos e preservar decimais
       const payloadInsumos = insumos
         .map((i) => {
           const anyI = i as any;
-          const rawQuantidade = anyI?.quantidade ?? anyI?.quantidade ?? 0;
+          const rawQuantidade = anyI?.quantidade ?? 0;
           const num = Number(rawQuantidade);
-          // Normalizar quantidade para inteiro (evita decimais inesperados na UI)
-          const quantidadeNormalized = Number.isFinite(num) ? Math.round(num) : 0;
+          const quantidadeNormalized = Number.isFinite(num) ? num : 0;
+
+          const compostoProdutoId =
+            anyI?.compostoProdutoId ?? anyI?.composto_produto_id ?? anyI?.produtoCompostoId ?? null;
+
+          const isComposto = Boolean(anyI?.isComposto || compostoProdutoId);
 
           return {
             insumoId: anyI?.insumoId ?? anyI?.insumo_id ?? anyI?.id ?? null,
             quantidade: quantidadeNormalized,
             unidadeMedida: anyI?.unidadeMedida ?? anyI?.unidade_medida ?? null,
             perdaPadrao: anyI?.perdaPadrao ?? anyI?.perda_padrao ?? null,
+            isComposto,
+            compostoProdutoId,
           };
         })
-        .filter((i) => i.insumoId);
+        .filter((i) => {
+          const hasIdentificador = i.isComposto
+            ? Boolean(i.compostoProdutoId)
+            : Boolean(i.insumoId);
+          return hasIdentificador && i.quantidade > 0;
+        });
 
       if (payloadInsumos.length === 0) {
         throw new Error('Nenhum insumo válido foi fornecido para a ficha técnica');
       }
 
-      console.log('Enviando dados para API server-side de criação de ficha (sanitizado)');
       try {
-        // Garantir slug único no cliente para reduzir tentativas concorrentes no servidor
-        const slugFinal = slugFichaTecnica
-          ? `${slugFichaTecnica}-${Date.now()}`
-          : `ft-${Date.now()}`;
-
         const res = await fetch('/api/fichas-tecnicas/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -215,11 +196,11 @@ export default function NovaFichaTecnicaPage() {
             nome: nomeFichaTecnica,
             preco_venda: precoVenda,
             rendimento,
+            rendimento_total_g: rendimentoTotalG ?? 0,
             slug_base: slugFichaTecnica,
-            slug: slugFinal,
             observacao: observacao || null,
             // garantir que o server grave auditoria/tenant para RLS
-            created_by: profile?.id || null,
+            created_by: profile?.id || user?.id || null,
             organization_id: profile?.organization_id || null,
           }),
         });
@@ -227,7 +208,7 @@ export default function NovaFichaTecnicaPage() {
         let payload: any = null;
         try {
           payload = await res.json();
-        } catch (e) {
+        } catch {
           const text = await res.text().catch(() => null);
           payload = { error: text || 'Resposta inválida do servidor' };
         }
@@ -236,20 +217,16 @@ export default function NovaFichaTecnicaPage() {
           console.error('Erro do servidor ao criar ficha:', res.status, payload);
           throw new Error(payload?.error || `Erro ao criar ficha (status ${res.status})`);
         }
-
-        console.log('✅ Fichas criadas (server):', payload.data);
       } catch (err: unknown) {
         console.error('❌ Erro ao criar ficha via API server-side:', getErrorMessage(err));
         throw err;
       }
 
       // Atualizar preço de venda do produto
-      console.log('Antes do update do preço');
       const { error: updateError } = await supabase
         .from('produtos_finais')
         .update({ preco_venda: precoVenda })
         .eq('id', produtoSelecionado);
-      console.log('Depois do update do preço', { updateError });
 
       if (updateError) {
         console.error('❌ Erro ao atualizar preço:', JSON.stringify(updateError, null, 2));
@@ -257,9 +234,7 @@ export default function NovaFichaTecnicaPage() {
       }
 
       toast({ title: 'Ficha técnica criada com sucesso!', variant: 'success' });
-      console.log('Antes do router.push');
       router.push('/dashboard/producao/fichas-tecnicas');
-      console.log('Depois do router.push');
     } catch (error: unknown) {
       console.error('❌ Erro ao criar ficha técnica:', getErrorMessage(error));
       toast({

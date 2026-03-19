@@ -115,10 +115,63 @@ export default function ControleCaixaPage() {
 
       // 2. Identificar Loja — preferir contexto operacional (caixa aberto do usuário), depois profile.local_id
       const opCtx = await getOperationalContext(profile);
-      // Prioridade para o local salvo na sessão (localStorage) — permite que Admin "flutue" entre lojas
+      // Para usuários PDV, priorizamos o local vinculado ao profile (vínculo automático).
+      // Para outros perfis (admin/master) respeitamos o local em localStorage para permitir seleção.
       const memoriaLocal = getActiveLocal();
-      let meuLocalId =
-        memoriaLocal ?? opCtx.caixa?.local_id ?? opCtx.localId ?? profile?.local_id ?? null;
+      // Validação defensiva: se há um local armazenado, mas pertence a outra org, limpamos
+      let validatedMemoriaLocal = memoriaLocal;
+      if (validatedMemoriaLocal && profile?.organization_id) {
+        try {
+          const { data: localRow } = await supabase
+            .from('locais')
+            .select('organization_id')
+            .eq('id', validatedMemoriaLocal)
+            .maybeSingle();
+          if (!localRow || localRow.organization_id !== profile.organization_id) {
+            try {
+              await setActiveLocal(null);
+            } catch (e) {
+              void e;
+            }
+            validatedMemoriaLocal = null;
+            console.warn('[controle-caixa] cleared persisted local due to org mismatch', {
+              memoriaLocal,
+              profileOrg: profile.organization_id,
+              localOrg: localRow?.organization_id ?? null,
+            });
+          }
+        } catch (e) {
+          void e;
+        }
+      }
+      let meuLocalId: string | null = null;
+      if (profile?.role === 'pdv') {
+        // Se o profile já tem local_id, damos prioridade absoluta a ele
+        if (profile?.local_id) {
+          meuLocalId = profile.local_id;
+          try {
+            await setActiveLocal(profile.local_id);
+          } catch (e) {
+            void e;
+          }
+        } else {
+          meuLocalId = opCtx.caixa?.local_id ?? validatedMemoriaLocal ?? opCtx.localId ?? null;
+        }
+      } else {
+        meuLocalId =
+          validatedMemoriaLocal ??
+          opCtx.caixa?.local_id ??
+          opCtx.localId ??
+          profile?.local_id ??
+          null;
+      }
+
+      console.log('[controle-caixa] diagnóstico local:', {
+        profileLocal: profile?.local_id,
+        opCtxLocal: opCtx.localId,
+        memoriaLocal,
+        meuLocalId,
+      });
       if (!meuLocalId) {
         const { data: locais } = await supabase
           .from('locais')
@@ -134,6 +187,21 @@ export default function ControleCaixaPage() {
         meuLocalId = meuLocal.id;
       }
       setLocalId(meuLocalId);
+
+      // Se não for admin/master, buscamos o nome da loja ativa para exibir no banner
+      try {
+        if (!(profile?.role === 'admin' || profile?.role === 'master')) {
+          const { data: localData } = await supabase
+            .from('locais')
+            .select('id,nome')
+            .eq('id', meuLocalId)
+            .maybeSingle();
+          if (localData) setListaLojasDisponiveis([localData]);
+        }
+      } catch (e) {
+        // ignora — o banner continuará mostrando fallback
+        console.warn('Não foi possível buscar nome da loja ativa:', e);
+      }
 
       // 3. Buscar Caixa — se o contexto operacional já trouxe uma sessão, usamos ela
       let caixa: any = null;
@@ -379,9 +447,17 @@ export default function ControleCaixaPage() {
           perda: Number((p as any).estoque_perda || 0),
         }));
 
+        // Determinar local final de forma hierárquica: prioridade Profile > localStorage > estado
+        const localIdFinal = (profile as any)?.local_id || getActiveLocal() || localId;
+        if (!localIdFinal) {
+          toast.error('Erro: Não foi possível identificar a unidade operacional.');
+          setLoading(false);
+          return;
+        }
+
         const { error: rpcError } = await supabase.rpc('processar_fechamento_caixa_inventario', {
           p_caixa_id: caixaAberto?.id,
-          p_local_pdv_id: localId,
+          p_local_pdv_id: localIdFinal,
           p_usuario_id: profile?.id,
           p_organization_id: profile?.organization_id,
           p_itens_contagem: contagemParaSql as any,
@@ -392,6 +468,14 @@ export default function ControleCaixaPage() {
 
       // B. Fechar Caixa
       // Também atualiza o registro em `caixa_diario` para manter consistência com vendas
+      // Garantir o mesmo local utilizado no fechamento
+      const localIdFinalForUpdate = (profile as any)?.local_id || getActiveLocal() || localId;
+      if (!localIdFinalForUpdate) {
+        toast.error('Erro: Não foi possível identificar a unidade operacional.');
+        setLoading(false);
+        return;
+      }
+
       const { error } = await supabase
         .from('caixa_sessao')
         .update({
@@ -402,6 +486,7 @@ export default function ControleCaixaPage() {
           diferenca: resumo.diferenca,
           observacoes: `${modoPdv === 'inventario' ? 'Fechamento por Inventário.' : 'Fechamento Padrão.'} ${observacao}`,
           status: 'fechado',
+          local_id: localIdFinalForUpdate,
         })
         .eq('id', caixaAberto?.id);
 

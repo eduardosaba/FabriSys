@@ -173,7 +173,7 @@ export default function KanbanPage() {
       let data: any[] | null = null;
       let error: any = null;
 
-      const localIdFilter = getActiveLocal() ?? profile?.local_id;
+      const localIdFilter = profile?.local_id || getActiveLocal();
 
       const makeBaseQuery = () => {
         let q: any = supabase

@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import CustomizacaoTab from '../CustomizacaoTab';
 import PageHeader from '@/components/ui/PageHeader';
@@ -6,7 +6,7 @@ import { Sliders } from 'lucide-react';
 
 export default function CustomizacaoPage() {
   return (
-    <div className="p-4">
+    <div className="p-3 md:p-6">
       <PageHeader
         title="Customização do Sistema 🎨 "
         description="Configure todas as cores e elementos visuais do sistema. Suas mudanças afetam toda a interface.

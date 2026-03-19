@@ -12,7 +12,6 @@ import { toast } from 'react-hot-toast';
 import { formatCurrency } from '@/lib/utils/format';
 import CurrencyInput from '@/components/ui/shared/CurrencyInput';
 import { parseCurrency } from '@/lib/utils/currency';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useConfirm } from '@/hooks/useConfirm';
 
 interface Produto {
@@ -36,7 +35,7 @@ interface Promocao {
 }
 
 export default function PromocoesPage() {
-  const { profile, loading: authLoading } = useAuth();
+  const { profile, loading: _authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [promocoes, setPromocoes] = useState<Promocao[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -84,7 +83,7 @@ export default function PromocoesPage() {
         setLoading(false);
       }
     }
-    loadData();
+    void loadData();
   }, [profile]);
 
   // Handlers do Formulário
@@ -233,7 +232,7 @@ export default function PromocoesPage() {
   const desconto = totalOriginal - precoPromoNum;
 
   return (
-    <div className="p-6 animate-fade-up">
+    <div className="p-3 md:p-6 animate-fade-up">
       <PageHeader
         title="Promoções & Combos"
         description="Crie combos para vender no PDV."
@@ -292,7 +291,7 @@ export default function PromocoesPage() {
       >
         <div className="p-4 space-y-6">
           {/* Dados Básicos */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Combo</label>
               <input
@@ -337,7 +336,7 @@ export default function PromocoesPage() {
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Composição do Combo
             </label>
-            <div className="flex gap-2 mb-4">
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
               <select
                 className="flex-1 border rounded-lg p-2 bg-white"
                 value={selectedProdId}
@@ -350,7 +349,13 @@ export default function PromocoesPage() {
                   </option>
                 ))}
               </select>
-              <Button size="sm" onClick={handleAddItem} disabled={!selectedProdId} icon={Plus}>
+              <Button
+                size="sm"
+                onClick={handleAddItem}
+                disabled={!selectedProdId}
+                icon={Plus}
+                className="w-full sm:w-auto"
+              >
                 Adicionar
               </Button>
             </div>

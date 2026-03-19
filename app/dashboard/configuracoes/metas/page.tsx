@@ -155,7 +155,9 @@ export default function GestaoMetasPage() {
     if (Number.isNaN(valor) || valor < 0) return toast.error('Valor inválido');
 
     // filtrar apenas os dias ativos conforme seleção do admin
-    const activeDays = metasDiarias.filter((m) => weekdays.includes(parseISOToLocal(m.data).getDay()));
+    const activeDays = metasDiarias.filter((m) =>
+      weekdays.includes(parseISOToLocal(m.data).getDay())
+    );
     if (!activeDays || activeDays.length === 0)
       return toast.error('Selecione ao menos um dia de funcionamento');
 
@@ -176,7 +178,9 @@ export default function GestaoMetasPage() {
       const metaTotal = (metasDiarias || []).reduce((s, m) => s + Number(m.valor || 0), 0);
 
       // calcular dias de funcionamento ativos para este mês/local
-      const diasAtivosCount = metasDiarias.filter((m) => weekdays.includes(parseISOToLocal(m.data).getDay())).length;
+      const diasAtivosCount = metasDiarias.filter((m) =>
+        weekdays.includes(parseISOToLocal(m.data).getDay())
+      ).length;
 
       const upserts = metasDiarias.map((m) => ({
         local_id: localSelecionado,
@@ -223,7 +227,13 @@ export default function GestaoMetasPage() {
           toast.error('Erro ao salvar dias de funcionamento');
         } else if (locData && locData[0]) {
           // atualizar cache local para refletir alteração imediatamente
-          setLocais((prev) => prev.map((l) => (l.id === localSelecionado ? { ...l, dias_funcionamento: locData[0].dias_funcionamento } : l)));
+          setLocais((prev) =>
+            prev.map((l) =>
+              l.id === localSelecionado
+                ? { ...l, dias_funcionamento: locData[0].dias_funcionamento }
+                : l
+            )
+          );
         }
       }
     } catch (err) {
@@ -349,10 +359,10 @@ export default function GestaoMetasPage() {
       />
 
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-end">
-        <div>
+        <div className="min-w-0">
           <label className="text-sm font-bold text-slate-700 block mb-1">Loja / PDV</label>
           <select
-            className="p-2 border rounded-lg bg-slate-50 min-w-[200px]"
+            className="p-2 border rounded-lg bg-slate-50 min-w-0 sm:min-w-[200px] w-full sm:w-auto"
             value={localSelecionado}
             onChange={(e) => setLocalSelecionado(e.target.value)}
           >
@@ -364,21 +374,21 @@ export default function GestaoMetasPage() {
           </select>
         </div>
 
-        <div>
+        <div className="min-w-0">
           <label className="text-sm font-bold text-slate-700 block mb-1">Mês de Referência</label>
           <input
             type="month"
-            className="p-2 border rounded-lg bg-slate-50"
+            className="p-2 border rounded-lg bg-slate-50 w-full sm:w-auto"
             value={mes}
             onChange={(e) => setMes(e.target.value)}
           />
         </div>
 
-        <div className="pl-4">
+        <div className="pl-4 min-w-0">
           <label className="text-sm font-bold text-slate-700 block mb-1">
             Dias de Funcionamento
           </label>
-          <div className="flex gap-1">
+          <div className="grid grid-cols-4 gap-1 sm:flex sm:flex-wrap">
             {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map((label, idx) => {
               const selected = weekdays.includes(idx);
               return (
@@ -386,7 +396,7 @@ export default function GestaoMetasPage() {
                   key={label}
                   type="button"
                   onClick={() => toggleWeekday(idx)}
-                  className={`text-xs px-2 py-1 rounded ${selected ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-700'} border border-slate-200`}
+                  className={`text-xs px-2 py-1 rounded w-full sm:w-auto ${selected ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-700'} border border-slate-200`}
                 >
                   {label}
                 </button>
@@ -395,7 +405,7 @@ export default function GestaoMetasPage() {
           </div>
         </div>
 
-        <div className="ml-4 text-sm text-slate-500">
+        <div className="ml-4 text-sm text-slate-500 min-w-0">
           <div>
             Dias no mês: <strong className="text-slate-700">{diasNoMes}</strong>
           </div>
@@ -410,7 +420,7 @@ export default function GestaoMetasPage() {
           </div>
         </div>
 
-        <div className="pl-4 border-l border-slate-200">
+        <div className="pl-4 border-l border-slate-200 min-w-0">
           <label className="text-sm font-bold text-blue-700 block mb-1">
             Definir Meta Mensal (R$)
           </label>
@@ -418,7 +428,7 @@ export default function GestaoMetasPage() {
             <input
               type="text"
               inputMode="numeric"
-              className="p-2 border rounded-lg w-40 text-right"
+              className="p-2 border rounded-lg w-full sm:w-40 text-right"
               placeholder="R$ 0,00"
               value={metaMensalDisplay}
               onChange={(e) => {
@@ -441,8 +451,8 @@ export default function GestaoMetasPage() {
           </div>
         </div>
 
-        <div className="ml-auto">
-          <Button onClick={salvarMetas} icon={Save} loading={loading}>
+        <div className="ml-auto min-w-0">
+          <Button onClick={salvarMetas} icon={Save} loading={loading} className="w-full sm:w-auto">
             Salvar Alterações
           </Button>
         </div>
@@ -460,20 +470,20 @@ export default function GestaoMetasPage() {
                   R$ {(monthlyMetaByLocal[l.id] || 0).toFixed(2)}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-center gap-2">
                 <button
                   onClick={() => abrirEdicaoLocal(l.id)}
-                  className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
+                  className="block w-full sm:inline-block sm:w-auto px-3 py-1 bg-blue-600 text-white rounded text-sm"
                 >
                   Editar
                 </button>
                 <button
                   onClick={() => excluirMetaLocal(l.id)}
-                  className="px-3 py-1 border rounded text-sm"
+                  className="block w-full sm:inline-block sm:w-auto px-3 py-1 border rounded text-sm mt-2 sm:mt-0"
                 >
                   Excluir
                 </button>
-                <div className="text-xs ml-2">
+                <div className="text-xs sm:ml-2 ml-0 mt-2 sm:mt-0">
                   {savedStatus[l.id] === 'saving'
                     ? 'Salvando...'
                     : savedStatus[l.id] === 'saved'

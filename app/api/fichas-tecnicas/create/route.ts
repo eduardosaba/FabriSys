@@ -33,6 +33,7 @@ export async function POST(request: Request) {
       nome,
       preco_venda,
       rendimento,
+      rendimento_total_g,
       slug_base,
       created_by,
       organization_id,
@@ -50,9 +51,6 @@ export async function POST(request: Request) {
     const attemptsInfo: Array<any> = [];
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const candidateSlug = attempt === 0 ? slug : `${slug}-${attempt}`;
-
-      // Log temporário para depuração de geração de slug único
-      console.log('[create/fichas] tentativa', attempt, 'slug_candidate=', candidateSlug);
 
       // Construir linhas garantindo `unidade_medida`.
       const rows: any[] = [];
@@ -94,6 +92,7 @@ export async function POST(request: Request) {
           unidade_medida: unidade,
           perda_padrao: insumo.perdaPadrao,
           rendimento_unidades: rendimento,
+          rendimento_total_g: Number(rendimento_total_g || 0),
           ordem_producao: index + 1,
           versao: 1,
           ativo: true,
@@ -121,7 +120,7 @@ export async function POST(request: Request) {
       const { data, error } = await tryInsertFicha(rows);
       if (!error) {
         // Atualizar preco_venda se informado
-        if (preco_venda) {
+        if (typeof preco_venda === 'number') {
           await supabaseAdmin
             .from('produtos_finais')
             .update({ preco_venda })

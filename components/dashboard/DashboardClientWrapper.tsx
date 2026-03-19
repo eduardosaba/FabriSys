@@ -9,6 +9,7 @@ import LicenseGuard from '@/components/LicenseGuard';
 import Loading from '@/components/ui/Loading';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useAuth } from '@/lib/auth';
+import { useTheme } from '@/lib/theme';
 import SystemAlertPopup from '@/components/SystemAlertPopup';
 
 export default function DashboardClientWrapper({
@@ -25,6 +26,7 @@ export default function DashboardClientWrapper({
 
   const { profile } = useAuth();
   const { org, loading: loadingOrg } = useOrganization();
+  const { loadThemeByOrg } = useTheme();
 
   // Sempre que o profile/org mudar, atualizamos variáveis CSS e forçamos
   // atualização da logo usada pelo Header/Sidebar.
@@ -44,6 +46,17 @@ export default function DashboardClientWrapper({
       }
     }
   }, [profile, org, logoUrl]);
+
+  // Carrega tema da organização assim que soubermos a organization_id
+  useEffect(() => {
+    if (profile?.organization_id) {
+      try {
+        void loadThemeByOrg(profile.organization_id);
+      } catch (e) {
+        void e;
+      }
+    }
+  }, [profile?.organization_id, loadThemeByOrg]);
 
   const isOnboardingPage = pathname === '/dashboard/onboarding';
 

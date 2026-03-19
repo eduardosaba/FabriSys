@@ -28,6 +28,7 @@ interface WidgetProps {
   auxFiltro?: any;
   organizationId?: string;
   profile?: any;
+  localId?: string | null;
 }
 
 export default function SalesChartWidget({ filtros, auxFiltro, organizationId }: WidgetProps) {

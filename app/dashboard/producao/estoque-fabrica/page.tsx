@@ -15,13 +15,36 @@ export default function EstoqueFabricaPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [movimentos, setMovimentos] = useState<any[]>([]);
 
+  const getStatusLogistica = (quantidade: number) => {
+    if (quantidade > 10) {
+      return {
+        label: 'Pronto para Envio',
+        className:
+          'bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[10px] font-black uppercase',
+      };
+    }
+
+    if (quantidade > 0) {
+      return {
+        label: 'Estoque Baixo',
+        className:
+          'bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black uppercase',
+      };
+    }
+
+    return {
+      label: 'Produzir Urgente',
+      className:
+        'bg-rose-100 text-rose-700 px-3 py-1 rounded-full text-[10px] font-black uppercase',
+    };
+  };
+
   const carregarEstoqueFabrica = useCallback(async () => {
     if (!profile?.organization_id) return;
 
     try {
       setLoading(true);
 
-      // 1. Localizar o ID da Fábrica
       const { data: fab, error: fabErr } = await supabase
         .from('locais')
         .select('id')
@@ -32,10 +55,10 @@ export default function EstoqueFabricaPage() {
       if (fabErr) throw fabErr;
       if (!fab?.id) {
         setEstoque([]);
+        setMovimentos([]);
         return;
       }
 
-      // 2. Buscar estoque direto de estoque_produtos (mais preciso)
       const { data: estoques, error: estErr } = await supabase
         .from('estoque_produtos')
         .select(
@@ -54,30 +77,77 @@ export default function EstoqueFabricaPage() {
 
       setEstoque(estoques || []);
 
-      // 3. Buscar movimentos recentes (envios + movimentacoes)
       try {
-        const [enviosRes, movRes] = await Promise.all([
+        const [enviosOrigemRes, enviosDestinoRes] = await Promise.all([
           supabase
             .from('envios_historico')
             .select(
-              'id, produto_id, quantidade, local_origem_id, local_destino_id, enviado_em, status, observacao, produto:produtos_finais(id,nome)'
+              'id, produto_id, quantidade, local_origem_id, local_destino_id, enviado_em, status, observacao'
             )
-            .eq('organization_id', fab.id ? undefined : null) // no-op, keep shape
+            .eq('organization_id', profile.organization_id)
+            .eq('local_origem_id', fab.id)
             .order('enviado_em', { ascending: false })
             .limit(50),
           supabase
-            .from('movimentacoes_estoque')
+            .from('envios_historico')
             .select(
-              'id, produto_id, quantidade, local_id, tipo, created_at, observacao, produto:produtos_finais(id,nome)'
+              'id, produto_id, quantidade, local_origem_id, local_destino_id, enviado_em, status, observacao'
             )
-            .order('created_at', { ascending: false })
+            .eq('organization_id', profile.organization_id)
+            .eq('local_destino_id', fab.id)
+            .order('enviado_em', { ascending: false })
             .limit(50),
         ]);
 
-        const envios = (enviosRes.data || []).map((e: any) => ({
+        if (enviosOrigemRes.error) throw enviosOrigemRes.error;
+        if (enviosDestinoRes.error) throw enviosDestinoRes.error;
+
+        const enviosMap = new Map<string, any>();
+        for (const item of [...(enviosOrigemRes.data || []), ...(enviosDestinoRes.data || [])]) {
+          enviosMap.set(String(item.id), item);
+        }
+        const enviosData = Array.from(enviosMap.values())
+          .sort((a, b) => new Date(b.enviado_em).getTime() - new Date(a.enviado_em).getTime())
+          .slice(0, 50);
+
+        const { data: movDataRaw, error: movErr } = await supabase
+          .from('movimentacao_estoque')
+          .select(
+            'id, produto_id, quantidade, tipo_movimento, observacoes, data_movimento, created_at'
+          )
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (movErr) throw movErr;
+
+        const movData = movDataRaw || [];
+
+        const produtoIds = Array.from(
+          new Set(
+            [...enviosData, ...movData]
+              .map((item: any) => item?.produto_id)
+              .filter((id): id is string => Boolean(id))
+          )
+        );
+
+        let produtosById = new Map<string, string>();
+
+        if (produtoIds.length > 0) {
+          const { data: produtosData } = await supabase
+            .from('produtos_finais')
+            .select('id, nome')
+            .in('id', produtoIds)
+            .eq('organization_id', profile.organization_id);
+
+          produtosById = new Map(
+            (produtosData || []).map((p: any) => [String(p.id), String(p.nome)])
+          );
+        }
+
+        const envios = (enviosData || []).map((e: any) => ({
           id: `env-${e.id}`,
           tipo: 'envio',
-          produto: e.produto?.nome || null,
+          produto: produtosById.get(String(e.produto_id)) || null,
           quantidade: e.quantidade,
           origem: e.local_origem_id,
           destino: e.local_destino_id,
@@ -86,16 +156,16 @@ export default function EstoqueFabricaPage() {
           status: e.status,
         }));
 
-        const movs = (movRes.data || []).map((m: any) => ({
+        const movs = (movData || []).map((m: any) => ({
           id: `mov-${m.id}`,
           tipo: 'movimentacao',
-          produto: m.produto?.nome || null,
+          produto: produtosById.get(String(m.produto_id)) || null,
           quantidade: m.quantidade,
-          origem: m.local_id,
+          origem: m.origem || '-',
           destino: null,
-          data: m.created_at,
-          observacao: m.observacao,
-          status: m.tipo,
+          data: m.created_at || m.data_movimento,
+          observacao: m.observacoes,
+          status: m.tipo_movimento,
         }));
 
         setMovimentos(
@@ -119,7 +189,6 @@ export default function EstoqueFabricaPage() {
     void carregarEstoqueFabrica();
   }, [carregarEstoqueFabrica]);
 
-  // Realtime: atualiza quando estoque_produtos muda
   useEffect(() => {
     const channel = supabase
       .channel('estoque_realtime')
@@ -130,8 +199,8 @@ export default function EstoqueFabricaPage() {
 
     return () => {
       try {
-        supabase.removeChannel(channel);
-      } catch (e) {
+        void supabase.removeChannel(channel);
+      } catch {
         // ignore
       }
     };
@@ -143,8 +212,8 @@ export default function EstoqueFabricaPage() {
   if (loading && estoque.length === 0) return <Loading />;
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-6 p-3 md:p-6">
+      <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <PageHeader
           title="Estoque Central (Fábrica)"
           description="Acompanhe o que está pronto para ser enviado."
@@ -152,7 +221,7 @@ export default function EstoqueFabricaPage() {
         />
         <button
           onClick={() => void carregarEstoqueFabrica()}
-          className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-4 py-2 rounded-lg transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-50 px-4 py-2 text-sm font-bold text-blue-600 transition-colors hover:text-blue-800 md:w-auto"
         >
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           Atualizar Saldo
@@ -160,8 +229,8 @@ export default function EstoqueFabricaPage() {
       </div>
 
       {lowStock.length > 0 && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-lg">
-          <div className="flex justify-between items-center">
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-rose-800">
+          <div className="flex flex-col items-start justify-between gap-3 md:flex-row md:items-center">
             <div>
               <div className="font-bold">Estoque baixo: {lowStock.length} produto(s)</div>
               <div className="text-sm text-rose-700/80">
@@ -173,21 +242,19 @@ export default function EstoqueFabricaPage() {
                 {lowStock.length > 5 ? ` e mais ${lowStock.length - 5}` : ''}
               </div>
             </div>
-            <div>
-              <button
-                onClick={() =>
-                  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
-                }
-                className="bg-rose-600 text-white px-3 py-1 rounded-md text-sm"
-              >
-                Ver todos
-              </button>
-            </div>
+            <button
+              onClick={() =>
+                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+              }
+              className="rounded-md bg-rose-600 px-3 py-1 text-sm text-white"
+            >
+              Ver todos
+            </button>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:flex gap-4 items-center">
+      <div className="grid grid-cols-1 items-center gap-4 md:flex">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
@@ -195,109 +262,178 @@ export default function EstoqueFabricaPage() {
             placeholder="Filtrar por nome do produto..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+            className="w-full rounded-xl border py-2 pl-10 pr-4 outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-        <div className="bg-white px-6 py-2 rounded-xl border shadow-sm text-center">
-          <p className="text-[10px] text-slate-500 font-bold uppercase">Produtos em Linha</p>
+        <div className="rounded-xl border bg-white px-6 py-2 text-center shadow-sm">
+          <p className="text-[10px] font-bold uppercase text-slate-500">Produtos em Linha</p>
           <p className="text-xl font-black text-slate-800">{estoque.length}</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b">
-            <tr>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Produto</th>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-center">
-                Saldo Disponível
-              </th>
-              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-center">
-                Status Logística
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {estoque.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="px-6 py-10 text-center text-slate-400">
-                  Nenhum produto com saldo encontrado.
-                </td>
-              </tr>
-            ) : (
-              estoque.map((item, idx) => (
-                <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      {item.produto.imagem_url && (
+      <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+        <div className="md:hidden">
+          {estoque.length === 0 ? (
+            <div className="px-4 py-10 text-center text-slate-400">
+              Nenhum produto com saldo encontrado.
+            </div>
+          ) : (
+            <div className="space-y-3 p-3">
+              {estoque.map((item, idx) => {
+                const status = getStatusLogistica(Number(item.quantidade || 0));
+                return (
+                  <div key={idx} className="rounded-xl border border-slate-200 p-3">
+                    <div className="mb-2 flex items-center gap-3">
+                      {item.produto?.imagem_url && (
                         <img
                           src={item.produto.imagem_url}
-                          className="w-8 h-8 rounded object-cover"
+                          className="h-8 w-8 rounded object-cover"
                           alt=""
                         />
                       )}
-                      <span className="font-bold text-slate-800">{item.produto.nome}</span>
+                      <span className="font-bold text-slate-800">{item.produto?.nome}</span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span
-                      className={`text-xl font-mono font-bold ${item.quantidade > 0 ? 'text-blue-600' : 'text-slate-300'}`}
-                    >
-                      {item.quantidade}
-                    </span>
-                    <span className="text-[10px] text-slate-400 ml-1 uppercase">un</span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    {item.quantidade > 10 ? (
-                      <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[10px] font-black uppercase">
-                        Pronto para Envio
-                      </span>
-                    ) : item.quantidade > 0 ? (
-                      <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black uppercase">
-                        Estoque Baixo
-                      </span>
-                    ) : (
-                      <span className="bg-rose-100 text-rose-700 px-3 py-1 rounded-full text-[10px] font-black uppercase">
-                        Produzir Urgente
-                      </span>
-                    )}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] uppercase text-slate-500">Saldo</div>
+                        <div className="font-mono text-xl font-bold text-blue-600">
+                          {item.quantidade}
+                          <span className="ml-1 text-[10px] uppercase text-slate-400">un</span>
+                        </div>
+                      </div>
+                      <span className={status.className}>{status.label}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full text-left">
+            <thead className="border-b bg-slate-50">
+              <tr>
+                <th className="px-6 py-4 text-xs font-bold uppercase text-slate-500">Produto</th>
+                <th className="px-6 py-4 text-center text-xs font-bold uppercase text-slate-500">
+                  Saldo Disponível
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-bold uppercase text-slate-500">
+                  Status Logística
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {estoque.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-10 text-center text-slate-400">
+                    Nenhum produto com saldo encontrado.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                estoque.map((item, idx) => {
+                  const status = getStatusLogistica(Number(item.quantidade || 0));
+                  return (
+                    <tr key={idx} className="transition-colors hover:bg-slate-50/50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          {item.produto?.imagem_url && (
+                            <img
+                              src={item.produto.imagem_url}
+                              className="h-8 w-8 rounded object-cover"
+                              alt=""
+                            />
+                          )}
+                          <span className="font-bold text-slate-800">{item.produto?.nome}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span
+                          className={`text-xl font-mono font-bold ${item.quantidade > 0 ? 'text-blue-600' : 'text-slate-300'}`}
+                        >
+                          {item.quantidade}
+                        </span>
+                        <span className="ml-1 text-[10px] uppercase text-slate-400">un</span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={status.className}>{status.label}</span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Histórico de Entradas/Saídas */}
-      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden mt-6">
-        <div className="px-6 py-4 border-b flex items-center justify-between">
+      <div className="mt-6 overflow-hidden rounded-2xl border bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b px-4 py-4 md:px-6">
           <h4 className="font-bold">Histórico de Entradas / Saídas</h4>
-          <span className="text-sm text-slate-500">Últimos 50 registros</span>
+          <span className="text-xs text-slate-500 md:text-sm">Últimos 50 registros</span>
         </div>
-        <div className="p-4 overflow-x-auto">
+
+        <div className="p-3 md:hidden">
           {movimentos.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
+            <div className="py-8 text-center text-slate-400">
+              Nenhum movimento recente encontrado.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {movimentos.map((m) => (
+                <div key={m.id} className="rounded-xl border border-slate-200 p-3">
+                  <div className="mb-1 text-xs text-slate-500">
+                    {new Date(m.data).toLocaleString()}
+                  </div>
+                  <div className="font-bold text-slate-800">{m.produto || m.produto_id}</div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-slate-500">Qtd:</span>{' '}
+                      <span className="font-mono text-slate-800">{m.quantidade}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Tipo:</span>{' '}
+                      <span className="uppercase text-slate-800">{m.tipo}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Origem:</span> {m.origem}
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Destino:</span> {m.destino || '-'}
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    {m.observacao || m.status || '-'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto p-4 md:block">
+          {movimentos.length === 0 ? (
+            <div className="py-8 text-center text-slate-400">
               Nenhum movimento recente encontrado.
             </div>
           ) : (
             <table className="w-full text-left">
-              <thead className="bg-slate-50 border-b">
+              <thead className="border-b bg-slate-50">
                 <tr>
-                  <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase">Data</th>
-                  <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase">Produto</th>
-                  <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase text-right">
+                  <th className="px-4 py-2 text-xs font-bold uppercase text-slate-500">Data</th>
+                  <th className="px-4 py-2 text-xs font-bold uppercase text-slate-500">Produto</th>
+                  <th className="px-4 py-2 text-right text-xs font-bold uppercase text-slate-500">
                     Qtd
                   </th>
-                  <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase">Origem</th>
-                  <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase">Destino</th>
-                  <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase">Tipo</th>
-                  <th className="px-4 py-2 text-xs font-bold text-slate-500 uppercase">Obs</th>
+                  <th className="px-4 py-2 text-xs font-bold uppercase text-slate-500">Origem</th>
+                  <th className="px-4 py-2 text-xs font-bold uppercase text-slate-500">Destino</th>
+                  <th className="px-4 py-2 text-xs font-bold uppercase text-slate-500">Tipo</th>
+                  <th className="px-4 py-2 text-xs font-bold uppercase text-slate-500">Obs</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {movimentos.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={m.id} className="transition-colors hover:bg-slate-50/50">
                     <td className="px-4 py-3 text-sm text-slate-500">
                       {new Date(m.data).toLocaleString()}
                     </td>
@@ -307,7 +443,7 @@ export default function EstoqueFabricaPage() {
                     <td className="px-4 py-3 text-right font-mono">{m.quantidade}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{m.origem}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{m.destino || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600 uppercase">{m.tipo}</td>
+                    <td className="px-4 py-3 text-sm uppercase text-slate-600">{m.tipo}</td>
                     <td className="px-4 py-3 text-sm text-slate-500">
                       {m.observacao || m.status || '-'}
                     </td>

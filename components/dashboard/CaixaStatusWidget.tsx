@@ -19,6 +19,7 @@ interface WidgetProps {
   auxFiltro?: any;
   organizationId?: string;
   profile?: any;
+  localId?: string | null;
 }
 
 export default function CaixaStatusWidget({
@@ -40,7 +41,17 @@ export default function CaixaStatusWidget({
       const fim = new Date(hoje.setHours(23, 59, 59, 999)).toISOString();
 
       // 1. Caixas Abertos (respeita contexto operacional)
+      const persisted = getActiveLocal();
+      console.debug(
+        '[diagnose][CaixaStatusWidget] profileId:',
+        profile?.id ?? null,
+        'profileLocal:',
+        profile?.local_id ?? null,
+        'persisted:',
+        persisted
+      );
       const ctx = await getOperationalContext(profile);
+      console.debug('[diagnose][CaixaStatusWidget] opCtx:', ctx);
       const activeLocal =
         ctx?.caixa?.local_id ?? ctx?.localId ?? profile?.local_id ?? getActiveLocal();
 

@@ -24,9 +24,16 @@ interface WidgetProps {
   auxFiltro?: any;
   organizationId?: string;
   profile?: any;
+  localId?: string | null;
 }
 
-export default function KPIsMetas({ filtros, auxFiltro, organizationId, profile }: WidgetProps) {
+export default function KPIsMetas({
+  filtros,
+  auxFiltro,
+  organizationId,
+  profile,
+  localId,
+}: WidgetProps) {
   const [dados, setDados] = useState<MetaLoja[]>([]);
   const [global, setGlobal] = useState<ResumoGlobal | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,7 +48,7 @@ export default function KPIsMetas({ filtros, auxFiltro, organizationId, profile 
       const fimDia = new Date(hoje.setHours(23, 59, 59, 999)).toISOString();
       const dataHojeStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-      // 1. QUERY DE LOJAS (Filtra se for gerente)
+      // 1. QUERY DE LOJAS (Filtra se for gerente ou quando `localId` está presente)
       let queryLocais = supabase
         .from('locais')
         .select('id, nome')
@@ -49,7 +56,10 @@ export default function KPIsMetas({ filtros, auxFiltro, organizationId, profile 
         .eq('tipo', 'pdv')
         .eq('ativo', true);
 
-      if (profile.role !== 'admin' && profile.role !== 'master' && profile.local_id) {
+      // Se o header/página indicou um local ativo, usa apenas esse
+      if (localId) {
+        queryLocais = queryLocais.eq('id', localId);
+      } else if (profile.role !== 'admin' && profile.role !== 'master' && profile.local_id) {
         queryLocais = queryLocais.eq('id', profile.local_id);
       }
 
@@ -60,6 +70,8 @@ export default function KPIsMetas({ filtros, auxFiltro, organizationId, profile 
         .eq('organization_id', organizationId)
         .eq('data_referencia', dataHojeStr);
 
+      if (localId) queryMetas.eq('local_id', localId);
+
       // 3. QUERY DE VENDAS (Todas de hoje)
       const queryVendas = supabase
         .from('vendas')
@@ -68,6 +80,8 @@ export default function KPIsMetas({ filtros, auxFiltro, organizationId, profile 
         .eq('status', 'concluida') // Importante: apenas vendas válidas
         .gte('created_at', inicioDia)
         .lte('created_at', fimDia);
+
+      if (localId) queryVendas.eq('local_id', localId);
 
       // Executa tudo em paralelo (Performance Boost 🚀)
       const [resLocais, resMetas, resVendas] = await Promise.all([
@@ -126,6 +140,11 @@ export default function KPIsMetas({ filtros, auxFiltro, organizationId, profile 
     void carregarDados();
 
     // Realtime: Escuta novas vendas para atualizar a barra de progresso ao vivo
+    const filterParts: string[] = [];
+    if (organizationId) filterParts.push(`organization_id=eq.${organizationId}`);
+    if (localId) filterParts.push(`local_id=eq.${localId}`);
+    const filterStr = filterParts.length > 0 ? filterParts.join(',') : undefined;
+
     const channel = supabase
       .channel('widget_kpis_realtime')
       .on(
@@ -134,7 +153,7 @@ export default function KPIsMetas({ filtros, auxFiltro, organizationId, profile 
           event: '*',
           schema: 'public',
           table: 'vendas',
-          filter: organizationId ? `organization_id=eq.${organizationId}` : undefined,
+          filter: filterStr,
         },
         () => void carregarDados()
       )

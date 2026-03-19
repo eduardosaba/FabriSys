@@ -144,9 +144,8 @@ export default function RelatorioEstoquePage() {
         </div>
       </div>
 
-      {/* ÁREA IMPRESSA (Estilizada para papel A4) */}
-      {/* A classe 'print:fixed print:inset-0' força este bloco a cobrir a tela toda ao imprimir */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden print:shadow-none print:border-0 print:fixed print:inset-0 print:z-[9999] print:bg-white print:p-8 print:h-screen print:w-screen print:overflow-visible">
+      {/* ÁREA IMPRESSA */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden print:shadow-none print:border-0 print:bg-white print:p-0 print:overflow-visible">
         {/* Cabeçalho Exclusivo para Impressão */}
         <div className="hidden print:flex justify-between items-start mb-8 border-b-2 border-black pb-4">
           <div className="flex items-center gap-4">
@@ -194,61 +193,73 @@ export default function RelatorioEstoquePage() {
         </div>
 
         {/* Tabela */}
-        <table className="w-full text-sm text-left">
-          <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-200 uppercase text-xs print:bg-gray-100 print:text-black print:border-black">
-            <tr>
-              <th className="px-6 py-3 print:px-2 print:py-1">Produto</th>
-              <th className="px-6 py-3 print:px-2 print:py-1">Categoria</th>
-              <th className="px-6 py-3 text-right print:px-2 print:py-1">Qtd</th>
-              <th className="px-6 py-3 text-right print:px-2 print:py-1">Custo Un.</th>
-              <th className="px-6 py-3 text-right font-bold print:px-2 print:py-1">Total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 print:divide-gray-300">
-            {itensFiltrados.map((item, idx) => (
-              <tr
-                key={Number.isFinite(item.id) ? item.id : `item-${idx}`}
-                className="hover:bg-slate-50 transition-colors print:break-inside-avoid"
-              >
-                <td className="px-6 py-3 print:px-2 print:py-1">
-                  <div className="font-medium text-slate-800 print:text-black">{item.nome}</div>
-                  {item.status === 'baixo' && (
-                    <span className="text-[10px] text-orange-600 font-bold print:text-black print:italic">
-                      {' '}
-                      (Baixo)
-                    </span>
-                  )}
-                  {item.status === 'zerado' && (
-                    <span className="text-[10px] text-red-600 font-bold print:text-black print:font-bold">
-                      {' '}
-                      (ZERADO)
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-3 text-slate-500 print:text-black print:px-2 print:py-1">
-                  {item.categoria}
-                </td>
-                <td className="px-6 py-3 text-right font-mono print:text-black print:px-2 print:py-1">
-                  {item.estoque_atual}{' '}
-                  <span className="text-xs text-slate-400 print:text-gray-600">{item.unidade}</span>
-                </td>
-                <td className="px-6 py-3 text-right text-slate-600 print:text-black print:px-2 print:py-1">
-                  {item.custo_medio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </td>
-                <td className="px-6 py-3 text-right font-bold text-slate-800 bg-slate-50/50 print:bg-transparent print:text-black print:px-2 print:py-1">
-                  {item.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </td>
-              </tr>
-            ))}
-            {itensFiltrados.length === 0 && (
+        <div className="w-full overflow-x-auto touch-pan-x">
+          <table className="min-w-[720px] w-full text-sm text-left md:min-w-0 print:min-w-0">
+            <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-200 uppercase text-xs print:table-header-group print:bg-gray-100 print:text-black print:border-black">
               <tr>
-                <td colSpan={5} className="p-8 text-center text-slate-400">
-                  Nenhum item encontrado.
-                </td>
+                <th className="sticky left-0 z-20 bg-slate-50 px-6 py-3 print:px-2 print:py-1 print:static print:bg-gray-100">
+                  Produto
+                </th>
+                <th className="px-6 py-3 print:px-2 print:py-1">Categoria</th>
+                <th className="px-6 py-3 text-right print:px-2 print:py-1">Qtd</th>
+                <th className="px-6 py-3 text-right print:px-2 print:py-1">Custo Un.</th>
+                <th className="px-6 py-3 text-right font-bold print:px-2 print:py-1">Total</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100 print:divide-gray-300">
+              {itensFiltrados.map((item, idx) => (
+                <tr
+                  key={Number.isFinite(item.id) ? item.id : `item-${idx}`}
+                  className="hover:bg-slate-50 transition-colors print:break-inside-avoid-page"
+                >
+                  <td className="sticky left-0 z-10 bg-white px-6 py-3 print:px-2 print:py-1 print:static print:bg-transparent">
+                    <div className="font-medium text-slate-800 print:text-black">{item.nome}</div>
+                    {item.status === 'baixo' && (
+                      <span className="text-[10px] text-orange-600 font-bold print:text-black print:italic">
+                        {' '}
+                        (Baixo)
+                      </span>
+                    )}
+                    {item.status === 'zerado' && (
+                      <span className="text-[10px] text-red-600 font-bold print:text-black print:font-bold">
+                        {' '}
+                        (ZERADO)
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-3 text-slate-500 print:text-black print:px-2 print:py-1">
+                    {item.categoria}
+                  </td>
+                  <td className="px-6 py-3 text-right font-mono print:text-black print:px-2 print:py-1">
+                    {item.estoque_atual}{' '}
+                    <span className="text-xs text-slate-400 print:text-gray-600">
+                      {item.unidade}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-right text-slate-600 print:text-black print:px-2 print:py-1">
+                    {item.custo_medio.toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                    })}
+                  </td>
+                  <td className="px-6 py-3 text-right font-bold text-slate-800 bg-slate-50/50 print:bg-transparent print:text-black print:px-2 print:py-1">
+                    {item.valor_total.toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                    })}
+                  </td>
+                </tr>
+              ))}
+              {itensFiltrados.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-slate-400">
+                    Nenhum item encontrado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
         {/* Rodapé da Impressão */}
         <div className="hidden print:block mt-8 pt-4 border-t border-gray-300 text-center text-xs text-gray-500">

@@ -233,7 +233,7 @@ export default function PlanejamentoPage() {
             created_by: profile?.id,
             // 🎯 Definir local de origem (fábrica) e destino principal
             local_origem_id: profile?.local_id || getActiveLocal(),
-            local_destino_id: getActiveLocal() ?? profile?.local_id,
+            local_destino_id: profile?.local_id || getActiveLocal(),
           })
           .select()
           .single();
@@ -391,7 +391,7 @@ export default function PlanejamentoPage() {
             created_by: profile?.id,
             // garantir origem (fábrica) para produto final quando aplicável
             local_origem_id: fabricaId,
-            local_destino_id: getActiveLocal() ?? null,
+            local_destino_id: profile?.local_id || getActiveLocal() || null,
             op_pai_id: opPaiId,
           })
           .select()

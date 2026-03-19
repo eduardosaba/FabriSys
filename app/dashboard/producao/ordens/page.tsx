@@ -50,7 +50,7 @@ export default function OrdensProducaoPage() {
 
   const loadOrdens = useCallback(async () => {
     try {
-      const localId = getActiveLocal() ?? profile?.local_id;
+      const localId = profile?.local_id || getActiveLocal();
 
       let q: any = supabase
         .from('ordens_producao')

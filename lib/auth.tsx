@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { setActiveLocal } from '@/lib/activeLocal';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/useToast';
 import type { Profile, UserRole } from '@/types/profile';
@@ -132,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 email: userEmail ?? baseProfile?.email,
                 avatar_url:
                   profSimple.avatar_url ?? profSimple.foto_url ?? baseProfile?.avatar_url ?? null,
+                local_id: profSimple.local_id ?? (baseProfile as any)?.local_id ?? undefined,
                 organization_id:
                   profSimple.organization_id ?? baseProfile?.organization_id ?? undefined,
                 organizations: org ?? undefined,
@@ -143,10 +145,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 ativo: profSimple.ativo ?? baseProfile?.ativo ?? undefined,
                 status_conta: profSimple.status_conta ?? baseProfile?.status_conta ?? undefined,
               } as Profile & { organizations?: any };
+              // if pdv and no local_id, try to resolve an operational local
+              if ((profileData as any).role === 'pdv' && !(profileData as any).local_id) {
+                try {
+                  const { data: caixa } = await supabase
+                    .from('caixa_sessao')
+                    .select('local_id')
+                    .eq('usuario_abertura', profileData.id)
+                    .eq('status', 'aberto')
+                    .maybeSingle();
+                  if (caixa && caixa.local_id) {
+                    (profileData as any).local_id = caixa.local_id;
+                    await setActiveLocal(caixa.local_id);
+                  } else {
+                    await setActiveLocal(null);
+                  }
+                } catch (e) {
+                  void e;
+                }
+              }
+
               console.log(
                 '[AuthProvider] ✅ Perfil vindo de profiles (fallback simples)',
                 profileData
               );
+              if ((profileData as any).local_id) {
+                try {
+                  await setActiveLocal((profileData as any).local_id);
+                } catch (e) {
+                  void e;
+                }
+              }
               setProfile(profileData as any);
               return;
             }
@@ -172,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             full_name: prof.full_name || prof.username || baseProfile?.full_name || undefined,
             email: userEmail ?? baseProfile?.email,
             avatar_url: prof.avatar_url ?? prof.foto_url ?? baseProfile?.avatar_url ?? null,
+            local_id: prof.local_id ?? (baseProfile as any)?.local_id ?? undefined,
             organization_id: prof.organization_id ?? baseProfile?.organization_id ?? undefined,
             organizations: org ?? undefined,
             // Prioriza logo da organização quando disponível
@@ -183,7 +213,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ativo: prof.ativo ?? baseProfile?.ativo ?? undefined,
             status_conta: prof.status_conta ?? baseProfile?.status_conta ?? undefined,
           } as Profile & { organizations?: any };
+          // resolve pdv local if missing
+          if ((profileData as any).role === 'pdv' && !(profileData as any).local_id) {
+            try {
+              const { data: caixa } = await supabase
+                .from('caixa_sessao')
+                .select('local_id')
+                .eq('usuario_abertura', profileData.id)
+                .eq('status', 'aberto')
+                .maybeSingle();
+              if (caixa && caixa.local_id) {
+                (profileData as any).local_id = caixa.local_id;
+                await setActiveLocal(caixa.local_id);
+              } else {
+                await setActiveLocal(null);
+              }
+            } catch (e) {
+              void e;
+            }
+          }
+
           console.log('[AuthProvider] ✅ Perfil vindo de profiles (mesclado)', profileData);
+          if ((profileData as any).local_id) {
+            try {
+              await setActiveLocal((profileData as any).local_id);
+            } catch (e) {
+              void e;
+            }
+          }
           setProfile(profileData as any);
           return;
         }
@@ -194,6 +251,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Se não existiu registro em `profiles` mas `baseProfile` foi encontrado, usa ele
       if (baseProfile) {
         console.log('[AuthProvider] ✅ Usando perfil base de colaboradores (sem profiles)');
+        // resolve pdv local for baseProfile if missing
+        if ((baseProfile as any).role === 'pdv' && !(baseProfile as any).local_id) {
+          try {
+            const { data: caixa } = await supabase
+              .from('caixa_sessao')
+              .select('local_id')
+              .eq('usuario_abertura', baseProfile.id)
+              .eq('status', 'aberto')
+              .maybeSingle();
+            if (caixa && caixa.local_id) {
+              (baseProfile as any).local_id = caixa.local_id;
+              await setActiveLocal(caixa.local_id);
+            } else {
+              await setActiveLocal(null);
+            }
+          } catch (e) {
+            void e;
+          }
+        }
+        if ((baseProfile as any).local_id) {
+          try {
+            await setActiveLocal((baseProfile as any).local_id);
+          } catch (e) {
+            void e;
+          }
+        }
         setProfile(baseProfile);
         return;
       }
@@ -318,6 +401,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.warn('[AuthProvider] Falha ao limpar sessionStorage:', e);
         }
 
+        try {
+          // Também limpar a unidade ativa persistida (pdv_active_local)
+          setActiveLocal(null);
+        } catch (e) {
+          void e;
+        }
+
         setProfile(null);
         lastFetchedUserId.current = null;
         fetchingProfile.current = false;
@@ -351,6 +441,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    try {
+      // limpar unidade ativa ao deslogar para evitar carry-over entre contas
+      setActiveLocal(null);
+    } catch (e) {
+      void e;
+    }
     setProfile(null);
     setUser(null);
     setSession(null);

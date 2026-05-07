@@ -43,7 +43,7 @@ const defaultTheme: ThemeSettings = {
   density: 'comfortable' as const,
   footer_company_name: 'Eduardo Saba',
   footer_system_version: '1.0.0',
-  sidebar_bg: '#e8e8e8',
+  sidebar_bg: '#e9c4c2',
   sidebar_hover_bg: '#88544c',
   header_bg: '#e9c4c2',
   colors: {

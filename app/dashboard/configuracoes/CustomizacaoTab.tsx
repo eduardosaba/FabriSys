@@ -77,7 +77,7 @@ export default function CustomizacaoTab() {
           name: theme.name || 'Confectio',
           footer_company_name: theme.footer_company_name || 'Eduardo Saba',
           footer_system_version: theme.footer_system_version || '1.0.0',
-          sidebar_bg: '#e8e8e8',
+          sidebar_bg: '#e9c4c2',
           sidebar_hover_bg: '#88544c',
           header_bg: '#e9c4c2',
         };
@@ -166,7 +166,7 @@ export default function CustomizacaoTab() {
     });
 
     // Atualizar campos globais no preview
-    newSettings.sidebar_bg = preset.sidebar_bg || newSettings.sidebar_bg || '#e8e8e8';
+    newSettings.sidebar_bg = preset.sidebar_bg || newSettings.sidebar_bg || '#e9c4c2';
     newSettings.sidebar_hover_bg =
       preset.sidebar_hover_bg || newSettings.sidebar_hover_bg || '#88544c';
     newSettings.header_bg = preset.header_bg || newSettings.header_bg || '#e9c4c2';

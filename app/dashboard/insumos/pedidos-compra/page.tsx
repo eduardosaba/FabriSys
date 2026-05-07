@@ -609,9 +609,14 @@ export default function PedidosCompraPage() {
       .map((it) => {
         const insRef = insumosDisponiveis.find((i) => i.nome === it.insumo?.nome);
         if (!insRef) return null;
-        return { insumo: insRef, quantidade: it.quantidade, itemId: it.id };
+        return {
+          insumo: insRef,
+          quantidade: it.quantidade,
+          itemId: String(it.id), // Convertendo para string para garantir compatibilidade
+        };
       })
-      .filter((v): v is ItemCarrinho => v !== null);
+      // CORREÇÃO DO ERRO 614: Usando interseção de tipos para o predicado
+      .filter((v): v is ItemCarrinho & { itemId: string } => v !== null && v.itemId !== undefined);
 
     setItensPedido(mapped);
     setEditingPedidoId(String(pedido.id));
@@ -622,7 +627,6 @@ export default function PedidosCompraPage() {
   // --- LÓGICA DE IMPRESSÃO ---
   const handleImprimir = (pedido: Pedido) => {
     setPedidoParaImpressao(pedido);
-    // Garantir impressão no próximo frame sem usar setTimeout
     if (typeof window !== 'undefined' && window.requestAnimationFrame) {
       window.requestAnimationFrame(() => window.print());
     } else {
@@ -631,7 +635,8 @@ export default function PedidosCompraPage() {
   };
 
   // Diagnóstico
-  const runDiagnostics = async () => {
+  // Movi runDiagnostics para useCallback para evitar warnings de dependência
+  const runDiagnostics = useCallback(async () => {
     setDiagLoading(true);
     const toastId = toast.loading('Executando diagnóstico...');
     try {
@@ -649,7 +654,24 @@ export default function PedidosCompraPage() {
     } finally {
       setDiagLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        window.__runPedidosDiagnostico = runDiagnostics;
+      } catch {
+        /* ignore */
+      }
+      return () => {
+        try {
+          delete (window as any).__runPedidosDiagnostico;
+        } catch {
+          /* ignore */
+        }
+      };
+    }
+  }, [runDiagnostics]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

@@ -64,7 +64,7 @@
   --botao-pesquisar-ativo: var(--botao-pesquisar-ativo, #1e40af);
 
   /* Sidebar Reativo */
-  --sidebar-bg: var(--sidebar-bg, #e8e8e8);
+  --sidebar-bg: var(--sidebar-bg, #e9c4c2);
   --sidebar-text: var(--sidebar-text, #4a2c2b);
   --sidebar-active-text: var(--sidebar-active-text, #88544c);
 

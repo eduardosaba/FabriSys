@@ -6,14 +6,15 @@ export function setActiveLocal(localId: string | null) {
     } else {
       window.localStorage.removeItem('pdv_active_local');
     }
-    // Dispara um evento para notificar a própria aba da mudança
+    // Dispara um evento customizado para notificar reatividade na mesma aba
     try {
-      window.dispatchEvent(new Event('storage'));
+      const ev = new CustomEvent('pdv_active_local_change', { detail: { localId } });
+      window.dispatchEvent(ev);
     } catch (e) {
-      // noop
+      void e;
     }
   } catch (e) {
-    // noop
+    void e;
   }
 }
 
@@ -22,6 +23,7 @@ export function getActiveLocal(): string | null {
     if (typeof window === 'undefined') return null;
     return window.localStorage.getItem('pdv_active_local');
   } catch (e) {
+    void e;
     return null;
   }
 }

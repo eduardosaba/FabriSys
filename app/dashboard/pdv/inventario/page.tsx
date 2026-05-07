@@ -49,16 +49,37 @@ export default function InventarioPDVPage() {
         (cats || []).forEach((c: any) => (categoriasMap[c.id] = c.nome));
       }
 
+      // Carregar somatório de envios pendentes para este PDV (entradas não confirmadas)
+      const { data: pendentes } = await supabase
+        .from('distribuicao_pedidos')
+        .select('produto_id, quantidade_solicitada')
+        .eq('local_destino_id', idParaCarregar)
+        .neq('status', 'recebido');
+
+      const pendingMap: Record<string, number> = {};
+      (pendentes || []).forEach((row: any) => {
+        const pid = String(row.produto_id);
+        pendingMap[pid] = (pendingMap[pid] || 0) + Number(row.quantidade_solicitada || 0);
+      });
+
       const formatted = (produtos || []).map((p: any) => {
         const est = p.estoque && p.estoque.length ? p.estoque[0] : null;
+        const realQty = Number(est?.quantidade || 0);
+        const pendingIn = pendingMap[String(p.id)] || 0;
+        // Exibir apenas o estoque confirmado (ocultar entradas ainda não confirmadas)
+        const displayedQty = Math.max(0, realQty - pendingIn);
         return {
           id: String(p.id),
-          quantidade: Number(est?.quantidade || 0),
+          quantidade: displayedQty,
           produto_id: p.id,
           produtos_finais: {
             id: p.id,
             nome: p.nome,
             categoria: categoriasMap[p.categoria_id] || '',
+          },
+          __meta: {
+            quantidade_real: realQty,
+            quantidade_pendente: pendingIn,
           },
         };
       });
@@ -331,7 +352,12 @@ export default function InventarioPDVPage() {
 
                   {isAdmin && (
                     <td className="px-6 py-4 text-center font-mono font-bold text-slate-400">
-                      {item.quantidade}
+                      <div>{item.quantidade}</div>
+                      {item.__meta?.quantidade_pendente > 0 && (
+                        <div className="text-[11px] font-semibold text-amber-600 mt-1">
+                          Em trânsito: {item.__meta.quantidade_pendente}
+                        </div>
+                      )}
                     </td>
                   )}
 
@@ -347,6 +373,11 @@ export default function InventarioPDVPage() {
                         setContagens((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
                       }
                     />
+                    {item.__meta?.quantidade_pendente > 0 && (
+                      <div className="text-[11px] text-amber-600 font-medium mt-2 text-center">
+                        Em trânsito: {item.__meta.quantidade_pendente}
+                      </div>
+                    )}
                   </td>
 
                   {isAdmin && (

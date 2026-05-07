@@ -16,7 +16,9 @@ import {
   Merriweather,
 } from 'next/font/google';
 import { ThemeProvider } from '@/lib/theme';
+import FullScreenProvider from '@/lib/fullscreen';
 import { AuthProvider } from '@/lib/auth';
+import { ActiveLocalProvider } from '@/contexts/ActiveLocalContext';
 import { Toaster } from 'sonner';
 import './globals.css';
 
@@ -115,8 +117,12 @@ export default function RootLayout({
       >
         <AuthProvider>
           <ThemeProvider>
-            {children}
-            <Toaster position="top-right" richColors />
+            <FullScreenProvider>
+              <ActiveLocalProvider>
+                {children}
+                <Toaster position="top-right" richColors />
+              </ActiveLocalProvider>
+            </FullScreenProvider>
           </ThemeProvider>
         </AuthProvider>
       </body>

@@ -148,7 +148,7 @@ export default function PedidosCompraPage() {
       return;
     }
 
-    rows = (res.data ?? []) as unknown as RawPedido[];
+    rows = res.data ?? [];
 
     // Enriquecimento de dados (Fornecedores)
     const localMap = new Map<string, string>(fornecedores.map((f) => [String(f.id), f.nome]));
@@ -489,9 +489,7 @@ export default function PedidosCompraPage() {
             });
             if (insertItemRes.error) throw insertItemRes.error;
             // inserted rows count may be in insertItemRes.data
-            insertedCount += Array.isArray(insertItemRes.data as any)
-              ? (insertItemRes.data as any).length
-              : 1;
+            insertedCount += Array.isArray(insertItemRes.data) ? insertItemRes.data.length : 1;
           }
         }
       } else {
@@ -541,8 +539,8 @@ export default function PedidosCompraPage() {
             .from('itens_pedido_compra')
             .insert(itensParaInserir);
           if (insertItemsRes.error) throw insertItemsRes.error;
-          insertedCount += Array.isArray(insertItemsRes.data as any)
-            ? (insertItemsRes.data as any).length
+          insertedCount += Array.isArray(insertItemsRes.data)
+            ? insertItemsRes.data.length
             : itensParaInserir.length;
         }
       }
@@ -611,7 +609,7 @@ export default function PedidosCompraPage() {
       .map((it) => {
         const insRef = insumosDisponiveis.find((i) => i.nome === it.insumo?.nome);
         if (!insRef) return null;
-        return { insumo: insRef, quantidade: it.quantidade, itemId: it.id } as ItemCarrinho;
+        return { insumo: insRef, quantidade: it.quantidade, itemId: it.id };
       })
       .filter((v): v is ItemCarrinho => v !== null);
 
@@ -1100,7 +1098,7 @@ export default function PedidosCompraPage() {
               <img
                 src={
                   getImageUrl(theme?.company_logo_url) ||
-                  getImageUrl(theme?.logo_url as string | undefined) ||
+                  getImageUrl(theme?.logo_url) ||
                   '/logo.png'
                 }
                 alt="Logo"

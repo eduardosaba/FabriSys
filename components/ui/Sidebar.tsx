@@ -1,31 +1,32 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import {
+  BarChart2,
+  Calendar,
+  ChefHat,
+  ChevronRight,
+  ClipboardList,
+  DollarSign,
+  Factory,
+  HelpCircle,
   LayoutDashboard,
   Package,
   Settings,
-  X,
-  ChevronRight,
-  BarChart2,
-  Factory,
+  Shield,
   Star,
-  Calendar,
-  ClipboardList,
-  ChefHat,
-  HelpCircle,
   Store,
   Truck,
-  Shield,
-  DollarSign,
+  X,
 } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { useTheme } from '@/lib/theme';
+import { useReservaRealtime } from '@/hooks/useReservaRealtime';
 import { useAuth } from '@/lib/auth';
-import { supabase } from '@/lib/supabase-client';
 import getImageUrl from '@/lib/getImageUrl';
+import { supabase } from '@/lib/supabase-client';
+import { useTheme } from '@/lib/theme';
 
 // --- Interfaces ---
 interface SidebarChild {
@@ -140,6 +141,12 @@ const sidebarItems: SidebarItem[] = [
     icon: <Truck className="h-5 w-5" />,
     children: [
       { id: 'logistica_expedicao', name: 'Expedição', href: '/dashboard/logistica/expedicao' },
+      {
+        id: 'reservas_seguranca',
+        name: 'Reservas de Segurança',
+        href: '/dashboard/estoque/reservas',
+        allowedRoles: ['admin'],
+      },
     ],
   },
   {
@@ -306,6 +313,47 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
   const { profile } = useAuth();
   const [permissoes, setPermissoes] = useState<Record<string, string[]>>({});
   const [permissoesLoading, setPermissoesLoading] = useState(true);
+  const reservasCount = useReservaRealtime();
+  const [pendentesConferencia, setPendentesConferencia] = useState<number>(0);
+
+  useEffect(() => {
+    // Buscar contagem inicial de fechamentos pendentes e escutar mudanças
+    let mounted = true;
+    const fetchPendentes = async () => {
+      try {
+        const { count } = await supabase
+          .from('pos_fechamentos')
+          .select('*', { count: 'exact', head: true })
+          .eq('status_conferencia', 'pendente');
+        if (!mounted) return;
+        setPendentesConferencia(Number(count || 0));
+      } catch (e) {
+        void e;
+      }
+    };
+    void fetchPendentes();
+
+    const channel = supabase
+      .channel('public:pos_fechamentos:pendentes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_fechamentos' }, () => {
+        void fetchPendentes();
+      })
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      try {
+        channel.unsubscribe();
+      } catch (e) {
+        try {
+          supabase.removeChannel?.(channel);
+        } catch (e2) {
+          void e2;
+        }
+        void e;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     async function carregarPermissoes() {
@@ -344,8 +392,9 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
           ...parseValor(orgData?.valor),
         };
         setPermissoes(merged);
-      } catch {
+      } catch (e) {
         setPermissoes(DEFAULT_PERMISSOES);
+        void e;
       } finally {
         setPermissoesLoading(false);
       }
@@ -629,7 +678,21 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
                             onClick={handleNavClick}
                             className={`block py-2 px-3 rounded-lg text-sm ${pathname === child.href ? 'text-primary font-bold bg-primary/5' : 'text-slate-500 hover:text-primary'}`}
                           >
-                            {child.name}
+                            <div className="flex items-center justify-between">
+                              <span>{child.name}</span>
+                              {child.href === '/dashboard/estoque/reservas' &&
+                                reservasCount > 0 && (
+                                  <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-800 rounded">
+                                    {reservasCount}
+                                  </span>
+                                )}
+                              {child.href === '/dashboard/financeiro/conferencia' &&
+                                pendentesConferencia > 0 && (
+                                  <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium bg-red-600 text-white rounded">
+                                    {pendentesConferencia}
+                                  </span>
+                                )}
+                            </div>
                           </Link>
                           <button
                             onClick={(e) => {

@@ -11,8 +11,8 @@ export interface ThemePreset {
   name: string;
   description: string;
   colors: {
-    light: Partial<ThemeColors>;
-    dark: Partial<ThemeColors>;
+    light: Partial<ThemeColors> & Record<string, any>;
+    dark: Partial<ThemeColors> & Record<string, any>;
   };
   sidebar_bg?: string;
   sidebar_hover_bg?: string;
@@ -22,41 +22,6 @@ export interface ThemePreset {
 // Campos de customização para usuários admin (limitados - apenas cores principais)
 export const ADMIN_FIELDS: ThemeField[] = [
   {
-    key: 'sidebar_text',
-    label: 'Texto do Sidebar',
-    description: 'Cor do texto geral do menu lateral (--sidebar-text)',
-  },
-  {
-    key: 'sidebar_active_text',
-    label: 'Texto do Menu Ativo',
-    description: 'Cor do texto do item ativo do menu lateral (--sidebar-active-text)',
-  },
-  {
-    key: 'sidebar_bg',
-    label: 'Fundo do Sidebar',
-    description: 'Cor de fundo do menu lateral (--sidebar-bg)',
-  },
-  {
-    key: 'sidebar_hover_bg',
-    label: 'Fundo do Sidebar (Hover)',
-    description: 'Cor de fundo do menu lateral ao passar o mouse (--sidebar-hover-bg)',
-  },
-  {
-    key: 'header_bg',
-    label: 'Fundo do Header',
-    description: 'Cor de fundo do cabeçalho (--header-bg)',
-  },
-  {
-    key: 'textoIconeAjuda',
-    label: 'Texto Ícone Ajuda',
-    description: 'Cor do texto do ícone de ajuda (--texto-icone-ajuda)',
-  },
-  {
-    key: 'camposNaoObrigatorios',
-    label: 'Campos Não Obrigatórios',
-    description: 'Cor dos campos não obrigatórios (--campos-nao-obrigatorios)',
-  },
-  {
     key: 'primary',
     label: 'Cor Principal',
     description: 'Cor principal do tema, usada em botões e destaques',
@@ -66,97 +31,288 @@ export const ADMIN_FIELDS: ThemeField[] = [
     label: 'Cor Secundária',
     description: 'Cor secundária para elementos complementares',
   },
-  {
-    key: 'tituloPaginas',
-    label: 'Títulos e Navegação',
-    description: 'Cor dos títulos das páginas e elementos de navegação',
-  },
+  { key: 'accent', label: 'Accent', description: 'Cor de destaque/alertas' },
   {
     key: 'background',
     label: 'Fundo da Interface',
     description: 'Cor de fundo principal da interface',
   },
-  {
-    key: 'text',
-    label: 'Texto Principal',
-    description: 'Cor padrão dos textos na interface',
-  },
-  // nota: o campo 'text' já exposto abaixo cobre o texto principal
-];
-
-// Campos para usuários master (mesmas opções de admin + secundária e botões de pesquisa)
-export const MASTER_FIELDS: ThemeField[] = [
-  {
-    key: 'sidebar_text',
-    label: 'Texto do Sidebar',
-    description: 'Cor do texto geral do menu lateral (--sidebar-text)',
-  },
-  {
-    key: 'sidebar_active_text',
-    label: 'Texto do Menu Ativo',
-    description: 'Cor do texto do item ativo do menu lateral (--sidebar-active-text)',
-  },
-  {
-    key: 'sidebar_bg',
-    label: 'Fundo do Sidebar',
-    description: 'Cor de fundo do menu lateral (--sidebar-bg)',
-  },
-  {
-    key: 'sidebar_hover_bg',
-    label: 'Fundo do Sidebar (Hover)',
-    description: 'Cor de fundo do menu lateral ao passar o mouse (--sidebar-hover-bg)',
-  },
-  {
-    key: 'header_bg',
-    label: 'Fundo do Header',
-    description: 'Cor de fundo do cabeçalho (--header-bg)',
-  },
-  {
-    key: 'textoIconeAjuda',
-    label: 'Texto Ícone Ajuda',
-    description: 'Cor do texto do ícone de ajuda (--texto-icone-ajuda)',
-  },
-  {
-    key: 'camposNaoObrigatorios',
-    label: 'Campos Não Obrigatórios',
-    description: 'Cor dos campos não obrigatórios (--campos-nao-obrigatorios)',
-  },
-  {
-    key: 'primary',
-    label: 'Cor Principal',
-    description: 'Cor principal do tema, usada em botões e destaques',
-  },
+  { key: 'text', label: 'Texto Principal', description: 'Cor padrão dos textos na interface' },
   {
     key: 'tituloPaginas',
     label: 'Títulos e Navegação',
     description: 'Cor dos títulos das páginas e elementos de navegação',
   },
+  { key: 'hover3Submenu', label: 'Hover Submenu', description: 'Cor de hover de itens do submenu' },
+  { key: 'textoGeralHover', label: 'Texto Hover', description: 'Cor de texto ao passar o mouse' },
   {
-    key: 'secondary',
-    label: 'Cor Secundária',
-    description: 'Cor secundária para elementos complementares',
+    key: 'bordasHeaderPerfil',
+    label: 'Bordas Header Perfil',
+    description: 'Cor das bordas do perfil no header',
   },
   {
-    key: 'background',
-    label: 'Fundo da Interface',
-    description: 'Cor de fundo principal da interface',
+    key: 'bordasSelecaoListagens',
+    label: 'Bordas de Seleção',
+    description: 'Cor das bordas em listagens selecionadas',
+  },
+  { key: 'barraDashboard', label: 'Barra Dashboard', description: 'Cor da barra do dashboard' },
+  {
+    key: 'barraDashboardHover',
+    label: 'Barra Dashboard Hover',
+    description: 'Cor da barra do dashboard ao hover',
   },
   {
-    key: 'text',
-    label: 'Texto Principal',
-    description: 'Cor padrão dos textos na interface',
+    key: 'receitasGraficos',
+    label: 'Receitas (gráficos)',
+    description: 'Cor primária dos gráficos de receita',
   },
   {
-    key: 'light_text',
-    label: 'Texto Claro',
-    description: 'Cor do texto principal do tema claro (--light-text)',
+    key: 'receitasGraficosSecundaria',
+    label: 'Receitas (secundária)',
+    description: 'Cor secundária dos gráficos de receita',
+  },
+  {
+    key: 'despesasGraficos',
+    label: 'Despesas (gráficos)',
+    description: 'Cor primária dos gráficos de despesa',
+  },
+  {
+    key: 'despesasGraficosSecundaria',
+    label: 'Despesas (secundária)',
+    description: 'Cor secundária dos gráficos de despesa',
+  },
+  { key: 'barraRolagem', label: 'Barra Rolagem', description: 'Cor da barra de rolagem' },
+  {
+    key: 'barraRolagemFundo',
+    label: 'Barra Rolagem Fundo',
+    description: 'Cor de fundo da barra de rolagem',
+  },
+  { key: 'fundoLinkEAD', label: 'Fundo Link EAD', description: 'Fundo de links EAD' },
+  { key: 'textoLinkEAD', label: 'Texto Link EAD', description: 'Cor do texto dos links EAD' },
+  { key: 'botaoSalvar', label: 'Botão Salvar', description: 'Cor do botão salvar' },
+  {
+    key: 'botaoSalvarAtivo',
+    label: 'Botão Salvar Ativo',
+    description: 'Cor do estado ativo do botão salvar',
+  },
+  {
+    key: 'botaoSalvarDesabilitado',
+    label: 'Botão Salvar Desabilitado',
+    description: 'Cor do botão salvar desabilitado',
+  },
+  { key: 'botaoCancelar', label: 'Botão Cancelar', description: 'Cor do botão cancelar' },
+  {
+    key: 'botaoCancelarAtivo',
+    label: 'Botão Cancelar Ativo',
+    description: 'Cor do estado ativo do botão cancelar',
+  },
+  {
+    key: 'botaoCancelarDesabilitado',
+    label: 'Botão Cancelar Desabilitado',
+    description: 'Cor do botão cancelar desabilitado',
   },
   { key: 'botaoPesquisar', label: 'Botão Pesquisar', description: 'Cor do botão pesquisar' },
   {
     key: 'botaoPesquisarAtivo',
     label: 'Botão Pesquisar Ativo',
-    description: 'Cor do botão pesquisar quando ativo',
+    description: 'Cor do estado ativo do botão pesquisar',
   },
+  {
+    key: 'botaoPesquisarDesabilitado',
+    label: 'Botão Pesquisar Desabilitado',
+    description: 'Cor do botão pesquisar desabilitado',
+  },
+  {
+    key: 'camposObrigatorios',
+    label: 'Campos Obrigatórios',
+    description: 'Cor para indicar campos obrigatórios',
+  },
+  {
+    key: 'camposNaoObrigatorios',
+    label: 'Campos Não Obrigatórios',
+    description: 'Cor dos campos não obrigatórios',
+  },
+  {
+    key: 'barraSuperiorMenu',
+    label: 'Barra Superior Menu',
+    description: 'Cor da barra superior do menu',
+  },
+  {
+    key: 'textoIconeAjuda',
+    label: 'Texto Ícone Ajuda',
+    description: 'Cor do texto do ícone de ajuda',
+  },
+  { key: 'iconeAjuda', label: 'Ícone Ajuda', description: 'Cor do ícone de ajuda' },
+  { key: 'sidebar_bg', label: 'Fundo do Sidebar', description: 'Cor de fundo do menu lateral' },
+  {
+    key: 'sidebar_hover_bg',
+    label: 'Fundo do Sidebar (Hover)',
+    description: 'Cor de fundo do menu lateral ao passar o mouse',
+  },
+  {
+    key: 'sidebar_text',
+    label: 'Texto do Sidebar',
+    description: 'Cor do texto geral do menu lateral',
+  },
+  {
+    key: 'sidebar_active_text',
+    label: 'Texto do Menu Ativo',
+    description: 'Cor do texto do item ativo do menu lateral',
+  },
+  { key: 'header_bg', label: 'Fundo do Header', description: 'Cor de fundo do cabeçalho' },
+  { key: 'footer_bg', label: 'Fundo do Footer', description: 'Cor de fundo do rodapé (opcional)' },
+];
+
+// Campos para usuários master (mesmas opções de admin + secundária e botões de pesquisa)
+export const MASTER_FIELDS: ThemeField[] = [
+  // Mesmos campos do admin, mais adicionais para master
+  {
+    key: 'primary',
+    label: 'Cor Principal',
+    description: 'Cor principal do tema, usada em botões e destaques',
+  },
+  {
+    key: 'secondary',
+    label: 'Cor Secundária',
+    description: 'Cor secundária para elementos complementares',
+  },
+  { key: 'accent', label: 'Accent', description: 'Cor de destaque/alertas' },
+  {
+    key: 'background',
+    label: 'Fundo da Interface',
+    description: 'Cor de fundo principal da interface',
+  },
+  { key: 'text', label: 'Texto Principal', description: 'Cor padrão dos textos na interface' },
+  {
+    key: 'tituloPaginas',
+    label: 'Títulos e Navegação',
+    description: 'Cor dos títulos das páginas e elementos de navegação',
+  },
+  { key: 'hover3Submenu', label: 'Hover Submenu', description: 'Cor de hover de itens do submenu' },
+  { key: 'textoGeralHover', label: 'Texto Hover', description: 'Cor de texto ao passar o mouse' },
+  {
+    key: 'bordasHeaderPerfil',
+    label: 'Bordas Header Perfil',
+    description: 'Cor das bordas do perfil no header',
+  },
+  {
+    key: 'bordasSelecaoListagens',
+    label: 'Bordas de Seleção',
+    description: 'Cor das bordas em listagens selecionadas',
+  },
+  { key: 'barraDashboard', label: 'Barra Dashboard', description: 'Cor da barra do dashboard' },
+  {
+    key: 'barraDashboardHover',
+    label: 'Barra Dashboard Hover',
+    description: 'Cor da barra do dashboard ao hover',
+  },
+  {
+    key: 'receitasGraficos',
+    label: 'Receitas (gráficos)',
+    description: 'Cor primária dos gráficos de receita',
+  },
+  {
+    key: 'receitasGraficosSecundaria',
+    label: 'Receitas (secundária)',
+    description: 'Cor secundária dos gráficos de receita',
+  },
+  {
+    key: 'despesasGraficos',
+    label: 'Despesas (gráficos)',
+    description: 'Cor primária dos gráficos de despesa',
+  },
+  {
+    key: 'despesasGraficosSecundaria',
+    label: 'Despesas (secundária)',
+    description: 'Cor secundária dos gráficos de despesa',
+  },
+  { key: 'barraRolagem', label: 'Barra Rolagem', description: 'Cor da barra de rolagem' },
+  {
+    key: 'barraRolagemFundo',
+    label: 'Barra Rolagem Fundo',
+    description: 'Cor de fundo da barra de rolagem',
+  },
+  { key: 'fundoLinkEAD', label: 'Fundo Link EAD', description: 'Fundo de links EAD' },
+  { key: 'textoLinkEAD', label: 'Texto Link EAD', description: 'Cor do texto dos links EAD' },
+  { key: 'botaoSalvar', label: 'Botão Salvar', description: 'Cor do botão salvar' },
+  {
+    key: 'botaoSalvarAtivo',
+    label: 'Botão Salvar Ativo',
+    description: 'Cor do estado ativo do botão salvar',
+  },
+  {
+    key: 'botaoSalvarDesabilitado',
+    label: 'Botão Salvar Desabilitado',
+    description: 'Cor do botão salvar desabilitado',
+  },
+  { key: 'botaoCancelar', label: 'Botão Cancelar', description: 'Cor do botão cancelar' },
+  {
+    key: 'botaoCancelarAtivo',
+    label: 'Botão Cancelar Ativo',
+    description: 'Cor do estado ativo do botão cancelar',
+  },
+  {
+    key: 'botaoCancelarDesabilitado',
+    label: 'Botão Cancelar Desabilitado',
+    description: 'Cor do botão cancelar desabilitado',
+  },
+  { key: 'botaoPesquisar', label: 'Botão Pesquisar', description: 'Cor do botão pesquisar' },
+  {
+    key: 'botaoPesquisarAtivo',
+    label: 'Botão Pesquisar Ativo',
+    description: 'Cor do estado ativo do botão pesquisar',
+  },
+  {
+    key: 'botaoPesquisarDesabilitado',
+    label: 'Botão Pesquisar Desabilitado',
+    description: 'Cor do botão pesquisar desabilitado',
+  },
+  {
+    key: 'camposObrigatorios',
+    label: 'Campos Obrigatórios',
+    description: 'Cor para indicar campos obrigatórios',
+  },
+  {
+    key: 'camposNaoObrigatorios',
+    label: 'Campos Não Obrigatórios',
+    description: 'Cor dos campos não obrigatórios',
+  },
+  {
+    key: 'barraSuperiorMenu',
+    label: 'Barra Superior Menu',
+    description: 'Cor da barra superior do menu',
+  },
+  {
+    key: 'textoIconeAjuda',
+    label: 'Texto Ícone Ajuda',
+    description: 'Cor do texto do ícone de ajuda',
+  },
+  { key: 'iconeAjuda', label: 'Ícone Ajuda', description: 'Cor do ícone de ajuda' },
+  { key: 'sidebar_bg', label: 'Fundo do Sidebar', description: 'Cor de fundo do menu lateral' },
+  {
+    key: 'sidebar_hover_bg',
+    label: 'Fundo do Sidebar (Hover)',
+    description: 'Cor de fundo do menu lateral ao passar o mouse',
+  },
+  {
+    key: 'sidebar_text',
+    label: 'Texto do Sidebar',
+    description: 'Cor do texto geral do menu lateral',
+  },
+  {
+    key: 'sidebar_active_text',
+    label: 'Texto do Menu Ativo',
+    description: 'Cor do texto do item ativo do menu lateral',
+  },
+  { key: 'header_bg', label: 'Fundo do Header', description: 'Cor de fundo do cabeçalho' },
+  { key: 'footer_bg', label: 'Fundo do Footer', description: 'Cor de fundo do rodapé (opcional)' },
+  // Opções avançadas para Master
+  {
+    key: 'border_radius',
+    label: 'Raio das Bordas',
+    description: 'Raio padrão das bordas (ex: 0.5rem)',
+  },
+  { key: 'font_family', label: 'Fonte', description: 'Família de fonte principal do tema' },
 ];
 
 // Predefinições de temas disponíveis para admin

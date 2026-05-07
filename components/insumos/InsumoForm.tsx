@@ -124,7 +124,7 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
       const categoriaId =
         formData.categoria_id ||
         (initialValues && typeof initialValues === 'object' && 'categoria_id' in initialValues
-          ? (initialValues as { categoria_id?: string }).categoria_id
+          ? initialValues?.categoria_id?.toString()
           : '');
       if (!categoriaId) {
         throw new Error('Categoria é obrigatória.');
@@ -157,7 +157,7 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
       const categoriaId =
         formData.categoria_id ||
         (initialValues && typeof initialValues === 'object' && 'categoria_id' in initialValues
-          ? (initialValues as { categoria_id?: string }).categoria_id
+          ? initialValues?.categoria_id?.toString()
           : '');
 
       const custoPorUE =
@@ -283,7 +283,7 @@ export default function InsumoForm({ onSubmit, onCancel, loading, initialValues 
           value={
             formData.categoria_id ||
             (initialValues && typeof initialValues === 'object' && 'categoria_id' in initialValues
-              ? (initialValues as { categoria_id?: string }).categoria_id
+              ? initialValues?.categoria_id?.toString()
               : '') ||
             ''
           }

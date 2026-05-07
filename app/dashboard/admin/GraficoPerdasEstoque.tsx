@@ -35,7 +35,9 @@ export default function GraficoPerdasEstoque() {
         }));
 
         setDados(formatado);
-        setTotalPrejuizo(data.reduce((acc, curr) => acc + (curr.valor_prejuizo || 0), 0));
+        setTotalPrejuizo(
+          data.reduce((acc: number, curr: any) => acc + (curr.valor_prejuizo || 0), 0)
+        );
       }
     }
     carregarRelatorio();

@@ -112,7 +112,7 @@ export function LogoUploadSection({
       // Obter URL pública (getPublicUrl é síncrono)
       try {
         const { data } = supabase.storage.from(bucketName).getPublicUrl(filePath);
-        const publicUrl = data?.publicUrl || (data as any)?.public_url || null;
+        const publicUrl = data?.publicUrl || data?.public_url || null;
         if (publicUrl) {
           onLogoUrlChange(publicUrl);
           toast.success(`${title} atualizado com sucesso!`);

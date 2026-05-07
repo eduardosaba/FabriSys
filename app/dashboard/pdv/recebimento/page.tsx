@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import Button from '@/components/Button';
+import Loading from '@/components/ui/Loading';
+import PageHeader from '@/components/ui/PageHeader';
 import { setActiveLocal } from '@/lib/activeLocal';
+import { useAuth } from '@/lib/auth';
 import { getOperationalContext } from '@/lib/operationalLocal';
 import { supabase } from '@/lib/supabase-client';
-import PageHeader from '@/components/ui/PageHeader';
-import Loading from '@/components/ui/Loading';
-import { Truck, CheckCircle, Package, MapPin, AlertCircle, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, MapPin, Package, Truck, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import Button from '@/components/Button';
-import { useAuth } from '@/lib/auth';
 
 export default function RecebimentoPage() {
   const { profile, loading: authLoading } = useAuth();
@@ -25,95 +25,74 @@ export default function RecebimentoPage() {
   const [obsRecebimento, setObsRecebimento] = useState<string>('');
   const [pdvOptions, setPdvOptions] = useState<Array<{ id: string; nome: string }>>([]);
   const [selectedPdv, setSelectedPdv] = useState<string | null>(null);
+  const [selectedCargas, setSelectedCargas] = useState<Record<string, boolean>>({});
+  const [bulkReceiving, setBulkReceiving] = useState(false);
 
   // 1. Identificar a Loja Atual (prefere caixa aberto do usuário)
   const carregarLocal = useCallback(async () => {
     try {
-      // Prioridade absoluta: se o profile do usuário já possui `local_id`, use-o
       if (profile?.local_id) {
         setLocalId(profile.local_id);
         setSelectedPdv(profile.local_id);
         await setActiveLocal(profile.local_id);
         return profile.local_id;
       }
-      const ctx = await getOperationalContext(profile);
-      if (ctx.caixa) {
-        setLocalId(ctx.caixa.local_id ?? ctx.localId);
-        setSelectedPdv(ctx.caixa.local_id ?? ctx.localId);
-        return ctx.caixa.local_id ?? ctx.localId;
+
+      // fallback: usar contexto operacional se disponível
+      try {
+        const oc = await getOperationalContext(profile);
+        if (oc?.localId) {
+          setLocalId(oc.localId);
+          setSelectedPdv(oc.localId);
+          await setActiveLocal(oc.localId);
+          return oc.localId;
+        }
+      } catch (e) {
+        // noop
       }
 
-      if (ctx.localId) {
-        setLocalId(ctx.localId);
-        setSelectedPdv(ctx.localId);
-        return ctx.localId;
-      }
-
-      // Fallback: try to pick any PDV configured
-      const { data: locais } = await supabase
-        .from('locais')
-        .select('id, nome')
-        .eq('tipo', 'pdv')
-        .limit(1);
-
-      const meuLocal = locais?.[0];
-      if (meuLocal) {
-        setLocalId(meuLocal.id);
-        setSelectedPdv(meuLocal.id);
-        return meuLocal.id;
-      }
+      return null;
     } catch (err) {
-      console.error('Erro ao carregar local', err);
+      console.error('Erro ao determinar local ativo', err);
+      return null;
     }
-    return null;
   }, [profile]);
 
-  // Carregar lista de PDVs (para admins/ver todos)
   const carregarPdvs = useCallback(async () => {
+    if (!profile?.organization_id) return;
     try {
       const { data } = await supabase
         .from('locais')
         .select('id, nome')
-        .eq('tipo', 'pdv')
+        .eq('organization_id', profile.organization_id)
         .order('nome');
-      setPdvOptions((data || []).map((d: any) => ({ id: d.id, nome: d.nome })));
-      if (!selectedPdv && data && data.length > 0) setSelectedPdv(data[0].id);
+      setPdvOptions((data || []) as any[]);
     } catch (err) {
       console.error('Erro ao carregar PDVs', err);
     }
-  }, [selectedPdv]);
+  }, [profile?.organization_id]);
 
-  // 2. Carregar Cargas (Filtrando pela loja)
   const carregarCargas = useCallback(
-    async (idLoja: string) => {
+    async (pdvId: string | null) => {
+      if (!pdvId) return;
+      setLoading(true);
       try {
-        setLoading(true);
         const { data, error } = await supabase
-          .from('distribuicao_pedidos')
+          .from('distribuicoes')
           .select(
-            `
-          id, quantidade_solicitada, status, created_at, local_destino_id,
-          local:locais!local_destino_id(nome),
-          ordem:ordens_producao!inner(id, numero_op, produto_final_id, status_logistica)
-        `
+            '*, ordem:ordens_producao(id, numero_op, produto_final_id, status_logistica), local:locais(id, nome)'
           )
-          .eq('local_destino_id', idLoja)
-          .eq('organization_id', profile?.organization_id)
-          // aceitar tanto registros 'pendente' (planejados) quanto 'enviado' (confirmados pela expedição)
-          .in('status', ['pendente', 'enviado'] as any[])
+          .eq('local_id', pdvId)
           .order('created_at', { ascending: false });
-
         if (error) throw error;
 
-        // Normalização dos dados e busca dos nomes dos produtos
-        // Filtrar apenas distribuições que foram efetivamente enviadas pela Expedição.
-        // Condição: distribuição com status 'enviado' OU ordem.status_logistica === 'enviado'.
         let norm = (data || []) as any[];
         norm = norm.filter((c: any) => {
           const distSent = String(c.status || '').toLowerCase() === 'enviado';
           const ordemSent = String(c.ordem?.status_logistica || '').toLowerCase() === 'enviado';
           return distSent || ordemSent;
         });
+
         const produtoIds = Array.from(
           new Set(norm.map((c) => String(c.ordem?.produto_final_id)).filter(Boolean))
         );
@@ -138,12 +117,12 @@ export default function RecebimentoPage() {
               numero_op: ordem.numero_op,
               produto: { nome: produtoMap[String(ordem.produto_final_id)]?.nome },
             },
+            local: c.local || {},
           };
         });
 
         setCargas(formatted);
 
-        // Inicializar quantidades/observações com valores padrão
         const qMap: Record<string, number> = {};
         const oMap: Record<string, string> = {};
         (formatted || []).forEach((f: any) => {
@@ -178,6 +157,50 @@ export default function RecebimentoPage() {
     void init();
   }, [carregarLocal, carregarCargas, authLoading]);
 
+  const selectAllCargas = () => {
+    const next: Record<string, boolean> = {};
+    cargas.forEach((c) => (next[c.id] = true));
+    setSelectedCargas(next);
+  };
+
+  const deselectAllCargas = () => setSelectedCargas({});
+
+  const toggleSelectCarga = (id: string, checked?: boolean) => {
+    setSelectedCargas((prev) => ({
+      ...prev,
+      [id]: typeof checked === 'boolean' ? checked : !prev[id],
+    }));
+  };
+
+  const receberSelecionados = async () => {
+    const ids = cargas.map((c) => c.id).filter((id) => selectedCargas[id]);
+    if (!ids.length) return toast.error('Nenhuma carga selecionada.');
+    setBulkReceiving(true);
+    const toastId = toast.loading(`Processando ${ids.length} recebimentos...`);
+    try {
+      for (const id of ids) {
+        try {
+          const quant = Number(quantidades[id] ?? 0);
+          const obs = observacoes[id] ?? null;
+          // processar um por um para respeitar validações e RPC
+
+          await confirmarRecebimento(id, quant, obs);
+        } catch (err) {
+          console.warn('Falha ao receber carga em lote', id, err);
+        }
+      }
+      toast.success('Recebimentos processados', { id: toastId });
+      setSelectedCargas({});
+      if (selectedPdv) await carregarCargas(selectedPdv);
+      else if (localId) await carregarCargas(localId);
+    } catch (err) {
+      console.error('Erro no recebimento em lote', err);
+      toast.error('Erro ao processar recebimentos', { id: toastId });
+    } finally {
+      setBulkReceiving(false);
+    }
+  };
+
   const confirmarRecebimento = async (
     id: string,
     quantidadeParam?: number,
@@ -190,11 +213,11 @@ export default function RecebimentoPage() {
         typeof quantidadeParam === 'number' ? quantidadeParam : Number(quantidades[id] ?? 0);
       const p_obs =
         typeof observacaoParam === 'string' ? observacaoParam : (observacoes[id] ?? null);
-      const { data, error } = (await supabase.rpc('confirmar_recebimento_pdv', {
+      const { data, error } = await supabase.rpc('confirmar_recebimento_pdv', {
         p_distribuicao_id: id,
         p_quantidade: p_quant,
         p_observacao: p_obs,
-      })) as any;
+      });
       if (error) throw error;
 
       // Atualizar histórico de envio (não-fatal)
@@ -234,17 +257,26 @@ export default function RecebimentoPage() {
 
   const handleConfirmarFinal = async () => {
     if (!cargaSelecionada) return;
+    // Bloqueio: se a quantidade informada exceder 10% da enviada, exigir verificação/observação
+    const enviado = Number(cargaSelecionada?.quantidade_solicitada || 0);
+    if (enviado > 0 && qtdRecebida > enviado * 1.1) {
+      toast.error(
+        'Quantidade informada é muito superior à enviada. Verifique antes de confirmar e registre uma observação.'
+      );
+      return;
+    }
+
     if (qtdRecebida !== cargaSelecionada?.quantidade_solicitada && !obsRecebimento) {
       toast.error('Por favor, relate o motivo da diferença na observação.');
       return;
     }
     try {
       setLoading(true);
-      const { data, error } = (await supabase.rpc('confirmar_recebimento_pdv', {
+      const { data, error } = await supabase.rpc('confirmar_recebimento_pdv', {
         p_distribuicao_id: cargaSelecionada.id,
         p_quantidade: qtdRecebida,
         p_observacao: obsRecebimento || null,
-      })) as any;
+      });
       if (error) throw error;
 
       // Se a RPC realizou apenas a atualização de estoque, marcamos a OP como entregue
@@ -319,6 +351,35 @@ export default function RecebimentoPage() {
               </option>
             ))}
           </select>
+        </div>
+      )}
+
+      {cargas.length > 0 && (
+        <div className="max-w-5xl mx-auto mt-2 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={selectAllCargas}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            Selecionar todos
+          </button>
+          <button
+            type="button"
+            onClick={deselectAllCargas}
+            className="text-sm text-gray-500 hover:underline"
+          >
+            Desmarcar
+          </button>
+          <button
+            type="button"
+            onClick={receberSelecionados}
+            disabled={bulkReceiving || Object.values(selectedCargas).filter(Boolean).length === 0}
+            className="ml-4 px-3 py-2 bg-emerald-600 text-white rounded disabled:opacity-50"
+          >
+            {bulkReceiving
+              ? 'Processando...'
+              : `Receber selecionados (${Object.values(selectedCargas).filter(Boolean).length})`}
+          </button>
         </div>
       )}
 

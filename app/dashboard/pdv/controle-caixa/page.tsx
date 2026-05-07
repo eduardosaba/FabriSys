@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getOperationalContext } from '@/lib/operationalLocal';
 import { setActiveLocal, getActiveLocal } from '@/lib/activeLocal';
+import { useActiveLocal } from '@/contexts/ActiveLocalContext';
 import { supabase } from '@/lib/supabase';
 import PageHeader from '@/components/ui/PageHeader';
 import Loading from '@/components/ui/Loading';
@@ -75,6 +76,12 @@ export default function ControleCaixaPage() {
     setValorTotalDescontos((prev) => (prev !== total ? total : prev));
     setPromosAplicadas(lista);
   }, []);
+
+  // Sincroniza localId com o contexto global de unidade ativa
+  const { activeLocalId } = useActiveLocal();
+  useEffect(() => {
+    if (activeLocalId) setLocalId(activeLocalId);
+  }, [activeLocalId]);
 
   const carregarEstado = useCallback(async () => {
     if (!profile?.id) {
@@ -421,18 +428,29 @@ export default function ControleCaixaPage() {
     if (!valoresFechamento.dinheiro) return toast.error('Informe o dinheiro em caixa');
 
     // Validações específicas por modo
+    // Se operando por inventário, tratar campos em branco como "vendido total"
+    // e pedir confirmação ao operador. Ao confirmar, preencheremos com 0 e
+    // enviaremos para conferência do Admin.
+    let produtosParaEnviar = produtosParaContar;
     if (modoPdv === 'inventario') {
       const naoContados = produtosParaContar.filter((p) => p.estoque_contado === '');
       if (naoContados.length > 0) {
+        const nomes = naoContados.map((p) => p.nome).join(', ');
         const confirmed = await confirmDialog.confirm({
-          title: 'Produtos Não Contados',
-          message: `Atenção: ${naoContados.length} produtos não foram contados. O sistema assumirá que não houve vendas deles. Continuar?`,
-          confirmText: 'Continuar',
+          title: 'Confirmar Venda Total?',
+          message: `Os itens não contados (${nomes}) estão em branco. Confirmar que foram TOTALMENTE VENDIDOS? Ao confirmar, esses itens serão enviados como 0 (vendidos totalmente).`,
+          confirmText: 'Confirmar Venda Total',
           cancelText: 'Cancelar',
           variant: 'warning',
         });
 
         if (!confirmed) return;
+
+        const produtosAtualizados = produtosParaContar.map((p) =>
+          p.estoque_contado === '' ? { ...p, estoque_contado: 0 } : p
+        );
+        produtosParaEnviar = produtosAtualizados;
+        setProdutosParaContar(produtosAtualizados);
       }
     }
 
@@ -441,7 +459,7 @@ export default function ControleCaixaPage() {
 
       // A. Se for Modo Inventário, processa automaticamente sobras e perdas via RPC
       if (modoPdv === 'inventario') {
-        const contagemParaSql: ItemContagemProjetado[] = produtosParaContar.map((p) => ({
+        const contagemParaSql: ItemContagemProjetado[] = produtosParaEnviar.map((p) => ({
           produto_id: p.id,
           sobra: Number(p.estoque_contado || 0),
           perda: Number((p as any).estoque_perda || 0),

@@ -36,12 +36,12 @@ export default function ProdutoFichaRedirectPage() {
 
         if (cancelled) return;
 
-        if (error && (error as any)?.code !== 'PGRST116') {
+        if (error && error?.code !== 'PGRST116') {
           // erro inesperado
           console.error('Erro ao buscar ficha por produto:', error);
         }
 
-        const slug = data && (data as any).slug;
+        const slug = data && data.slug;
 
         // Decide se usuário pode abrir em edição
         const canEdit =

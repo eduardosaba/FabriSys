@@ -153,6 +153,8 @@ export default function KanbanPage() {
   const [ordens, setOrdens] = useState<OrdemKanban[]>([]);
   const [loading, setLoading] = useState(true);
   const [movendo, setMovendo] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMoving, setBulkMoving] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [ordensHasStatusLogistica, setOrdensHasStatusLogistica] = useState(false);
   const [validStatusLogisticaValues, setValidStatusLogisticaValues] = useState<string[] | null>(
@@ -338,15 +340,76 @@ export default function KanbanPage() {
     };
   }, [authLoading, profile?.organization_id]);
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id);
+      else s.add(id);
+      return s;
+    });
+  };
+
+  const selectAllInColumn = (colId: string) => {
+    const ids = ordens.filter((o) => o.estagio === colId).map((o) => o.id);
+    setSelectedIds((prev) => {
+      const s = new Set(prev);
+      ids.forEach((id) => s.add(id));
+      return s;
+    });
+  };
+
+  const deselectAllInColumn = (colId: string) => {
+    const ids = ordens.filter((o) => o.estagio === colId).map((o) => o.id);
+    setSelectedIds((prev) => {
+      const s = new Set(prev);
+      ids.forEach((id) => s.delete(id));
+      return s;
+    });
+  };
+
+  const moverOrdensSelecionadas = async (colId: string) => {
+    const ids = ordens
+      .filter((o) => o.estagio === colId)
+      .map((o) => o.id)
+      .filter((id) => selectedIds.has(id));
+    if (ids.length === 0) return;
+    setBulkMoving(true);
+    const toastId = toast.loading(`Movendo ${ids.length} ordens...`);
+    try {
+      for (const id of ids) {
+        try {
+          // usar a função existente para manter comportamentos e toasts
+
+          await moverOrdem(id, colId);
+        } catch (e) {
+          console.warn('Erro movendo ordem em lote:', id, e);
+        }
+      }
+      toast.success('Movimentação em lote concluída', { id: toastId });
+      // limpar seleção das ordens movidas
+      setSelectedIds((prev) => {
+        const s = new Set(prev);
+        ids.forEach((i) => s.delete(i));
+        return s;
+      });
+      await carregarKanban();
+    } catch (err) {
+      console.error('Erro ao mover ordens selecionadas:', err);
+      toast.error('Erro ao mover ordens selecionadas', { id: toastId });
+    } finally {
+      setBulkMoving(false);
+    }
+  };
+
   // Verifica se a coluna `status_logistica` existe e carrega valores distintos
   useEffect(() => {
     const loadStatusInfo = async () => {
       if (!profile?.organization_id) return;
       try {
-        const { data: hasCol } = (await supabase.rpc('has_column', {
+        const { data: hasCol } = await supabase.rpc('has_column', {
           p_table_name: 'ordens_producao',
           p_column_name: 'status_logistica',
-        })) as any;
+        });
         setOrdensHasStatusLogistica(Boolean(hasCol));
 
         if (hasCol) {
@@ -359,7 +422,7 @@ export default function KanbanPage() {
             const vals = Array.from(
               new Set((data || []).map((r: any) => r.status_logistica).filter(Boolean))
             );
-            setValidStatusLogisticaValues(vals);
+            setValidStatusLogisticaValues(vals as string[]);
           }
         }
       } catch (err) {
@@ -602,8 +665,8 @@ export default function KanbanPage() {
           .limit(1)
           .maybeSingle();
 
-        const distrib = (ordemRow as any)?.distribuicao || [];
-        const produtoId = (ordemRow as any)?.produto_final_id ?? null;
+        const distrib = ordemRow?.distribuicao || [];
+        const produtoId = ordemRow?.produto_final_id ?? null;
 
         for (const dest of distrib) {
           try {
@@ -615,7 +678,7 @@ export default function KanbanPage() {
                 .ilike('nome', dest.local)
                 .limit(1)
                 .maybeSingle();
-              localId = (localRow as any)?.id ?? null;
+              localId = localRow?.id ?? null;
             } catch (e) {
               console.warn('Não foi possível resolver local por nome:', dest.local, e);
             }
@@ -729,7 +792,7 @@ export default function KanbanPage() {
             .limit(1)
             .maybeSingle();
 
-          const localId = (localData as any)?.id ?? null;
+          const localId = localData?.id ?? null;
 
           const upsertBody: any = {
             ordem_producao_id: ordemParaExpedir.id,
@@ -818,17 +881,6 @@ export default function KanbanPage() {
               />
             </div>
           ) : null}
-
-          <div className="ml-2">
-            <Button
-              variant="secondary"
-              onClick={() => void toggleFullscreen()}
-              className="flex items-center gap-2"
-            >
-              {isFullscreen ? <X size={16} /> : <KanbanIcon size={16} />}
-              {isFullscreen ? 'Sair da Tela Cheia' : 'Modo Foco (Tela Cheia)'}
-            </Button>
-          </div>
         </div>
       </PageHeader>
 
@@ -843,10 +895,48 @@ export default function KanbanPage() {
                 className={`flex flex-col w-80 rounded-xl border-t-4 ${coluna.cor} bg-white shadow-sm h-full`}
               >
                 <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                  <h3 className="font-bold text-gray-700">{coluna.label}</h3>
-                  <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full font-bold">
-                    {ordensColuna.length}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-bold text-gray-700">{coluna.label}</h3>
+                    <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full font-bold">
+                      {ordensColuna.length}
+                    </span>
+                    <div className="hidden sm:flex items-center gap-2">
+                      <button
+                        onClick={() => selectAllInColumn(coluna.id)}
+                        className="text-xs text-blue-600 hover:underline"
+                        type="button"
+                      >
+                        Selecionar todos
+                      </button>
+                      <button
+                        onClick={() => deselectAllInColumn(coluna.id)}
+                        className="text-xs text-gray-500 hover:underline"
+                        type="button"
+                      >
+                        Desmarcar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {Array.from(selectedIds).filter((id) => ordensColuna.some((o) => o.id === id))
+                      .length > 0 ? (
+                      <button
+                        onClick={() => void moverOrdensSelecionadas(coluna.id)}
+                        disabled={bulkMoving}
+                        className="text-sm px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                        type="button"
+                      >
+                        Mover selecionados (
+                        {
+                          Array.from(selectedIds).filter((id) =>
+                            ordensColuna.some((o) => o.id === id)
+                          ).length
+                        }
+                        )
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2 space-y-3 bg-gray-50/30">
@@ -864,6 +954,15 @@ export default function KanbanPage() {
                         key={ordem.id}
                         className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all"
                       >
+                        <div className="flex items-start justify-end mb-2">
+                          <input
+                            type="checkbox"
+                            aria-label={`Selecionar OP ${ordem.numero_op}`}
+                            checked={selectedIds.has(ordem.id)}
+                            onChange={() => toggleSelect(ordem.id)}
+                            className="w-4 h-4 mt-0.5"
+                          />
+                        </div>
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex flex-col gap-1">
                             <span className="text-[10px] font-mono text-gray-500 bg-gray-100 px-1 rounded w-fit">

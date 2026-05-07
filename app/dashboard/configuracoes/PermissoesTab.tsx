@@ -168,7 +168,7 @@ export default function PermissoesTab() {
             ...(parsedGlobal || {}),
             ...(parsedOrg || {}),
           };
-          setPermissoes(merged as Record<string, string[]>);
+          setPermissoes(merged);
         } else {
           const { data, error } = await supabase
             .from('configuracoes_sistema')
@@ -223,7 +223,7 @@ export default function PermissoesTab() {
     setSaving(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
-      const session = (sessionData as any)?.session;
+      const session = sessionData?.session;
       if (!session?.user) {
         toast.error('Você precisa estar logado para salvar as permissões');
         setSaving(false);

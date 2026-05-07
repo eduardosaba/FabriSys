@@ -211,8 +211,8 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
               .from('produtos_finais')
               .insert({ ...payload, created_by: user?.id });
             if (res.error) {
-              const code = (res.error as any)?.code;
-              const msg = String((res.error as any)?.message || '');
+              const code = res.error?.code;
+              const msg = String(res.error?.message || '');
               // Se for conflito em codigo_interno, tentar gerar outro e reenviar
               if (
                 code === '23505' ||

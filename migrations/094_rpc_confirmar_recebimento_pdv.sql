@@ -2,6 +2,10 @@
 -- RPC para confirmar recebimento no PDV e creditar estoque_produtos
 BEGIN;
 
+-- Garantir remoção de versões antigas da função para evitar erro 42P13
+DROP FUNCTION IF EXISTS public.confirmar_recebimento_pdv(uuid, numeric, text);
+DROP FUNCTION IF EXISTS public.confirmar_recebimento_pdv(uuid, numeric);
+
 CREATE OR REPLACE FUNCTION public.confirmar_recebimento_pdv(
   p_distribuicao_id uuid,
   p_quantidade numeric DEFAULT NULL,
@@ -11,14 +15,23 @@ DECLARE
   v_produto_id uuid;
   v_quant_solicitada numeric;
   v_local_destino uuid;
+  v_quant_recebida numeric;
   v_status text;
 BEGIN
-  -- Buscar registro de distribuição
-  SELECT produto_id, quantidade_solicitada, local_destino_id, status
-  INTO v_produto_id, v_quant_solicitada, v_local_destino, v_status
-  FROM public.distribuicao_pedidos
-  WHERE id = p_distribuicao_id
-  FOR UPDATE;
+  -- Buscar registro de distribuição (inclui quantidade_recebida se existir)
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='distribuicao_pedidos' AND column_name='quantidade_recebida') THEN
+    SELECT produto_id, quantidade_solicitada, local_destino_id, status, quantidade_recebida
+    INTO v_produto_id, v_quant_solicitada, v_local_destino, v_status, v_quant_recebida
+    FROM public.distribuicao_pedidos
+    WHERE id = p_distribuicao_id
+    FOR UPDATE;
+  ELSE
+    SELECT produto_id, quantidade_solicitada, local_destino_id, status
+    INTO v_produto_id, v_quant_solicitada, v_local_destino, v_status
+    FROM public.distribuicao_pedidos
+    WHERE id = p_distribuicao_id
+    FOR UPDATE;
+  END IF;
 
   IF v_produto_id IS NULL THEN
     RAISE EXCEPTION 'Distribuição não encontrada: %', p_distribuicao_id;
@@ -28,9 +41,19 @@ BEGIN
     RETURN jsonb_build_object('success', true, 'message', 'Já recebido');
   END IF;
 
+  -- Se já houver uma quantidade registrada na distribuição, tratar como idempotente
+  IF v_quant_recebida IS NOT NULL THEN
+    RETURN jsonb_build_object('success', true, 'message', 'Já recebeu: quantidade registrada anteriormente', 'quantidade_recebida', v_quant_recebida);
+  END IF;
+
   -- Quantidade efetiva a creditar
   IF p_quantidade IS NULL THEN
     p_quantidade := v_quant_solicitada;
+  END IF;
+
+  -- Validação de divergência crítica (ex: digitou o total do estoque em vez da quantidade enviada)
+  IF v_quant_solicitada IS NOT NULL AND p_quantidade > v_quant_solicitada * 1.1 THEN
+    RAISE EXCEPTION 'Quantidade informada (%) é muito superior à enviada (%). Verifique se não está somando com o estoque antigo!', p_quantidade, v_quant_solicitada;
   END IF;
 
   -- Creditar em estoque_produtos (upsert)
@@ -73,7 +96,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Conceder execução para roles padrões da API
+-- Compatibilidade: criar overload com 2 parâmetros que delega ao 3º (NULL)
+CREATE OR REPLACE FUNCTION public.confirmar_recebimento_pdv(
+  p_distribuicao_id uuid,
+  p_quantidade numeric
+) RETURNS jsonb AS $$
+BEGIN
+  RETURN public.confirmar_recebimento_pdv(p_distribuicao_id, p_quantidade, NULL);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Conceder execução para roles padrões da API (ambas as assinaturas)
+GRANT EXECUTE ON FUNCTION public.confirmar_recebimento_pdv(uuid, numeric, text) TO anon;
+GRANT EXECUTE ON FUNCTION public.confirmar_recebimento_pdv(uuid, numeric, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.confirmar_recebimento_pdv(uuid, numeric) TO anon;
 GRANT EXECUTE ON FUNCTION public.confirmar_recebimento_pdv(uuid, numeric) TO authenticated;
 

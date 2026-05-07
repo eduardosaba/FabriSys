@@ -111,7 +111,10 @@ export default function UsuariosPage() {
           try {
             const { error: profErr } = await supabase
               .from('profiles')
-              .upsert({ id: editingId, role: formData.role, nome: formData.nome }, { onConflict: 'id' });
+              .upsert(
+                { id: editingId, role: formData.role, nome: formData.nome },
+                { onConflict: 'id' }
+              );
             if (profErr) console.warn('profiles upsert warning', profErr);
           } catch (e) {
             console.warn('Erro ao sincronizar profiles:', e);
@@ -129,9 +132,10 @@ export default function UsuariosPage() {
         return 'created';
       })();
 
-      const result = await toast.promise(savePromise as unknown as Promise<any>, {
+      const result = await toast.promise(savePromise, {
         loading: 'Salvando usuário...',
-        success: (res) => (res === 'created' ? 'Usuário criado com sucesso!' : 'Dados atualizados!'),
+        success: (res) =>
+          res === 'created' ? 'Usuário criado com sucesso!' : 'Dados atualizados!',
         error: (err) => `Erro: ${err?.message || ''}`,
       });
 
@@ -235,10 +239,10 @@ export default function UsuariosPage() {
                       className={
                         'px-2 py-1 rounded text-xs font-bold border uppercase ' +
                         (user.role === 'admin'
-                              ? 'bg-purple-50 text-purple-700 border-purple-200'
-                              : user.role === 'master'
-                                ? 'bg-slate-800 text-white border-slate-900'
-                                : 'bg-blue-50 text-blue-700 border-blue-200')
+                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                          : user.role === 'master'
+                            ? 'bg-slate-800 text-white border-slate-900'
+                            : 'bg-blue-50 text-blue-700 border-blue-200')
                       }
                     >
                       {user.role}

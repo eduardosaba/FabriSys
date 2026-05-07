@@ -47,12 +47,8 @@ export default function SistemaTab() {
               .select('logo_scale')
               .eq('chave', 'visual_identity')
               .maybeSingle();
-            if (
-              vdata &&
-              (vdata as any).logo_scale !== undefined &&
-              (vdata as any).logo_scale !== null
-            ) {
-              const parsed = Number((vdata as any).logo_scale);
+            if (vdata && vdata.logo_scale !== undefined && vdata.logo_scale !== null) {
+              const parsed = Number(vdata.logo_scale);
               if (!Number.isNaN(parsed)) setLogoScale(parsed);
             }
           } catch (e) {
@@ -74,7 +70,7 @@ export default function SistemaTab() {
     setSaving(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
-      const session = (sessionData as any)?.session;
+      const session = sessionData?.session;
       if (!session?.user) {
         toast.error('Você precisa estar logado para salvar as configurações');
         setSaving(false);
@@ -91,7 +87,7 @@ export default function SistemaTab() {
             .eq('id', session.user.id)
             .maybeSingle();
           if (profErr) throw profErr;
-          resolvedOrgId = (profileData as any)?.organization_id ?? null;
+          resolvedOrgId = profileData?.organization_id ?? null;
         } catch (e) {
           console.warn('Não foi possível resolver organization_id do perfil:', e);
           resolvedOrgId = null;
@@ -132,7 +128,7 @@ export default function SistemaTab() {
 
           if (existingErr) throw existingErr;
 
-          if (existing && (existing as any).chave) {
+          if (existing && existing.chave) {
             const { error: idUpdateErr } = await supabase
               .from('configuracoes_sistema')
               .update({ valor, updated_at })
@@ -147,7 +143,7 @@ export default function SistemaTab() {
               .from('configuracoes_sistema')
               .insert(payload);
             if (insertErr) {
-              if ((insertErr as any).code === '23505') {
+              if (insertErr.code === '23505') {
                 const { error: conflictUpdateErr } = await supabase
                   .from('configuracoes_sistema')
                   .update({ valor, updated_at })
@@ -166,7 +162,7 @@ export default function SistemaTab() {
         return anyChanged;
       })();
 
-      const result = await toast.promise(savePromise as unknown as Promise<any>, {
+      const result = await toast.promise(savePromise, {
         loading: 'Salvando configurações...',
         success: (anyChanged) =>
           anyChanged ? 'Regras do sistema atualizadas!' : 'Nenhuma alteração necessária',

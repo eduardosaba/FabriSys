@@ -29,7 +29,7 @@ export default function CustomizacaoTab() {
   useEffect(() => {
     if (!theme) return;
     const themeMode = theme.theme_mode === 'system' ? 'light' : theme.theme_mode || 'light';
-    const themeColors = theme.colors?.[themeMode] as import('@/lib/types').ThemeColors | undefined;
+    const themeColors = theme.colors?.[themeMode];
     if (themeColors && typeof themeColors === 'object') {
       Object.entries(themeColors).forEach(([key, value]) => {
         const colorValue = typeof value === 'string' ? value : String(value);
@@ -64,7 +64,7 @@ export default function CustomizacaoTab() {
     if (!profile?.id) return;
 
     const themeMode = theme.theme_mode;
-    const themeColors = theme.colors;
+    const themeColors = theme.colors as Record<string, any> | undefined;
     if (themeColors && typeof themeColors === 'object' && themeMode in themeColors) {
       const currentColors = themeColors[themeMode as keyof typeof themeColors];
       if (currentColors && typeof currentColors === 'object') {
@@ -131,7 +131,7 @@ export default function CustomizacaoTab() {
             ...appliedPreset.colors,
             [mode]: presetColorsForMode,
           },
-        } as typeof appliedPreset;
+        };
 
         // também atualizar campos globais (sidebar_bg, sidebar_hover_bg, header_bg)
         if (key === 'sidebar_bg' || key === 'sidebar_hover_bg' || key === 'header_bg') {
@@ -152,33 +152,42 @@ export default function CustomizacaoTab() {
   // Handler para aplicar predefinição
   const handleApplyPreset = (preset: ThemePreset) => {
     // Aplicando predefinição: preparar settings para preview
-    // Aplica as cores do preset para ambos os modos
     const newSettings = { ...settings };
     const lightColors = preset.colors.light || {};
     const darkColors = preset.colors.dark || {};
 
-    // Atualiza settings com as cores do modo atual (para preview)
-    const themeMode = theme.theme_mode;
-    const currentModeColors = themeMode === 'light' ? lightColors : darkColors;
+    // Determinar quais cores aplicar ao preview baseado no modo atual
+    const themeMode = theme.theme_mode === 'system' ? 'light' : theme.theme_mode;
+    const currentModeColors = preset.colors[themeMode] || {};
 
+    // Atualizar o estado 'settings' (o que aparece nos inputs)
     Object.entries(currentModeColors).forEach(([key, value]) => {
       newSettings[key] = typeof value === 'string' ? value : String(value);
     });
 
-    // Aplica campos globais do preset (sidebar_bg, sidebar_hover_bg, header_bg, sidebar_text, sidebar_active_text)
+    // Atualizar campos globais no preview
     newSettings.sidebar_bg = preset.sidebar_bg || newSettings.sidebar_bg || '#e8e8e8';
     newSettings.sidebar_hover_bg =
       preset.sidebar_hover_bg || newSettings.sidebar_hover_bg || '#88544c';
     newSettings.header_bg = preset.header_bg || newSettings.header_bg || '#e9c4c2';
-    if ('sidebar_text' in currentModeColors && typeof currentModeColors.sidebar_text === 'string')
-      newSettings.sidebar_text = currentModeColors.sidebar_text;
-    if (
-      'sidebar_active_text' in currentModeColors &&
-      typeof currentModeColors.sidebar_active_text === 'string'
-    )
-      newSettings.sidebar_active_text = currentModeColors.sidebar_active_text;
 
-    // newSettings atualizado com campos globais do preset
+    // ATENÇÃO: Aplicar variáveis CSS IMEDIATAMENTE para o usuário ver a mudança
+    try {
+      Object.entries(currentModeColors).forEach(([key, value]) => {
+        if (typeof value === 'string' && value) {
+          document.documentElement.style.setProperty(`--${key}`, value);
+          document.documentElement.style.setProperty(`--${themeMode}-${key}`, value);
+        }
+      });
+      if (preset.sidebar_bg)
+        document.documentElement.style.setProperty('--sidebar-bg', preset.sidebar_bg);
+      if (preset.sidebar_hover_bg)
+        document.documentElement.style.setProperty('--sidebar-hover-bg', preset.sidebar_hover_bg);
+      if (preset.header_bg)
+        document.documentElement.style.setProperty('--header-bg', preset.header_bg);
+    } catch (e) {
+      void e;
+    }
 
     // Validação simples de contraste para modo dark
     const darkBg = darkColors?.background ?? '#4a2c2b';
@@ -194,11 +203,10 @@ export default function CustomizacaoTab() {
     if (contrast < 0.3) {
       toast.error('Atenção: as cores do modo escuro podem não ter contraste suficiente!');
     } else {
-      toast.success(
-        `Predefinição "${preset.name}" aplicada! As cores serão salvas para ambos os modos (light e dark) quando você clicar em "Salvar Customização".`
-      );
+      toast.success(`Preview do tema "${preset.name}" aplicado! Clique em Salvar para confirmar.`);
     }
 
+    // Aplicar preset em memória e atualizar inputs
     setAppliedPreset(preset);
     setSettings(newSettings);
   };
@@ -207,7 +215,7 @@ export default function CustomizacaoTab() {
   const handleSave = async () => {
     try {
       const themeMode = theme.theme_mode;
-      const themeColors = theme.colors;
+      const themeColors = theme.colors as Record<string, any> | undefined;
       if (!themeColors || typeof themeColors !== 'object') return;
 
       const updatedSettings = { ...theme };
@@ -231,13 +239,19 @@ export default function CustomizacaoTab() {
         const lightColors = appliedPreset.colors.light || {};
         const darkColors = appliedPreset.colors.dark || {};
 
+        // Merge com as cores já presentes no tema (garante que chaves faltantes sejam preservadas)
+        const existingLight = (theme.colors && (theme.colors as any).light) || {};
+        const existingDark = (theme.colors && (theme.colors as any).dark) || {};
+
         // Preparar configurações para light (cast seguro via unknown para satisfazer o TS)
         const lightUpdatedColors = {
+          ...existingLight,
           ...(lightColors || {}),
         } as unknown as import('@/lib/types').ThemeColors;
 
         // Preparar configurações para dark (cast seguro via unknown para satisfazer o TS)
         const darkUpdatedColors = {
+          ...existingDark,
           ...(darkColors || {}),
         } as unknown as import('@/lib/types').ThemeColors;
 
@@ -285,7 +299,9 @@ export default function CustomizacaoTab() {
             if (!verify) {
               toast('Configuração salva localmente; persistência no servidor não confirmada.', {
                 icon: '⚠️',
-              } as any);
+              });
+            } else {
+              toast.success('Persistência confirmada no servidor');
             }
           }
         } catch (err) {
@@ -343,7 +359,7 @@ export default function CustomizacaoTab() {
           colors: {
             ...themeColors,
             [themeMode]: updatedColors,
-          },
+          } as any,
         };
 
         // Salvar configurações específicas do usuário admin
@@ -365,7 +381,9 @@ export default function CustomizacaoTab() {
             if (!verify) {
               toast('Configuração salva localmente; persistência no servidor não confirmada.', {
                 icon: '⚠️',
-              } as any);
+              });
+            } else {
+              toast.success('Persistência confirmada no servidor');
             }
           }
         } catch (err) {
@@ -408,9 +426,9 @@ export default function CustomizacaoTab() {
       );
     } else {
       // Extrair do tema atual e do settings
-      const themeColors = theme.colors || {};
-      colorsForLight = { ...(themeColors.light || {}) } as unknown as Record<string, string>;
-      colorsForDark = { ...(themeColors.dark || {}) } as unknown as Record<string, string>;
+      const themeColors = (theme.colors || {}) as Record<string, any>;
+      colorsForLight = { ...(themeColors.light || {}) } as Record<string, string>;
+      colorsForDark = { ...(themeColors.dark || {}) } as Record<string, string>;
 
       // sobrepor com settings do usuário
       Object.entries(settings).forEach(([k, v]) => {
@@ -429,7 +447,7 @@ export default function CustomizacaoTab() {
         light: colorsForLight,
         dark: colorsForDark,
       },
-    } as ThemePreset;
+    };
   };
 
   // Persistir predefinição no campo colors_json do registro user_theme_colors para ambos os modos

@@ -116,7 +116,7 @@ export default function ContasPagarPage() {
     try {
       const result = await Tesseract.recognize(file, 'por+eng', {
         logger: (m: any) => console.log(m),
-      } as any);
+      });
       const text = result?.data?.text || '';
 
       const regexValor = /(?:TOTAL|VALOR|PAGO|PAGAR).*?(\d+[,.]\d{2})/gi;

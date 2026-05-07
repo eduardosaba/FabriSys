@@ -3,6 +3,8 @@ import Image from 'next/image';
 import { useTheme } from '../lib/theme';
 import { useAuth } from '@/lib/auth';
 import { useEffect, useState } from 'react';
+import { ExternalLink, X } from 'lucide-react';
+import { useFullScreenSafe } from '@/lib/fullscreen';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase-client';
 import getImageUrl from '@/lib/getImageUrl';
@@ -42,7 +44,7 @@ export default function Header({ onMenuClick }: Props) {
           .eq('local_id', fab.id)
           .lt('quantidade', LOW_THRESHOLD);
 
-        const count = (res as any).count ?? 0;
+        const count = res.count ?? 0;
         setLowStockCount(Number(count || 0));
       } catch (e) {
         // ignore
@@ -81,7 +83,7 @@ export default function Header({ onMenuClick }: Props) {
           .eq('id', profile.organization_id)
           .maybeSingle();
         if (error) throw error;
-        if (data && (data as any).nome) setOrgName((data as any).nome as string);
+        if (data && data.nome) setOrgName(data.nome as string);
       } catch (e) {
         // fallback silencioso
       }
@@ -188,6 +190,10 @@ export default function Header({ onMenuClick }: Props) {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Full-screen toggle (global) - always visible */}
+          <div className="flex items-center">
+            <FullScreenToggle />
+          </div>
           {/* Low stock badge */}
           {lowStockCount > 0 && (
             <Link href="/dashboard/producao/estoque-fabrica">
@@ -256,6 +262,8 @@ export default function Header({ onMenuClick }: Props) {
                 </span>
                 {profile.role && <span className="text-xs text-slate-400">{profile.role}</span>}
               </div>
+              {/* Full-screen toggle (global) */}
+              <FullScreenToggle />
             </>
           ) : (
             <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Usuário</span>
@@ -263,5 +271,18 @@ export default function Header({ onMenuClick }: Props) {
         </div>
       </div>
     </header>
+  );
+}
+
+function FullScreenToggle() {
+  const { isFullScreen, toggleForTarget } = useFullScreenSafe();
+  return (
+    <button
+      title="Alternar tela cheia"
+      onClick={toggleForTarget}
+      className="ml-3 inline-flex items-center rounded-md p-2 text-slate-500 hover:bg-slate-100 transition"
+    >
+      {isFullScreen ? <X size={18} /> : <ExternalLink size={18} />}
+    </button>
   );
 }

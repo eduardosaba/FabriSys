@@ -176,9 +176,9 @@ export default function FornecedoresPage() {
       const payload = {
         ...values,
         cnpj: values.cnpj ? onlyDigits(String(values.cnpj)) : null,
-        email: (values.email as string) || null,
-        telefone: (values.telefone as string) || null,
-        endereco: (values.endereco as string) || null,
+        email: values.email || null,
+        telefone: values.telefone || null,
+        endereco: values.endereco || null,
         categoria: categoriaToStore,
         avaliacao: Number(values.avaliacao) || 5,
       };
@@ -574,7 +574,7 @@ export default function FornecedoresPage() {
                   {(watch('categoria') || ['Outros']) && null}
                   {(categoriasDb.length ? categoriasDb : CATEGORIAS_FORNECEDOR).map((cat) => {
                     const selected = Array.isArray(watch('categoria'))
-                      ? (watch('categoria') as string[]).includes(cat)
+                      ? watch('categoria').includes(cat)
                       : false;
                     return (
                       <label key={cat} className="inline-flex items-center gap-2 text-sm">

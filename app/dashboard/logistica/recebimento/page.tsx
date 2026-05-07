@@ -43,7 +43,7 @@ export default function RecebimentoPage() {
         .eq('local_destino_id', profile.local_id);
 
       if (error) throw error;
-      setItens((data as any) || []);
+      setItens(data || []);
     } catch (err) {
       toast.error('Erro ao carregar lista de recebimento.');
     } finally {

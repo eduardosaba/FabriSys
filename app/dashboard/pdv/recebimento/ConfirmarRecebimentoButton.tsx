@@ -18,8 +18,9 @@ export default function ConfirmarRecebimentoButton({ distribId, onDone }: Props)
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc('confirmar_recebimento_pdv', {
-        p_distrib_id: distribId,
-        p_usuario_id: profile.id,
+        p_distribuicao_id: distribId,
+        p_quantidade: null,
+        p_observacao: null,
       });
 
       if (error) throw error;

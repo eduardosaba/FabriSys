@@ -54,7 +54,7 @@ export default function FidelidadeConfigPage() {
     try {
       const savePromise = (async () => {
         const { data: sessionData } = await supabase.auth.getSession();
-        const session = (sessionData as any)?.session;
+        const session = sessionData?.session;
         if (!session?.user) {
           throw new Error('Você precisa entrar para salvar as configurações');
         }

@@ -35,7 +35,7 @@ export default function ReposicaoListener() {
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'solicitacoes_reposicao' },
       (payload) => {
-        const row = payload.new as any;
+        const row = payload.new;
         const local = row.local_id || 'Loja';
         const produto = row.produto_id || '';
         const urg = row.urgencia || '';

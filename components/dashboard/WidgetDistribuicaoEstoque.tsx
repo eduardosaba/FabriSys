@@ -14,7 +14,7 @@ export default function WidgetDistribuicaoEstoque() {
       try {
         const { data: rows, error } = await supabase.from('vista_distribuicao_estoque').select('*');
         if (error) throw error;
-        if (mounted) setData((rows as any) || []);
+        if (mounted) setData(rows || []);
       } catch (err) {
         console.warn('Erro ao carregar vista_distribuicao_estoque:', err);
       } finally {

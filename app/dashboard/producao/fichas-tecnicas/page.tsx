@@ -30,7 +30,7 @@ function normalizeFichaNome(ficha: FichaTecnica) {
 }
 
 export default function FichasTecnicasPage() {
-  const { profile, loading: authLoading } = useAuth();
+  useAuth();
 
   const confirmDialog = useConfirm();
   const router = useRouter();

@@ -87,8 +87,8 @@ export default function ProfitMarginWidget({
                 .from('produtos_finais')
                 .select('id, preco_custo')
                 .in('id', (chunk || []).filter(Boolean));
-              if ((res as any).error) throw (res as any).error;
-              produtos = (res as any).data || null;
+              if (res.error) throw res.error;
+              produtos = res.data || null;
             } catch (errSelect) {
               // provável que coluna `preco_custo` não exista — fallback para não quebrar
               console.warn('preco_custo não disponível, usando fallback:', errSelect);
@@ -96,7 +96,7 @@ export default function ProfitMarginWidget({
                 .from('produtos_finais')
                 .select('id')
                 .in('id', (chunk || []).filter(Boolean));
-              produtos = (res2 as any).data || null;
+              produtos = res2.data || null;
             }
             (produtos || []).forEach((p: any) => {
               produtoPrecoMap[String(p.id)] = Number(p.preco_custo || 0);

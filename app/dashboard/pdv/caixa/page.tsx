@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getOperationalContext } from '@/lib/operationalLocal';
 import { getActiveLocal } from '@/lib/activeLocal';
+import { useActiveLocal } from '@/contexts/ActiveLocalContext';
 import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -113,6 +114,11 @@ export default function CaixaPDVPage() {
       return () => clearTimeout(t);
     }
   }, [showCartModal]);
+
+  const { activeLocalId } = useActiveLocal();
+  useEffect(() => {
+    if (activeLocalId) setLocalId(activeLocalId);
+  }, [activeLocalId]);
 
   useEffect(() => {
     const update = () => setIsDesktop(window.innerWidth >= 768);
@@ -502,8 +508,8 @@ export default function CaixaPDVPage() {
         },
         (payload) => {
           try {
-            const novo = (payload.new as any)?.valor;
-            const org = (payload.new as any)?.organization_id ?? null;
+            const novo = payload.new?.valor;
+            const org = payload.new?.organization_id ?? null;
             const myOrg = (profile as any)?.organization_id ?? null;
             // Aplicar a mudança somente se for global (null) ou para a mesma organização
             if (org === null || org === myOrg) {
@@ -553,8 +559,8 @@ export default function CaixaPDVPage() {
         { event: '*', schema: 'public', table: 'caixa_sessao' },
         (payload) => {
           try {
-            const novo = (payload.new as any) ?? null;
-            const velho = (payload.old as any) ?? null;
+            const novo = payload.new ?? null;
+            const velho = payload.old ?? null;
 
             // Se o evento estiver relacionado ao nosso `localId`, reagir
             const relatedToLocal =
@@ -762,8 +768,8 @@ export default function CaixaPDVPage() {
         try {
           const res = await supabase.from('vendas').insert(vendaPayload).select().single();
           lastInsertResponse = res;
-          vendaData = (res as any).data;
-          errVenda = (res as any).error;
+          vendaData = res.data;
+          errVenda = res.error;
         } catch (e) {
           // Capture thrown exception as errVenda and also lastInsertResponse
           errVenda = e;
@@ -931,7 +937,7 @@ export default function CaixaPDVPage() {
               .eq('local_id', opLocalId)
               .eq('produto_id', item.produto.id)
               .maybeSingle();
-            const available = (est && (est as any).quantidade) || 0;
+            const available = (est && est.quantidade) || 0;
             if (available < item.quantidade) {
               insuficientes.push({
                 produtoId: item.produto.id,

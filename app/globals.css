@@ -36,113 +36,85 @@
 @tailwind utilities;
 
 :root {
-  /* Variáveis do 🌞 tema claro */
-  --background: var(--light-background, #ffffff);
-  --foreground: var(--light-text, #171717);
-  /* Mapeamento de cores padrão: orange → primary, blue → secondary */
-  /* Mapeamento para suportar variáveis injetadas pelo servidor (ex: --primary-color) */
-  --primary: var(--primary-color, var(--light-primary, #f97316)); /* Laranja padrão (primary) */
-  --primary-hover: var(--primary-hover, calc(var(--primary) + 0));
-  --secondary: var(
-    --secondary-color,
-    var(--light-secondary, #2563eb)
-  ); /* Azul padrão (secondary) */
-  --accent: var(--light-accent, #f97316);
+  /* 
+     REATIVIDADE TOTAL: 
+     Priorizamos a variável sem prefixo (injetada pelo JS). 
+     Se não existir, usamos a variante do modo. 
+     Se não existir, usamos o fallback final.
+  */
+  --background: var(--background, var(--light-background, #ffffff));
+  --foreground: var(--text, var(--light-text, #171717));
+
+  --primary: var(--primary, var(--light-primary, #f97316));
+  --secondary: var(--secondary, var(--light-secondary, #2563eb));
+  --accent: var(--accent, var(--light-accent, #f97316));
+
   --radius: var(--border-radius, 0.5rem);
 
-  /* Cores dos gráficos */
+  /* Botões vinculados dinamicamente ao tema */
+  --botao-salvar: var(--botao-salvar, var(--primary));
+  --botao-salvar-ativo: var(--botao-salvar-ativo, #c2410f);
+  --botao-salvar-desabilitado: var(--botao-salvar-desabilitado, #9ca3af);
+
+  --botao-cancelar: var(--botao-cancelar, #ef4444);
+  --botao-cancelar-ativo: var(--botao-cancelar-ativo, #f87171);
+  --botao-cancelar-desabilitado: var(--botao-cancelar-desabilitado, #9ca3af);
+
+  --botao-pesquisar: var(--botao-pesquisar, var(--secondary));
+  --botao-pesquisar-ativo: var(--botao-pesquisar-ativo, #1e40af);
+
+  /* Sidebar Reativo */
+  --sidebar-bg: var(--sidebar-bg, #e8e8e8);
+  --sidebar-text: var(--sidebar-text, #4a2c2b);
+  --sidebar-active-text: var(--sidebar-active-text, #88544c);
+
+  /* Mantendo cores de suporte */
   --color-1: #b1b3b6;
   --color-2: #16a34a;
   --color-3: #dc2626;
-  --color-4: #9333ea;
-  --color-5: #ea580c;
-  --color-6: #0d9488;
-  --color-7: #be123c;
-  --color-8: #4f46e5;
-  --overlay-mobile: rgba(0, 0, 0, 0.5);
-  --sidebar-active-bg: rgb(245 243 255);
-  --sidebar-active-text: rgb(79 70 229);
-  --status-success-bg: rgb(236 253 245);
-  --status-success-text: rgb(34 197 94);
-  --status-warning-bg: rgb(254 243 199);
-  --status-warning-text: rgb(245 158 11);
-  --status-danger-bg: rgb(254 226 226);
-  --status-danger-text: rgb(239 68 68);
-  --loading-spinner: rgb(37 99 235);
-  --loading-text: rgb(75 85 99);
-  --loading-button-bg: rgb(37 99 235);
-  --loading-button-hover: rgb(29 78 216);
   --trend-positive: rgb(34 197 94);
   --trend-negative: rgb(239 68 68);
-  /* Botões padrão vinculados às cores primárias/segundárias */
-  --botao-salvar: var(--primary);
-  --botao-salvar-ativo: #c2410f;
-  --botao-salvar-desabilitado: #9ca3af;
-  --botao-cancelar: #ef4444;
-  --botao-cancelar-ativo: #f87171;
-  --botao-pesquisar: var(--secondary);
-  --botao-pesquisar-ativo: #1e40af;
-  --sidebar-active-bg: rgb(245 243 255);
-  --sidebar-active-text: rgb(79 70 229);
 }
 
-/* Aplica cores do 🌙 tema escuro quando a classe .dark estiver presente */
+/* 🌙 O modo Dark agora apenas confia nas variáveis injetadas pelo ThemeProvider */
 .dark {
-  /* As variáveis do tema escuro serão definidas dinamicamente via JS conforme o tema customizado */
+  --background: var(--background, var(--dark-background, #0b1220));
+  --foreground: var(--text, var(--dark-text, #f9fafb));
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans);
+  font-family: var(--custom-font-family, 'Inter', sans-serif);
 }
 
-/* Utilitários de botão primário que usam variáveis de tema definidas pelo ThemeProvider */
+/* Botão Primário Dinâmico */
 .btn-primary {
-  background: var(--primary);
-  color: inherit;
+  background: var(--botao-salvar);
+  color: var(--text);
   border-radius: var(--radius);
-  transition:
-    background-color 200ms ease,
-    color 200ms ease,
-    filter 200ms ease;
+  transition: all 200ms ease;
 }
 .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.05);
-}
-.btn-primary:disabled {
-  background: var(--primary);
-  color: var(--botao-salvar-ativo);
-  cursor: not-allowed;
-  opacity: 0.6;
+  background: var(--botao-salvar-ativo);
+  filter: brightness(1.1);
 }
 
-/* Botão secundário (aparência leve, usa cores do tema quando aplicável) */
+/* Botão de Pesquisa (Secundário) */
 .btn-secondary {
-  /* agora usa mesma cor do primary conforme solicitado */
-  background: var(--primary);
-  color: var(--botao-salvar-ativo);
-  border: 1px solid transparent;
+  background: var(--botao-pesquisar);
+  color: var(--text);
   border-radius: var(--radius);
-  transition:
-    background-color 200ms ease,
-    color 200ms ease,
-    filter 200ms ease;
+  transition: all 200ms ease;
 }
 .btn-secondary:hover:not(:disabled) {
-  filter: brightness(1.05);
-}
-.btn-secondary:disabled {
-  background: var(--primary);
-  color: var(--botao-salvar-ativo);
-  cursor: not-allowed;
-  opacity: 0.6;
+  background: var(--botao-pesquisar-ativo);
 }
 
 /* Botão cancelar - usa variáveis de tema específicas para botão de cancelar */
 .btn-cancel {
   background: var(--botao-cancelar, #ef4444);
-  color: #fff;
+  color: var(--text);
   border-radius: var(--radius);
   transition:
     background-color 200ms ease,
@@ -155,7 +127,7 @@ body {
 }
 .btn-cancel:disabled {
   background: var(--botao-cancelar-desabilitado, #9ca3af);
-  color: #fff;
+  color: var(--text);
   cursor: not-allowed;
   opacity: 0.8;
 }

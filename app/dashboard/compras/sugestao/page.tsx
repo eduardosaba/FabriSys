@@ -142,7 +142,7 @@ export default function SugestaoComprasPage() {
         .single();
 
       if (!errSelect) {
-        const current = Number((insRow as any)?.estoque_atual ?? 0);
+        const current = Number(insRow?.estoque_atual ?? 0);
         const novo = current - qty;
         const { error: errUpdate } = await supabase
           .from('insumos')

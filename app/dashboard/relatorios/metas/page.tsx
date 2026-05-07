@@ -28,7 +28,7 @@ function monthRange(year: number, monthIndex: number) {
 }
 
 export default function RelatorioMetasPage() {
-  const { profile, loading: authLoading } = useAuth();
+  useAuth();
 
   const [loading, setLoading] = useState(true);
   const [metaMensal, setMetaMensal] = useState(0);
@@ -189,7 +189,7 @@ export default function RelatorioMetasPage() {
             <label className="text-xs text-slate-500">PDV</label>
             <select
               value={pdv}
-              onChange={(e) => setPdv(e.target.value as any)}
+              onChange={(e) => setPdv(e.target.value)}
               className="block mt-1 w-full"
             >
               <option value="all">Todos</option>

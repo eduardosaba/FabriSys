@@ -57,7 +57,7 @@ export default function OrdemDetailPage() {
         if (error) throw error;
 
         const prodId = data.produto_final_id;
-        let produtoObj = null;
+        let produtoObj: { nome: string } | null = null;
         if (prodId) {
           const { data: p } = await supabase
             .from('produtos_finais')

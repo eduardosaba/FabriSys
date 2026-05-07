@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation'; // Importação correta para App Router
@@ -628,7 +628,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           {editing && (
             <div {...listeners} className="p-2 mr-2 cursor-grab select-none touch-none">
-              ☰
+              ?
             </div>
           )}
         </div>
@@ -643,7 +643,7 @@ export default function DashboardPage() {
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-[var(--primary)] mb-1">
-            Olá, {displayName} 🍭🍫🍪👋🚀
+            {displayName} 🍭🍫🍪👋🚀
           </h1>
           <p className="text-2xl sm:text-3xl font-black text-[var(--secondary)] dark:text-white tracking-tight">
             📈 Dashboard{' '}
@@ -680,7 +680,7 @@ export default function DashboardPage() {
             <option value="esta-semana">Esta Semana</option>
             <option value="este-mes">Este Mês</option>
             <option value="ultimos-30-dias">Últimos 30 Dias</option>
-            <option disabled>──────────</option>
+            <option disabled>----------</option>
             <option value="mes-especifico">Mês Específico</option>
             <option value="ano-especifico">Ano Completo</option>
           </select>
@@ -777,7 +777,7 @@ export default function DashboardPage() {
                   const rawCols =
                     metaCols ?? (entry.defaultSize ? defaultSizeToCols(entry.defaultSize) : 1);
                   const mdSpan = Math.max(1, Math.min(12, rawCols * 4));
-                  const spanClassWithSize = `col-span-12 md:col-span-${Math.max(1, Math.min(12, ((draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1)) * 4))}`;
+                  const spanClassWithSize = `col-span-12 md:col-span-${Math.max(1, Math.min(12, ((draftMeta && draftMeta[wid]) || dashboardMeta?.[role || '']?.[wid] || (entry.defaultSize === '4x1' ? 3 : 1)) * 4))}`;
 
                   return (
                     <div key={wid} className={`${spanClassWithSize}`}>
@@ -792,19 +792,19 @@ export default function DashboardPage() {
                                 <div className="flex items-center gap-1">
                                   <button
                                     onClick={() => changeSize(wid, 1)}
-                                    className={`text-xs px-2 py-0.5 rounded ${((draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1)) === 1 ? 'bg-slate-200' : 'bg-white'}`}
+                                    className={`text-xs px-2 py-0.5 rounded ${((draftMeta && draftMeta[wid]) || dashboardMeta?.[role || '']?.[wid] || (entry.defaultSize === '4x1' ? 3 : 1)) === 1 ? 'bg-slate-200' : 'bg-white'}`}
                                   >
                                     1
                                   </button>
                                   <button
                                     onClick={() => changeSize(wid, 2)}
-                                    className={`text-xs px-2 py-0.5 rounded ${((draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1)) === 2 ? 'bg-slate-200' : 'bg-white'}`}
+                                    className={`text-xs px-2 py-0.5 rounded ${((draftMeta && draftMeta[wid]) || dashboardMeta?.[role || '']?.[wid] || (entry.defaultSize === '4x1' ? 3 : 1)) === 2 ? 'bg-slate-200' : 'bg-white'}`}
                                   >
                                     2
                                   </button>
                                   <button
                                     onClick={() => changeSize(wid, 3)}
-                                    className={`text-xs px-2 py-0.5 rounded ${((draftMeta && draftMeta[wid]) || (dashboardMeta?.[role || '']?.[wid] as number) || (entry.defaultSize === '4x1' ? 3 : 1)) === 3 ? 'bg-slate-200' : 'bg-white'}`}
+                                    className={`text-xs px-2 py-0.5 rounded ${((draftMeta && draftMeta[wid]) || dashboardMeta?.[role || '']?.[wid] || (entry.defaultSize === '4x1' ? 3 : 1)) === 3 ? 'bg-slate-200' : 'bg-white'}`}
                                   >
                                     3
                                   </button>

@@ -120,7 +120,7 @@ export default function GestaoMetasPage() {
       .gte('data_referencia', `${mes}-01`)
       .lte('data_referencia', `${mes}-${diasNoMes}`);
 
-    const lista = [];
+    const lista: { data: string; valor: any; id: any }[] = [];
     for (let d = 1; d <= diasNoMes; d++) {
       const dataStr = `${mes}-${String(d).padStart(2, '0')}`;
       const salvo = existentes?.find((m) => m.data_referencia === dataStr);
@@ -194,7 +194,7 @@ export default function GestaoMetasPage() {
         .from('metas_vendas')
         .upsert(upserts, { onConflict: 'local_id, data_referencia' });
 
-      await toast.promise(savePromise as unknown as Promise<any>, {
+      await toast.promise(savePromise, {
         loading: 'Salvando metas...',
         success: 'Metas salvas com sucesso!',
         error: (err) => `Erro ao salvar: ${err?.message || ''}`,
@@ -289,7 +289,7 @@ export default function GestaoMetasPage() {
         .from('metas_vendas')
         .upsert(upserts, { onConflict: 'local_id,data_referencia' });
 
-      await toast.promise(savePromise as unknown as Promise<any>, {
+      await toast.promise(savePromise, {
         loading: 'Salvando meta...',
         success: 'Meta mensal atualizada e metas diárias redistribuídas',
         error: (err) => `Erro ao salvar meta: ${err?.message || ''}`,

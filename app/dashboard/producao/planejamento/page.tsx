@@ -1,29 +1,26 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import Button from '@/components/Button';
+import TabelaResumoExplosao from '@/components/planejamento/TabelaResumoExplosao';
+import Loading from '@/components/ui/Loading';
+import PageHeader from '@/components/ui/PageHeader';
+import { useToast } from '@/hooks/useToast';
 import { getActiveLocal } from '@/lib/activeLocal';
 import { useAuth } from '@/lib/auth';
-import Button from '@/components/Button';
-import PageHeader from '@/components/ui/PageHeader';
-import Loading from '@/components/ui/Loading';
-import { useToast } from '@/hooks/useToast';
-import TabelaResumoExplosao from '@/components/planejamento/TabelaResumoExplosao';
+import { supabase } from '@/lib/supabase';
 import {
-  Truck,
-  Save,
-  ChefHat,
   AlertTriangle,
-  Sparkles,
-  Package,
-  Plus,
-  Store,
   Calendar,
   ChevronDown,
   ChevronUp,
   Info,
+  Package,
+  Save,
+  Sparkles,
+  Truck,
 } from 'lucide-react';
+import Link from 'next/link';
+import { useCallback, useEffect, useState } from 'react';
 
 // --- TIPOS ---
 interface Local {
@@ -59,6 +56,7 @@ export default function PlanejamentoPage() {
   const [explosaoLoading, setExplosaoLoading] = useState(false);
   const [produtosParaProduzir, setProdutosParaProduzir] = useState<Record<string, number>>({});
   const [mostrarExplosao, setMostrarExplosao] = useState(false);
+  const [estoqueSeguranca, setEstoqueSeguranca] = useState<Record<string, number>>({});
 
   // Estado para expandir cards no mobile
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
@@ -117,6 +115,14 @@ export default function PlanejamentoPage() {
       setProdutos(produtosFormatados);
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
+      const msg = (err && err.message) || String(err);
+      if (msg && msg.toLowerCase().includes('supabase não configurado')) {
+        toast({
+          title: 'Supabase não configurado',
+          description: 'Verifique NEXT_PUBLIC_SUPABASE_*',
+          variant: 'error',
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -166,7 +172,9 @@ export default function PlanejamentoPage() {
 
   const calcularLinha = (produto: ProdutoPlanejamento) => {
     const qtds = plano[produto.id] || {};
-    const totalUnidades = Object.values(qtds).reduce((acc, q) => acc + q, 0);
+    const demandaUnidades = Object.values(qtds).reduce((acc, q) => acc + q, 0);
+    const extra = Number(estoqueSeguranca[produto.id] ?? 0);
+    const totalUnidades = demandaUnidades + extra;
 
     if (totalUnidades === 0) return null;
 
@@ -218,12 +226,14 @@ export default function PlanejamentoPage() {
 
         // 1. Criar Ordem
         const numeroOp = Math.floor(10000 + Math.random() * 90000).toString();
+        const extra = Number(estoqueSeguranca[prod.id] ?? 0);
         const { data: op, error: opErr } = await supabase
           .from('ordens_producao')
           .insert({
             numero_op: numeroOp,
             produto_final_id: prod.id,
             quantidade_prevista: calc.totalUnidades,
+            estoque_seguranca: extra,
             data_prevista: dataProducao,
             qtd_receitas_calculadas: calc.qtdPanelas || 0,
             massa_total_kg: calc.massaTotalKg,
@@ -263,6 +273,7 @@ export default function PlanejamentoPage() {
 
       toast({ title: `${ordensGeradas} ordens geradas!`, variant: 'success' });
       setPlano({});
+      setEstoqueSeguranca({});
     } catch (err: any) {
       console.error('Erro ao salvar', err);
       let errMsg = 'Erro desconhecido';
@@ -379,12 +390,14 @@ export default function PlanejamentoPage() {
         const massaRelacionado = compData && compData[0] ? compData[0].item_id : null;
         const opPaiId = massaRelacionado ? (massOpMap[massaRelacionado] ?? null) : null;
 
+        const extraFinal = Number(estoqueSeguranca[prodId] ?? 0);
         const { data: opFinal, error: errOpFinal } = await supabase
           .from('ordens_producao')
           .insert({
             numero_op: numeroOp,
             produto_final_id: prodId,
-            quantidade_prevista: totalUnidades,
+            quantidade_prevista: totalUnidades + extraFinal,
+            estoque_seguranca: extraFinal,
             data_prevista: dataProducao,
             status: 'pendente',
             organization_id: profile?.organization_id,
@@ -424,6 +437,7 @@ export default function PlanejamentoPage() {
       setPlano({});
       setExplosaoDados(null);
       setMostrarExplosao(false);
+      setEstoqueSeguranca({});
     } catch (err: any) {
       console.error('Erro ao gerar OPs explodidas:', err);
       toast({
@@ -492,24 +506,31 @@ export default function PlanejamentoPage() {
 
       {/* --- VERSÃO DESKTOP (TABELA) --- */}
       <div className="hidden md:block bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[80vh] overflow-y-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-6 py-4 font-bold text-slate-700 w-64">Produto Final</th>
-                <th className="px-4 py-4 text-center font-bold text-slate-500 w-32">Config</th>
+                <th className="px-6 py-4 font-bold text-slate-700 w-64 sticky top-0 z-30 bg-white">
+                  Produto Final
+                </th>
+                <th className="px-4 py-4 text-center font-bold text-slate-500 w-32 sticky top-0 z-30 bg-white">
+                  Config
+                </th>
                 {locais.map((local) => (
                   <th
                     key={local.id}
-                    className="px-2 py-4 text-center font-bold text-blue-600 bg-blue-50/30 min-w-[100px]"
+                    className="px-2 py-4 text-center font-bold text-blue-600 min-w-[100px] sticky top-0 z-30 bg-white"
                   >
                     {local.nome}
                   </th>
                 ))}
-                <th className="px-4 py-4 text-center font-bold text-slate-700 bg-yellow-50">
+                <th className="px-4 py-4 text-center font-bold text-orange-700 sticky top-0 z-30 bg-white">
+                  Estoque Extra
+                </th>
+                <th className="px-4 py-4 text-center font-bold text-slate-700 sticky top-0 z-30 bg-white">
                   Total
                 </th>
-                <th className="px-4 py-4 text-center font-bold text-green-700 bg-green-50">
+                <th className="px-4 py-4 text-center font-bold text-green-700 sticky top-0 z-30 bg-white">
                   Cozinha
                 </th>
               </tr>
@@ -561,10 +582,26 @@ export default function PlanejamentoPage() {
                         )}
                       </td>
                     ))}
-                    <td className="px-4 py-4 text-center font-bold bg-yellow-50/50">
+                    <td className="px-4 py-4 text-center  bg-pink-200/100">
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-20 p-2 text-center border rounded-lg focus:border-orange-500 outline-none bg-pink-100"
+                        value={estoqueSeguranca[produto.id] ?? ''}
+                        onChange={(e) =>
+                          setEstoqueSeguranca((prev) => ({
+                            ...prev,
+                            [produto.id]: Number(e.target.value) || 0,
+                          }))
+                        }
+                        placeholder="0"
+                        title="Estoque de Segurança (Admin)"
+                      />
+                    </td>
+                    <td className="px-4 py-4 text-center font-bold bg-yellow-200/50">
                       {calc?.totalUnidades || '-'}
                     </td>
-                    <td className="px-4 py-4 text-center bg-green-50/50">
+                    <td className="px-4 py-4 text-center bg-green-200/50">
                       {calc && !calc.erro ? (
                         <div className="text-xs">
                           {!faltaFicha ? (
@@ -620,7 +657,7 @@ export default function PlanejamentoPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 pl-2">
+                <div className="flex items-center gap-2">
                   {totalUnidades > 0 && (
                     <div className="text-right">
                       <div className="font-bold text-blue-600">{totalUnidades} un</div>
@@ -648,6 +685,23 @@ export default function PlanejamentoPage() {
                     </div>
                   ) : (
                     <>
+                      <div className="mb-2">
+                        <label className="block text-xs font-bold text-orange-600 uppercase mb-1">
+                          Estoque de Segurança (Admin)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="w-full p-2 border rounded-lg bg-orange-50 text-center"
+                          value={estoqueSeguranca[produto.id] ?? ''}
+                          onChange={(e) =>
+                            setEstoqueSeguranca((prev) => ({
+                              ...prev,
+                              [produto.id]: Number(e.target.value) || 0,
+                            }))
+                          }
+                        />
+                      </div>
                       {locais.length > 0 ? (
                         locais.map((local) => (
                           <div

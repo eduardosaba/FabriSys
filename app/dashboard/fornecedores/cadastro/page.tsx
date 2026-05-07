@@ -73,13 +73,13 @@ export default function CadastroFornecedorPage() {
 
       // Prefer RPC insert_fornecedor (SECURITY DEFINER) to avoid RLS issues.
       try {
-        const rpc = (await supabase.rpc('insert_fornecedor', {
+        const rpc = await supabase.rpc('insert_fornecedor', {
           p_nome: String(values.nome),
           p_cnpj: payload.cnpj ?? null,
-          p_email: (values.email as string) ?? null,
-          p_telefone: (values.telefone as string) ?? null,
+          p_email: values.email ?? null,
+          p_telefone: values.telefone ?? null,
           p_categoria_id: values.categoria_id ? String(values.categoria_id) : null,
-        })) as any;
+        });
 
         if (rpc?.error) throw rpc.error;
       } catch (rpcErr: any) {

@@ -37,193 +37,258 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const [authTimeout, setAuthTimeout] = useState(false);
   const AUTH_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_AUTH_TIMEOUT_MS) || 20000;
+  const PROFILE_CACHE_KEY = 'syslari_profile_v1';
+  const PROFILE_CACHE_MS = Number(process.env.NEXT_PUBLIC_PROFILE_CACHE_MS) || 300000; // 5min
+
+  const readProfileCache = () => {
+    try {
+      if (typeof window === 'undefined') return null;
+      const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.ts || !parsed.profile) return null;
+      if (Date.now() - parsed.ts > PROFILE_CACHE_MS) return null;
+      return parsed.profile as Profile;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const writeProfileCache = (p: Profile | null) => {
+    try {
+      if (typeof window === 'undefined') return;
+      if (!p) return localStorage.removeItem(PROFILE_CACHE_KEY);
+      // store only essential public fields to reduce payload and avoid sensitive data
+      const cacheObj = {
+        id: (p as any).id,
+        role: (p as any).role,
+        local_id: (p as any).local_id ?? null,
+        organization_id: (p as any).organization_id ?? null,
+        avatar_url: (p as any).avatar_url ?? null,
+        company_logo_url: (p as any).company_logo_url ?? null,
+      } as Profile;
+      localStorage.setItem(
+        PROFILE_CACHE_KEY,
+        JSON.stringify({ ts: Date.now(), profile: cacheObj })
+      );
+    } catch (e) {
+      void e;
+    }
+  };
 
   // Ref para evitar chamadas duplicadas ao fetchProfile
   const fetchingProfile = useRef(false);
   const lastFetchedUserId = useRef<string | null>(null);
 
   // Função isolada para buscar o perfil nas tabelas corretas
-  const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
-    // Evitar chamadas duplicadas simultaneas
-    if (fetchingProfile.current && lastFetchedUserId.current === userId) {
-      console.log(`[AuthProvider] ⏭️ Pulando fetchProfile duplicado para ${userId}`);
-      return;
-    }
-
-    fetchingProfile.current = true;
-    lastFetchedUserId.current = userId;
-    const startTime = performance.now();
-    console.log(`[AuthProvider] 🔍 Iniciando fetchProfile (sequencial) para userId=${userId}`);
-
-    try {
-      // 1) Tentativa em colaboradores (funcionários) — se existir, usamos como base
-      // mas NÃO retornamos imediatamente: tentamos mesclar campos extras (ex: avatar_url)
-      let baseProfile: Profile | null = null;
-      try {
-        const { data: colab, error: colabErr } = await supabase
-          .from('colaboradores')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
-        if (colabErr) console.warn('[AuthProvider] ⚠️ colaboradores query erro:', colabErr);
-        if (colab) {
-          console.log('[AuthProvider] ✅ Perfil vindo de colaboradores (base)', {
-            id: colab.id,
-            role: colab.role,
-          });
-          baseProfile = colab as Profile;
-          // não retorna — vamos tentar mesclar com `profiles` para buscar avatar_url/nomes adicionais
-        }
-      } catch (e) {
-        console.warn('[AuthProvider] ⚠️ Falha ao consultar colaboradores:', e);
+  const fetchProfile = useCallback(
+    async (userId: string, userEmail?: string | null): Promise<void> => {
+      // Evitar chamadas duplicadas simultaneas
+      if (fetchingProfile.current && lastFetchedUserId.current === userId) {
+        console.log(`[AuthProvider] ⏭️ Pulando fetchProfile duplicado para ${userId}`);
+        return;
       }
 
-      // 2) Tentativa em profiles (clientes/administradores) — se existir, mesclar com base
-      try {
-        // Buscar profile incluindo relacionamento com organizations
-        const { data: prof, error: profErr } = await supabase
-          .from('profiles')
-          .select(`*, organizations(id, nome, logo_url)`)
-          .eq('id', userId)
-          .maybeSingle();
+      fetchingProfile.current = true;
+      lastFetchedUserId.current = userId;
+      const startTime = performance.now();
+      console.log(`[AuthProvider] 🔍 Iniciando fetchProfile (sequencial) para userId=${userId}`);
 
-        if (profErr) {
-          // Se a query com relacionamento falhar (PostgREST 400), tentamos um fallback simples
-          console.warn('[AuthProvider] ⚠️ profiles query erro (relacionamento):', profErr);
-          try {
-            const { data: profSimple, error: profSimpleErr } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', userId)
-              .maybeSingle();
-            if (profSimpleErr) {
-              console.warn('[AuthProvider] ⚠️ fallback profiles query erro:', profSimpleErr);
+      // tentar carregar perfil do cache para exibir imediatamente
+      try {
+        const cached = readProfileCache();
+        if (cached && cached.id === userId) {
+          setProfile(cached);
+          setLoading(false);
+        } else {
+          // setar um perfil mínimo imediatamente para não bloquear a UI
+          setProfile({ id: userId, role: 'user', email: userEmail ?? undefined });
+          setLoading(false);
+        }
+      } catch (e) {
+        try {
+          setProfile({ id: userId, role: 'user', email: userEmail ?? undefined });
+          setLoading(false);
+        } catch (err) {
+          void err;
+        }
+      }
+
+      try {
+        // Executar buscas em paralelo para reduzir latência percebida.
+        let baseProfile: Profile | null = null;
+        try {
+          const colabQ: any = supabase
+            .from('colaboradores')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+          const profQ: any = supabase
+            .from('profiles')
+            .select(`*, organizations(id, nome, logo_url)`)
+            .eq('id', userId)
+            .maybeSingle();
+
+          console.time('[AuthProvider] profile-queries');
+          const [colabRes, profRes] = await Promise.allSettled([colabQ, profQ]);
+          console.timeEnd('[AuthProvider] profile-queries');
+
+          const colab: any = colabRes.status === 'fulfilled' ? colabRes.value.data : null;
+          const colabErr: any = colabRes.status === 'rejected' ? colabRes.reason : null;
+          if (colabErr) console.warn('[AuthProvider] ⚠️ colaboradores query erro:', colabErr);
+          if (colab) baseProfile = colab as Profile;
+          const profVal: any = profRes.status === 'fulfilled' ? profRes.value : null;
+          if (profRes.status === 'rejected')
+            console.warn('[AuthProvider] ⚠️ profiles query erro:', profRes.reason);
+
+          // Se profiles retornou com dados, usamos como fonte primária
+          if (profVal && profVal.data) {
+            const prof: any = profVal.data;
+            const orgRaw: any = prof.organizations;
+            const org: any = Array.isArray(orgRaw) ? orgRaw[0] : orgRaw;
+
+            const profileData: any = {
+              id: prof.id,
+              role: (prof.role as UserRole) || baseProfile?.role || 'user',
+              nome:
+                prof.nome ||
+                prof.full_name ||
+                prof.username ||
+                baseProfile?.nome ||
+                userEmail?.split('@')[0],
+              full_name: prof.full_name || prof.username || baseProfile?.full_name || undefined,
+              email: userEmail ?? baseProfile?.email,
+              avatar_url: prof.avatar_url ?? prof.foto_url ?? baseProfile?.avatar_url ?? null,
+              local_id: prof.local_id ?? (baseProfile as any)?.local_id ?? undefined,
+              organization_id: prof.organization_id ?? baseProfile?.organization_id ?? undefined,
+              organizations: org ?? undefined,
+              company_logo_url:
+                (org && org.logo_url) ??
+                prof.company_logo_url ??
+                baseProfile?.company_logo_url ??
+                undefined,
+              ativo: prof.ativo ?? baseProfile?.ativo ?? undefined,
+              status_conta: prof.status_conta ?? baseProfile?.status_conta ?? undefined,
+            } as Profile & { organizations?: any };
+
+            setProfile(profileData as Profile);
+            try {
+              writeProfileCache(profileData as Profile);
+            } catch (e) {
+              void e;
             }
 
-            if (profSimple) {
-              // tentar buscar organização manualmente se existir organization_id
-              let org = undefined;
-              try {
-                if (profSimple.organization_id) {
-                  const { data: orgData } = await supabase
-                    .from('organizations')
-                    .select('id,nome,logo_url')
-                    .eq('id', profSimple.organization_id)
-                    .maybeSingle();
-                  org = orgData;
-                }
-              } catch (orgErr) {
-                void orgErr;
-              }
-
-              const profileData = {
-                id: profSimple.id,
-                role: (profSimple.role as UserRole) || (baseProfile?.role as UserRole) || 'user',
-                nome:
-                  profSimple.nome ||
-                  profSimple.full_name ||
-                  profSimple.username ||
-                  baseProfile?.nome ||
-                  userEmail?.split('@')[0],
-                full_name:
-                  profSimple.full_name ||
-                  profSimple.username ||
-                  baseProfile?.full_name ||
-                  undefined,
-                email: userEmail ?? baseProfile?.email,
-                avatar_url:
-                  profSimple.avatar_url ?? profSimple.foto_url ?? baseProfile?.avatar_url ?? null,
-                local_id: profSimple.local_id ?? (baseProfile as any)?.local_id ?? undefined,
-                organization_id:
-                  profSimple.organization_id ?? baseProfile?.organization_id ?? undefined,
-                organizations: org ?? undefined,
-                company_logo_url:
-                  (org && (org as any).logo_url) ??
-                  profSimple.company_logo_url ??
-                  baseProfile?.company_logo_url ??
-                  undefined,
-                ativo: profSimple.ativo ?? baseProfile?.ativo ?? undefined,
-                status_conta: profSimple.status_conta ?? baseProfile?.status_conta ?? undefined,
-              } as Profile & { organizations?: any };
-              // if pdv and no local_id, try to resolve an operational local
-              if ((profileData as any).role === 'pdv' && !(profileData as any).local_id) {
+            // resolver local/pdv em background se necessário
+            (async () => {
+              if (profileData.role === 'pdv' && !profileData.local_id) {
                 try {
-                  const { data: caixa } = await supabase
+                  const caixaRes: any = await supabase
                     .from('caixa_sessao')
                     .select('local_id')
                     .eq('usuario_abertura', profileData.id)
                     .eq('status', 'aberto')
                     .maybeSingle();
+                  const caixa: any = caixaRes?.data ?? null;
                   if (caixa && caixa.local_id) {
-                    (profileData as any).local_id = caixa.local_id;
-                    await setActiveLocal(caixa.local_id);
+                    profileData.local_id = caixa.local_id;
+                    try {
+                      await setActiveLocal(caixa.local_id);
+                    } catch (e) {
+                      void e;
+                    }
+                    setProfile((p) => ({ ...(p as any), local_id: caixa.local_id }));
+                    try {
+                      writeProfileCache({ ...profileData });
+                    } catch (e) {
+                      void e;
+                    }
                   } else {
-                    await setActiveLocal(null);
+                    try {
+                      await setActiveLocal(null);
+                    } catch (e) {
+                      void e;
+                    }
                   }
                 } catch (e) {
                   void e;
                 }
               }
+            })();
 
-              console.log(
-                '[AuthProvider] ✅ Perfil vindo de profiles (fallback simples)',
-                profileData
-              );
-              if ((profileData as any).local_id) {
+            return;
+          }
+
+          // Se não temos profile mas há colaboradores, usamos baseProfile
+          if (baseProfile) {
+            console.log('[AuthProvider] ✅ Perfil vindo de colaboradores (base)', {
+              id: baseProfile.id,
+              role: baseProfile.role,
+            });
+            setProfile(baseProfile);
+            try {
+              writeProfileCache(baseProfile);
+            } catch (e) {
+              void e;
+            }
+            // tentar resolver local em background
+            (async () => {
+              if ((baseProfile as any).role === 'pdv' && !(baseProfile as any).local_id) {
                 try {
-                  await setActiveLocal((profileData as any).local_id);
+                  const caixaRes: any = await supabase
+                    .from('caixa_sessao')
+                    .select('local_id')
+                    .eq('usuario_abertura', baseProfile.id)
+                    .eq('status', 'aberto')
+                    .maybeSingle();
+                  const caixa: any = caixaRes?.data ?? null;
+                  if (caixa && caixa.local_id) {
+                    try {
+                      await setActiveLocal(caixa.local_id);
+                    } catch (e) {
+                      void e;
+                    }
+                    setProfile((p) => ({ ...(p as any), local_id: caixa.local_id }));
+                    try {
+                      writeProfileCache({ ...(baseProfile as any) });
+                    } catch (e) {
+                      void e;
+                    }
+                  } else {
+                    try {
+                      await setActiveLocal(null);
+                    } catch (e) {
+                      void e;
+                    }
+                  }
                 } catch (e) {
                   void e;
                 }
               }
-              setProfile(profileData as any);
-              return;
-            }
-          } catch (fallbackErr) {
-            console.warn('[AuthProvider] ⚠️ Falha no fallback profiles query:', fallbackErr);
+            })();
+
+            return;
           }
+        } catch (e) {
+          console.warn(
+            '[AuthProvider] ⚠️ Falha ao consultar colaboradores/profiles em paralelo:',
+            e
+          );
         }
 
-        if (prof) {
-          // organizations pode vir como objeto ou array dependendo do relacionamento
-          const orgRaw: any = prof.organizations;
-          const org = Array.isArray(orgRaw) ? orgRaw[0] : orgRaw;
-
-          const profileData = {
-            id: prof.id,
-            role: (prof.role as UserRole) || (baseProfile?.role as UserRole) || 'user',
-            nome:
-              prof.nome ||
-              prof.full_name ||
-              prof.username ||
-              baseProfile?.nome ||
-              userEmail?.split('@')[0],
-            full_name: prof.full_name || prof.username || baseProfile?.full_name || undefined,
-            email: userEmail ?? baseProfile?.email,
-            avatar_url: prof.avatar_url ?? prof.foto_url ?? baseProfile?.avatar_url ?? null,
-            local_id: prof.local_id ?? (baseProfile as any)?.local_id ?? undefined,
-            organization_id: prof.organization_id ?? baseProfile?.organization_id ?? undefined,
-            organizations: org ?? undefined,
-            // Prioriza logo da organização quando disponível
-            company_logo_url:
-              (org && org.logo_url) ??
-              prof.company_logo_url ??
-              baseProfile?.company_logo_url ??
-              undefined,
-            ativo: prof.ativo ?? baseProfile?.ativo ?? undefined,
-            status_conta: prof.status_conta ?? baseProfile?.status_conta ?? undefined,
-          } as Profile & { organizations?: any };
-          // resolve pdv local if missing
-          if ((profileData as any).role === 'pdv' && !(profileData as any).local_id) {
+        // Se não existiu registro em `profiles` mas `baseProfile` foi encontrado, usa ele
+        if (baseProfile) {
+          console.log('[AuthProvider] ✅ Usando perfil base de colaboradores (sem profiles)');
+          // resolve pdv local for baseProfile if missing
+          if ((baseProfile as any).role === 'pdv' && !(baseProfile as any).local_id) {
             try {
               const { data: caixa } = await supabase
                 .from('caixa_sessao')
                 .select('local_id')
-                .eq('usuario_abertura', profileData.id)
+                .eq('usuario_abertura', baseProfile.id)
                 .eq('status', 'aberto')
                 .maybeSingle();
               if (caixa && caixa.local_id) {
-                (profileData as any).local_id = caixa.local_id;
+                (baseProfile as any).local_id = caixa.local_id;
                 await setActiveLocal(caixa.local_id);
               } else {
                 await setActiveLocal(null);
@@ -232,70 +297,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               void e;
             }
           }
-
-          console.log('[AuthProvider] ✅ Perfil vindo de profiles (mesclado)', profileData);
-          if ((profileData as any).local_id) {
+          if ((baseProfile as any).local_id) {
             try {
-              await setActiveLocal((profileData as any).local_id);
+              await setActiveLocal((baseProfile as any).local_id);
             } catch (e) {
               void e;
             }
           }
-          setProfile(profileData as any);
+          setProfile(baseProfile);
           return;
         }
-      } catch (e) {
-        console.warn('[AuthProvider] ⚠️ Falha ao consultar profiles:', e);
-      }
 
-      // Se não existiu registro em `profiles` mas `baseProfile` foi encontrado, usa ele
-      if (baseProfile) {
-        console.log('[AuthProvider] ✅ Usando perfil base de colaboradores (sem profiles)');
-        // resolve pdv local for baseProfile if missing
-        if ((baseProfile as any).role === 'pdv' && !(baseProfile as any).local_id) {
-          try {
-            const { data: caixa } = await supabase
-              .from('caixa_sessao')
-              .select('local_id')
-              .eq('usuario_abertura', baseProfile.id)
-              .eq('status', 'aberto')
-              .maybeSingle();
-            if (caixa && caixa.local_id) {
-              (baseProfile as any).local_id = caixa.local_id;
-              await setActiveLocal(caixa.local_id);
-            } else {
-              await setActiveLocal(null);
-            }
-          } catch (e) {
-            void e;
-          }
+        // 3) Fallback: perfil mínimo para não travar a app
+        console.warn(
+          '[AuthProvider] ⚠️ Perfil não encontrado em colaboradores/profiles — aplicando fallback'
+        );
+        const fallbackProfile = { id: userId, role: 'user', email: userEmail } as Profile;
+        setProfile(fallbackProfile);
+        try {
+          writeProfileCache(fallbackProfile);
+        } catch (e) {
+          void e;
         }
-        if ((baseProfile as any).local_id) {
-          try {
-            await setActiveLocal((baseProfile as any).local_id);
-          } catch (e) {
-            void e;
-          }
+      } catch (error) {
+        console.error('[AuthProvider] ❌ Erro crítico no fetchProfile:', error);
+        const fallbackProfile2 = { id: userId, role: 'user', email: userEmail } as Profile;
+        setProfile(fallbackProfile2);
+        try {
+          writeProfileCache(fallbackProfile2);
+        } catch (e) {
+          void e;
         }
-        setProfile(baseProfile);
-        return;
+      } finally {
+        fetchingProfile.current = false;
+        setLoading(false);
+        const totalDuration = performance.now() - startTime;
+        console.log(`[AuthProvider] fetchProfile finalizado em ${totalDuration.toFixed(2)}ms`);
+        try {
+          if (totalDuration > 2000) {
+            toast({
+              title: 'Atenção: demora no carregamento',
+              description: `Carregamento do perfil demorou ${Math.round(totalDuration)}ms.`,
+              variant: 'warning',
+              duration: 6000,
+            });
+          }
+        } catch (e) {
+          void e;
+        }
       }
-
-      // 3) Fallback: perfil mínimo para não travar a app
-      console.warn(
-        '[AuthProvider] ⚠️ Perfil não encontrado em colaboradores/profiles — aplicando fallback'
-      );
-      setProfile({ id: userId, role: 'user', email: userEmail } as Profile);
-    } catch (error) {
-      console.error('[AuthProvider] ❌ Erro crítico no fetchProfile:', error);
-      setProfile({ id: userId, role: 'user', email: userEmail } as Profile);
-    } finally {
-      fetchingProfile.current = false;
-      setLoading(false);
-      const totalDuration = performance.now() - startTime;
-      console.log(`[AuthProvider] fetchProfile finalizado em ${totalDuration.toFixed(2)}ms`);
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     // Timeout de segurança: evita loading infinito se houver problemas de rede
@@ -409,6 +462,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         setProfile(null);
+        try {
+          writeProfileCache(null);
+        } catch (e) {
+          void e;
+        }
         lastFetchedUserId.current = null;
         fetchingProfile.current = false;
         setLoading(false);
@@ -427,6 +485,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         setProfile(null);
+        try {
+          writeProfileCache(null);
+        } catch (e) {
+          void e;
+        }
         lastFetchedUserId.current = null;
       }
 
@@ -448,6 +511,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void e;
     }
     setProfile(null);
+    try {
+      writeProfileCache(null);
+    } catch (e) {
+      void e;
+    }
     setUser(null);
     setSession(null);
     lastFetchedUserId.current = null;
@@ -457,6 +525,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = async () => {
     if (user) {
+      // Invalidate cache and force refetch
+      try {
+        writeProfileCache(null);
+      } catch (e) {
+        void e;
+      }
       lastFetchedUserId.current = null; // Força refetch
       await fetchProfile(user.id, user.email);
     }

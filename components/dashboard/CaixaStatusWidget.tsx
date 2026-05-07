@@ -66,7 +66,7 @@ export default function CaixaStatusWidget({
       }
 
       const { data: dadosAbertos } = await queryAbertos;
-      if (dadosAbertos) setListaAbertos(dadosAbertos as any);
+      if (dadosAbertos) setListaAbertos(dadosAbertos);
 
       // 2. Fechados Hoje
       let queryFechados = supabase

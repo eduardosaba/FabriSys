@@ -109,10 +109,15 @@ export default function AgendaPage() {
         .neq('status', 'cancelada');
 
       const ordensList = ordensRaw || [];
-      const produtoIds = Array.from(new Set(ordensList.map((o: any) => String(o.produto_final_id)).filter(Boolean)));
+      const produtoIds = Array.from(
+        new Set(ordensList.map((o: any) => String(o.produto_final_id)).filter(Boolean))
+      );
       const produtoMap: Record<string, { nome?: string }> = {};
       if (produtoIds.length > 0) {
-        const { data: produtos } = await supabase.from('produtos_finais').select('id, nome').in('id', produtoIds);
+        const { data: produtos } = await supabase
+          .from('produtos_finais')
+          .select('id, nome')
+          .in('id', produtoIds);
         (produtos || []).forEach((p: any) => (produtoMap[String(p.id)] = { nome: p.nome }));
       }
 
@@ -471,7 +476,7 @@ export default function AgendaPage() {
               <select
                 className="w-full border border-slate-300 p-3 md:p-2 rounded-lg bg-white text-base focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
                 value={novaTarefa.tipo}
-                onChange={(e) => setNovaTarefa({ ...novaTarefa, tipo: e.target.value as any })}
+                onChange={(e) => setNovaTarefa({ ...novaTarefa, tipo: e.target.value })}
               >
                 <option value="outros">Geral</option>
                 <option value="financeiro">Financeiro</option>

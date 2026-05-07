@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
 export default function BlockedPage() {
-  const { profile, loading: authLoading } = useAuth();
+  useAuth();
 
   const router = useRouter();
 

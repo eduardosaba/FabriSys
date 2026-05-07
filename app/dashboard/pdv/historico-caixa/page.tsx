@@ -32,8 +32,7 @@ export default function HistoricoCaixaPage() {
         )
         .eq('organization_id', profile.organization_id)
         .eq('status', 'fechado')
-        .order('data_fechamento', { ascending: false })
-        .returns<CaixaSessaoCompleto[]>();
+        .order('data_fechamento', { ascending: false });
 
       if (!error) setCaixas(data || []);
       setLoading(false);

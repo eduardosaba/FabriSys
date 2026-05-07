@@ -12,7 +12,7 @@ import { toast } from 'react-hot-toast';
 import { useTheme } from '@/lib/theme';
 
 export default function ResetPasswordPage() {
-  const { profile, loading: authLoading } = useAuth();
+  useAuth();
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);

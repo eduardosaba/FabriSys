@@ -79,15 +79,15 @@ export default function LossesWidget({ filtros, auxFiltro, organizationId, profi
               .from('produtos_finais')
               .select('id, nome, preco_custo')
               .in('id', (produtoIds || []).filter(Boolean));
-            if ((res as any).error) throw (res as any).error;
-            produtos = (res as any).data || null;
+            if (res.error) throw res.error;
+            produtos = res.data || null;
           } catch (errSelect) {
             console.warn('preco_custo não disponível, usando fallback:', errSelect);
             const res2 = await supabase
               .from('produtos_finais')
               .select('id, nome')
               .in('id', (produtoIds || []).filter(Boolean));
-            produtos = (res2 as any).data || null;
+            produtos = res2.data || null;
           }
           (produtos || []).forEach(
             (p: any) =>

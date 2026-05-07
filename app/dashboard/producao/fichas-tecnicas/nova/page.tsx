@@ -75,7 +75,7 @@ export default function NovaFichaTecnicaPage() {
         if (fichasError) throw fichasError;
 
         const idsComFicha = new Set(
-          (fichasExistentes ?? []).map((f) => String((f as any).produto_final_id || ''))
+          (fichasExistentes ?? []).map((f) => String(f.produto_final_id || ''))
         );
 
         const produtosSemFicha = (todosProdutos ?? []).filter(

@@ -42,7 +42,7 @@ export default function ThemeConfigurator() {
   const [saving, setSaving] = useState(false);
   const [loadingTheme, setLoadingTheme] = useState(true);
   const [previewImageError, setPreviewImageError] = useState(false);
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme, updateTheme, setPreviewVars, theme } = useTheme();
 
   // 🎨 Valores padrão iniciais
   const defaultTheme: FormData = {
@@ -88,12 +88,73 @@ export default function ThemeConfigurator() {
     }
   }, []);
 
-  function handleSave(_values: FormData) {
+  useEffect(() => {
+    // Atualiza preview em tempo real enquanto o usuário edita
+    if (typeof window === 'undefined') return;
     try {
-      setSaving(true);
-      // Exemplo de salvamento no Supabase (ajuste conforme sua tabela):
-      // await supabase.from('theme_config').upsert(values);
-      toast.success('Configurações salvas com sucesso!');
+      if (setPreviewVars) {
+        const partial: Partial<any> = {
+          logo_url: watchedValues.logo_url,
+          logo_scale: watchedValues.logo_scale,
+          font_family: watchedValues.font_family,
+          border_radius: watchedValues.border_radius,
+          colors: {
+            light: watchedValues.colors.light,
+            dark: watchedValues.colors.dark,
+          },
+        };
+        setPreviewVars(partial);
+      }
+    } catch (e) {
+      void e;
+    }
+  }, [watchedValues, setPreviewVars]);
+
+  async function handleSave(values: FormData) {
+    setSaving(true);
+    try {
+      // Preparar payload parcial compatível com ThemeSettings
+      const newThemePayload: Partial<any> = {
+        // preservar theme_mode atual para evitar reverter para padrão
+        theme_mode: theme?.theme_mode ?? 'light',
+        logo_url: values.logo_url,
+        logo_scale: values.logo_scale,
+        font_family: values.font_family,
+        border_radius: values.border_radius,
+        colors: {
+          light: values.colors.light,
+          dark: values.colors.dark,
+        },
+      };
+
+      // Tentar obter userId para persistência escopada; se falhar, updateTheme salvará no localStorage
+      let userId: string | undefined;
+      try {
+        const { data } = await supabase.auth.getUser();
+        userId = data?.user?.id as string | undefined;
+      } catch (e) {
+        void e;
+      }
+
+      if (!updateTheme) {
+        toast.success('Preview aplicado (local).');
+      } else {
+        await toast.promise(updateTheme(newThemePayload, false, userId), {
+          loading: 'Salvando tema...',
+          success: 'Tema salvo com sucesso!',
+          error: 'Erro ao salvar tema',
+        });
+
+        // Garantia extra: escrever explicitamente em localStorage um fallback
+        try {
+          const merged = { ...(theme || {}), ...newThemePayload };
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('theme-preference', JSON.stringify(merged));
+          }
+        } catch (e) {
+          void e;
+        }
+      }
     } catch (err) {
       console.error(err);
       toast.error('Erro ao salvar configurações');

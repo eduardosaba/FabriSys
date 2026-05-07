@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import PageHeader from '@/components/ui/PageHeader';
@@ -52,39 +52,37 @@ export default function PromocoesPage() {
   const [selectedProdId, setSelectedProdId] = useState('');
 
   // Carregar Dados
-  useEffect(() => {
-    async function loadData() {
-      if (!profile?.organization_id) return;
-      try {
-        setLoading(true);
-        // 1. Buscar Promoções
-        const { data: promoData } = await supabase
-          .from('promocoes')
-          .select('*, itens:promocao_itens(produto_id, quantidade, valor_referencia_unitario)')
-          // O filtro .eq foi removido pois o RLS já faz isso automaticamente
-          .order('created_at', { ascending: false });
+  const fetchData = useCallback(async () => {
+    if (!profile?.organization_id) return;
+    try {
+      setLoading(true);
+      const { data: promoData } = await supabase
+        .from('promocoes')
+        .select('*, itens:promocao_itens(produto_id, quantidade, valor_referencia_unitario)')
+        .order('created_at', { ascending: false });
 
-        setPromocoes(promoData || []);
+      setPromocoes(promoData || []);
 
-        // 2. Buscar Produtos para o Select
-        const { data: prodData } = await supabase
-          .from('produtos_finais')
-          .select('id, nome, preco_venda')
-          .eq('organization_id', profile.organization_id)
-          .eq('ativo', true)
-          .eq('tipo', 'final')
-          .order('nome');
+      const { data: prodData } = await supabase
+        .from('produtos_finais')
+        .select('id, nome, preco_venda')
+        .eq('organization_id', profile.organization_id)
+        .eq('ativo', true)
+        .eq('tipo', 'final')
+        .order('nome');
 
-        setProdutos(prodData || []);
-      } catch (err) {
-        console.error(err);
-        toast.error('Erro ao carregar dados.');
-      } finally {
-        setLoading(false);
-      }
+      setProdutos(prodData || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao carregar dados.');
+    } finally {
+      setLoading(false);
     }
-    void loadData();
   }, [profile]);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
   // Handlers do Formulário
   const handleAddItem = () => {
@@ -177,14 +175,15 @@ export default function PromocoesPage() {
         return true;
       })();
 
-      await toast.promise(savePromise as unknown as Promise<any>, {
+      await toast.promise(savePromise, {
         loading: 'Salvando promoção...',
         success: 'Promoção salva!',
         error: (err) => `Erro ao salvar promoção: ${err?.message || ''}`,
       });
 
       setIsModalOpen(false);
-      window.location.reload(); // Refresh simples para atualizar lista
+      // Recarrega os dados via fetch reativo (sem reload completo)
+      await fetchData();
     } catch (err) {
       console.error(err);
       toast.error('Erro ao salvar promoção.');

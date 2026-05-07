@@ -37,7 +37,7 @@ export default function RelatorioVendasPage() {
 
     async function fetchLocais() {
       const { data } = await supabase.from('locais').select('id, nome').eq('tipo', 'pdv');
-      setLocais((data as any) || []);
+      setLocais(data || []);
     }
     void fetchLocais();
   }, []);
@@ -54,12 +54,12 @@ export default function RelatorioVendasPage() {
         .lte('data_fechamento', `${dataFim}T23:59:59`)
         .order('data_fechamento', { ascending: false });
 
-      if (localId) query = (query as any).eq('loja', localId);
+      if (localId) query = query.eq('loja', localId);
 
       const { data, error } = await query;
 
       if (error) throw error;
-      setCaixasConfirmados((data as any) || []);
+      setCaixasConfirmados(data || []);
     } catch (err: any) {
       console.error('Erro ao carregar relatório consolidado:', err);
       toast.error('Erro ao carregar relatório.');

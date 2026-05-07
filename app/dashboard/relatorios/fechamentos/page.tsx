@@ -213,9 +213,7 @@ export default function RelatorioFechamentosPage() {
 
   const exportarPDF = () => {
     const logo =
-      getImageUrl(theme?.company_logo_url) ||
-      getImageUrl(theme?.logo_url as string | undefined) ||
-      '/logo.png';
+      getImageUrl(theme?.company_logo_url) || getImageUrl(theme?.logo_url) || '/logo.png';
     const issuedDate = new Date();
 
     const resumoHtml = `

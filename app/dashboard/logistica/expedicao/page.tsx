@@ -24,6 +24,7 @@ import { Warehouse } from 'lucide-react';
 import Image from 'next/image';
 import getImageUrl from '@/lib/getImageUrl';
 import { toast, Toaster } from 'react-hot-toast';
+import { useFullScreen } from '@/lib/fullscreen';
 import { useAuth } from '@/lib/auth';
 
 export default function ExpedicaoPage() {
@@ -36,7 +37,9 @@ export default function ExpedicaoPage() {
 
   // Estados de UI
   const [activeTab, setActiveTab] = useState<'despacho' | 'historico'>('despacho');
-  const [isFullScreen, setIsFullScreen] = useState(false);
+  const { isFullScreen, toggleForTarget } = useFullScreen();
+  const [isClosing, setIsClosing] = useState(false);
+  const [isOpening, setIsOpening] = useState(false);
   const [viewMode, setViewMode] = useState<'trello' | 'vertical'>('trello');
   const [loading, setLoading] = useState(true);
   const [enviando, setEnviando] = useState(false);
@@ -50,6 +53,26 @@ export default function ExpedicaoPage() {
   const [locaisMap, setLocaisMap] = useState<Record<string, string>>({});
   const [produtosMap, setProdutosMap] = useState<Record<string, string>>({});
   const [selectedPdvs, setSelectedPdvs] = useState<Record<string, boolean>>({});
+
+  const selectAllForLoja = (lojaId: string, itens: any[]) => {
+    setSelectedPdvs((prev) => {
+      const next = { ...prev };
+      itens.forEach((it) => {
+        next[`${lojaId}-${it.id}`] = true;
+      });
+      return next;
+    });
+  };
+
+  const deselectAllForLoja = (lojaId: string, itens: any[]) => {
+    setSelectedPdvs((prev) => {
+      const next = { ...prev };
+      itens.forEach((it) => {
+        delete next[`${lojaId}-${it.id}`];
+      });
+      return next;
+    });
+  };
 
   // Estados de Filtro (Histórico)
   const [filtroDataInicio, setFiltroDataInicio] = useState('');
@@ -142,6 +165,19 @@ export default function ExpedicaoPage() {
   useEffect(() => {
     carregarDados();
   }, [carregarDados, reloadKey]);
+
+  useEffect(() => {
+    // synchronize local opening/closing animation state with provider
+    if (isFullScreen) {
+      setIsOpening(true);
+      setTimeout(() => setIsOpening(false), 20);
+    } else {
+      // play close animation briefly
+      setIsClosing(true);
+      setTimeout(() => setIsClosing(false), 220);
+    }
+    return () => {};
+  }, [isFullScreen]);
 
   // 2. Ações de Envio
   const handleEnviarLote = async (pdvId: string, itens: any[]) => {
@@ -284,36 +320,40 @@ export default function ExpedicaoPage() {
 
   return (
     <div
-      className={`flex flex-col gap-4 transition-all ${isFullScreen ? 'fixed inset-0 z-[9999] bg-slate-100 p-4 overflow-hidden' : 'p-6 max-w-7xl mx-auto'}`}
+      data-fullscreen-target
+      className={`flex flex-col gap-4 transform transition-all duration-200 ease-in-out ${isFullScreen ? `fixed inset-0 z-[9999] bg-slate-100 p-4 overflow-auto ${isClosing || isOpening ? 'scale-95 opacity-0' : 'scale-100 opacity-100'}` : 'p-6 max-w-7xl mx-auto'}`}
     >
       <Toaster position="top-right" />
 
-      <PageHeader
-        title="Expedição & Logística"
-        description="Controle o fluxo de saída da fábrica para as lojas."
-        icon={Truck}
+      <div
+        className={
+          isFullScreen ? 'sticky top-4 z-[10001] bg-white/95 backdrop-blur-sm rounded-lg' : ''
+        }
       >
-        <div className="flex items-center gap-2">
-          <Button
-            variant={activeTab === 'despacho' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('despacho')}
-            className="gap-2"
-          >
-            <ClipboardList size={18} /> Painel
-          </Button>
-          <Button
-            variant={activeTab === 'historico' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('historico')}
-            className="gap-2"
-          >
-            <History size={18} /> Histórico
-          </Button>
-          <div className="h-8 w-[1px] bg-slate-200 mx-2" />
-          <Button variant="secondary" onClick={() => setIsFullScreen(!isFullScreen)}>
-            {isFullScreen ? <X size={18} /> : <ExternalLink size={18} />}
-          </Button>
-        </div>
-      </PageHeader>
+        <PageHeader
+          title="Expedição & Logística"
+          description="Controle o fluxo de saída da fábrica para as lojas."
+          icon={Truck}
+        >
+          <div className="flex items-center gap-2">
+            <Button
+              variant={activeTab === 'despacho' ? 'primary' : 'secondary'}
+              onClick={() => setActiveTab('despacho')}
+              className="gap-2"
+            >
+              <ClipboardList size={18} /> Painel
+            </Button>
+            <Button
+              variant={activeTab === 'historico' ? 'primary' : 'secondary'}
+              onClick={() => setActiveTab('historico')}
+              className="gap-2"
+            >
+              <History size={18} /> Histórico
+            </Button>
+            <div className="h-8 w-[1px] bg-slate-200 mx-2" />
+          </div>
+        </PageHeader>
+      </div>
 
       {activeTab === 'despacho' ? (
         <>
@@ -366,14 +406,32 @@ export default function ExpedicaoPage() {
                         {itens.length} pendentes
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => gerarRomaneioPdf(loja.nome, itens)}
-                      title="Imprimir Romaneio Pendente"
-                    >
-                      <Printer size={14} />
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <div className="hidden sm:flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => selectAllForLoja(loja.id, itens)}
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          Selecionar todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deselectAllForLoja(loja.id, itens)}
+                          className="text-xs text-gray-500 hover:underline"
+                        >
+                          Desmarcar
+                        </button>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => gerarRomaneioPdf(loja.nome, itens)}
+                        title="Imprimir Romaneio Pendente"
+                      >
+                        <Printer size={14} />
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="p-3 space-y-3 overflow-y-auto custom-scrollbar">
@@ -395,9 +453,25 @@ export default function ExpedicaoPage() {
                           className={`p-4 rounded-xl border-2 cursor-pointer transition-all active:scale-95 bg-white shadow-sm hover:border-blue-300 ${selectedPdvs[`${loja.id}-${item.id}`] ? 'border-blue-500 bg-blue-50' : 'border-transparent'}`}
                         >
                           <div className="flex justify-between items-start mb-2">
-                            <span className="text-[10px] font-bold text-slate-400">
-                              OP #{item.numero_op}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={!!selectedPdvs[`${loja.id}-${item.id}`]}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setSelectedPdvs((prev) => ({
+                                    ...prev,
+                                    [`${loja.id}-${item.id}`]: checked,
+                                  }));
+                                }}
+                                className="w-4 h-4"
+                                aria-label={`Selecionar item OP ${item.numero_op}`}
+                              />
+                              <span className="text-[10px] font-bold text-slate-400">
+                                OP #{item.numero_op}
+                              </span>
+                            </div>
                             {selectedPdvs[`${loja.id}-${item.id}`] && (
                               <CheckCircle2 size={16} className="text-blue-500" />
                             )}
@@ -556,7 +630,7 @@ export default function ExpedicaoPage() {
                                 if (!confirmed) return;
                                 try {
                                   setEnviando(true);
-                                  const { data, error } = (await supabase.rpc(
+                                  const { data, error } = await supabase.rpc(
                                     'processar_retorno_sobra',
                                     {
                                       p_produto_id: d.produto_id,
@@ -565,7 +639,7 @@ export default function ExpedicaoPage() {
                                       p_fabrica_id: d.local_origem_id,
                                       p_org_id: profile?.organization_id || null,
                                     } as any
-                                  )) as any;
+                                  );
                                   if (error) throw error;
                                   if (data && data.success === false)
                                     throw new Error(data.message || 'Erro no retorno');

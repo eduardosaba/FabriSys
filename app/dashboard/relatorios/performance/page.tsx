@@ -55,7 +55,7 @@ export default function PerformancePage() {
     });
 
     // Montar dataset
-    const lista = [];
+    const lista: { data: string; meta: any; vendido: number; percentual: number }[] = [];
     for (let d = 1; d <= diasNoMes; d++) {
       const dataStr = `${mes}-${String(d).padStart(2, '0')}`;
       const meta = metas?.find((m) => m.data_referencia === dataStr);

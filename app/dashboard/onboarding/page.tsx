@@ -29,7 +29,7 @@ export default function OnboardingPage() {
     cnpj: '',
     telefone: '',
     endereco: '',
-    logo_url: null as string | null,
+    logo_url: null,
   });
 
   // 1. Carregar dados atuais da organização
@@ -150,7 +150,7 @@ export default function OnboardingPage() {
     const toastId = toast.loading('Enviando logo...');
     try {
       const { data: sessionData } = await supabase.auth.getSession();
-      const session = (sessionData as any)?.session;
+      const session = sessionData?.session;
       if (!session?.user) {
         toast.error('Você precisa estar logado para enviar uma logo.');
         toast.dismiss(toastId);
@@ -168,8 +168,8 @@ export default function OnboardingPage() {
       if (error) throw error;
 
       const urlRes = await supabase.storage.from('company-assets').getPublicUrl(path);
-      const urlData = (urlRes as any).data;
-      const urlError = (urlRes as any).error;
+      const urlData = urlRes.data;
+      const urlError = urlRes.error;
       if (urlError) throw urlError;
 
       setFormData((prev) => ({ ...prev, logo_url: urlData?.publicUrl ?? null }));

@@ -87,7 +87,7 @@ export default function SistemaTab() {
     setSaving(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
-      const session = (sessionData as any)?.session;
+      const session = sessionData?.session;
       if (!session?.user) {
         toast.error('Você precisa estar logado para salvar as configurações');
         setSaving(false);

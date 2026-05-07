@@ -84,7 +84,7 @@ export default function AlertasPage() {
             estoque_minimo_alerta: Number(d['estoque_minimo_alerta'] ?? 0),
             custo_por_ue: Number(d['custo_por_ue'] ?? 0),
             categoria: categoriaObj ? { nome: String(categoriaObj['nome'] ?? '') } : undefined,
-          } as InsumoAlerta;
+          };
         });
         setInsumos(normalized);
       } else {

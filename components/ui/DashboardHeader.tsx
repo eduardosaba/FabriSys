@@ -1,7 +1,49 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import BrandSkeleton from '@/components/ui/BrandSkeleton';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useActiveLocal } from '@/contexts/ActiveLocalContext';
+import { usePageTracking } from '@/hooks/usePageTracking';
+import { getActiveLocal } from '@/lib/activeLocal';
+import { useAuth } from '@/lib/auth';
+import { useFullScreenSafe } from '@/lib/fullscreen';
+import getImageUrl from '@/lib/getImageUrl';
+import { getOperationalContext } from '@/lib/operationalLocal';
+import { supabase } from '@/lib/supabase-client';
+import { useTheme } from '@/lib/theme';
 import type { ThemeSettings } from '@/lib/types';
+import {
+  Bell,
+  CheckCircle,
+  ChevronDown,
+  Clock,
+  ExternalLink,
+  History,
+  Lightbulb,
+  LogOut,
+  MapPin,
+  Menu,
+  Moon,
+  Package,
+  Pin,
+  PinOff,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings,
+  ShoppingCart,
+  Sparkles,
+  Star,
+  Store,
+  Sun,
+  TrendingUp,
+  User,
+  X,
+} from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'react-hot-toast';
 // Função utilitária para cor primária com opacidade
 function getPrimaryWithOpacity(_theme: Partial<ThemeSettings> | undefined, opacity: number) {
   let color = '#88544c';
@@ -21,43 +63,6 @@ function getPrimaryWithOpacity(_theme: Partial<ThemeSettings> | undefined, opaci
   }
   return color;
 }
-import { useTheme } from '@/lib/theme';
-import getImageUrl from '@/lib/getImageUrl';
-import { useAuth } from '@/lib/auth';
-import { getOperationalContext } from '@/lib/operationalLocal';
-import { usePageTracking } from '@/hooks/usePageTracking';
-import { supabase } from '@/lib/supabase-client';
-import {
-  Search,
-  Sun,
-  Moon,
-  User,
-  Settings,
-  LogOut,
-  Bell,
-  Menu,
-  Plus,
-  Package,
-  ShoppingCart,
-  Store,
-  RefreshCw,
-  ChevronDown,
-  Pin,
-  PinOff,
-  Clock,
-  Star,
-  Sparkles,
-  History,
-  TrendingUp,
-  Lightbulb,
-  MapPin,
-  CheckCircle,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { getActiveLocal, setActiveLocal } from '@/lib/activeLocal';
-import BrandSkeleton from '@/components/ui/BrandSkeleton';
 
 export default function DashboardHeader({
   onMenuClick,
@@ -116,21 +121,20 @@ export default function DashboardHeader({
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationsList, setNotificationsList] = useState<any[]>([]);
-  const [opLocalId, setOpLocalId] = useState<string | null>(null);
-  const [activeLocalName, setActiveLocalName] = useState<string | null>(null);
+  const { activeLocalId, activeLocalName, setActiveLocalId, refreshName } = useActiveLocal();
   const [lojasAdmin, setLojasAdmin] = useState<any[]>([]);
 
   const handleTrocarLoja = (id: string | null) => {
-    // Prevent PDV users (with a fixed profile.local_id) from changing the unit
     try {
-      if ((profile as any)?.local_id) {
-        console.warn('Usuário com local fixo não pode alterar unidade.');
+      // 1. Só bloqueia se for PDV. Admin/master podem trocar mesmo tendo profile.local_id
+      const userRole = (profile as any)?.role;
+      if (userRole === 'pdv') {
+        toast.error('Acesso restrito: seu local de operação é fixo.');
         setShowUserMenu(false);
         return;
       }
 
       const currentLocal = getActiveLocal();
-
       // Se clicar no que já está selecionado, apenas fecha o menu
       if (id === currentLocal) {
         setShowUserMenu(false);
@@ -138,14 +142,10 @@ export default function DashboardHeader({
       }
 
       // Persiste a nova escolha (ou limpa se id for null)
-      setActiveLocal(id);
-
-      // Feedback visual imediato
-      setActiveLocalName(id === null ? null : activeLocalName);
+      setActiveLocalId(id);
       setShowUserMenu(false);
-
-      // Recarrega a página para resetar hooks e contexto
-      window.location.reload();
+      // Não recarregamos: o armazenamento emite evento `pdv_active_local_change`
+      // que é escutado por componentes reativos.
     } catch (e) {
       console.error('Erro ao trocar de unidade:', e);
     }
@@ -164,7 +164,7 @@ export default function DashboardHeader({
 
   // Funções para pesquisa com IA
   const generateAISuggestions = (query: string) => {
-    const suggestions = [];
+    const suggestions: string[] = [];
 
     if (query.toLowerCase().includes('estoque') || query.toLowerCase().includes('produto')) {
       suggestions.push('Ver produtos com estoque baixo');
@@ -376,7 +376,7 @@ export default function DashboardHeader({
 
       // PDV: ver apenas eventos do próprio local
       if (isPdv) {
-        const localId = opLocalId ?? (profile as any)?.local_id ?? null;
+        const localId = activeLocalId ?? (profile as any)?.local_id ?? null;
         if (!localId) {
           setNotificationsList([]);
           return;
@@ -385,7 +385,7 @@ export default function DashboardHeader({
           .from('vendas')
           .select('id,total_venda,created_at,local:locais(nome),local_id')
           .eq('local_id', localId)
-          .gte('created_at', since)
+          .gte('created_at', sinceIso)
           .order('created_at', { ascending: false })
           .limit(10);
 
@@ -395,7 +395,7 @@ export default function DashboardHeader({
             'id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome),local_id'
           )
           .eq('local_id', localId)
-          .gte('data_abertura', since)
+          .gte('data_abertura', sinceIso)
           .order('data_abertura', { ascending: false })
           .limit(10);
 
@@ -405,7 +405,7 @@ export default function DashboardHeader({
             'id,data_abertura,data_fechamento,saldo_inicial,total_vendas_sistema,local:locais(nome),local_id'
           )
           .eq('local_id', localId)
-          .gte('data_fechamento', since)
+          .gte('data_fechamento', sinceIso)
           .order('data_fechamento', { ascending: false })
           .limit(10);
 
@@ -423,7 +423,7 @@ export default function DashboardHeader({
         const { data: nots } = await supabase
           .from('notificacoes_pedido')
           .select('id,pedido_id,tipo,mensagem,created_at')
-          .gte('created_at', since)
+          .gte('created_at', sinceIso)
           .order('created_at', { ascending: false })
           .limit(20);
 
@@ -449,7 +449,7 @@ export default function DashboardHeader({
 
   useEffect(() => {
     if (showNotifications) void fetchRecentNotifications();
-  }, [showNotifications, opLocalId]);
+  }, [showNotifications, activeLocalId]);
 
   // reset logoError when resolved logo changes
   useEffect(() => {
@@ -469,7 +469,6 @@ export default function DashboardHeader({
         const ctx = await getOperationalContext(profile);
         const myLocal = ctx.caixa?.local_id ?? ctx.localId ?? (profile as any)?.local_id ?? null;
         if (!mounted) return;
-        setOpLocalId(myLocal ?? null);
 
         vendasChannel = supabase.channel('public:vendas');
         vendasChannel.on(
@@ -496,7 +495,7 @@ export default function DashboardHeader({
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'caixa_sessao' },
             async (payload) => {
-              const c = payload.new as any;
+              const c = payload.new;
               if (!isAdmin && !isPdv) return;
 
               let localName = c.local?.nome;
@@ -551,7 +550,7 @@ export default function DashboardHeader({
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'caixa_sessao' },
             async (payload) => {
-              const c = payload.new as any;
+              const c = payload.new;
               if (!c.data_fechamento) return;
               if (!isAdmin && !isPdv) return;
 
@@ -605,7 +604,7 @@ export default function DashboardHeader({
               'postgres_changes',
               { event: 'INSERT', schema: 'public', table: 'notificacoes_pedido' },
               (payload) => {
-                const p = payload.new as any;
+                const p = payload.new;
                 const notif = {
                   id: `np-${p.id}`,
                   title: `Pedido #${p.pedido_id}`,
@@ -707,79 +706,42 @@ export default function DashboardHeader({
 
   useEffect(() => {
     const syncLocal = async () => {
-      // 1. Aguarda o perfil carregar
       if (!profile?.id) return;
 
       try {
         const profileLocalId = (profile as any)?.local_id;
         const persisted = getActiveLocal();
+        const userRole = profile?.role;
 
-        // 2. SE O USUÁRIO FOR PDV (Tem local fixo no banco): atropela localStorage
-        if (profileLocalId) {
+        // 1. Lógica de Restrição: Só forçamos o local se for um operador de PDV real
+        const isRestricted = userRole === 'pdv';
+
+        if (isRestricted && profileLocalId) {
+          // Se é PDV e o local salvo é diferente do local do contrato, força a correção
           if (persisted !== profileLocalId) {
+            setActiveLocalId(profileLocalId);
+            // Atualiza o nome e deixa o contexto propagar a mudança sem reload
             try {
-              setActiveLocal(profileLocalId);
+              await refreshName();
             } catch (e) {
-              void e;
+              // ignore
             }
-
-            // Reforço: se em 300ms o valor ainda não foi atualizado (race), reaplica e recarrega.
-            setTimeout(() => {
-              try {
-                const now = getActiveLocal();
-                if (now !== profileLocalId) {
-                  try {
-                    setActiveLocal(profileLocalId);
-                  } catch (e) {
-                    void e;
-                  }
-                  // reload para garantir que todos os hooks leiam o novo valor
-                  setTimeout(() => window.location.reload(), 250);
-                }
-              } catch (e) {
-                void e;
-              }
-            }, 300);
           }
-
-          try {
-            const { data } = await supabase
-              .from('locais')
-              .select('nome')
-              .eq('id', profileLocalId)
-              .maybeSingle();
-            setActiveLocalName(data?.nome || null);
-          } catch (e) {
-            setActiveLocalName(null);
-          }
-
-          // encerra aqui para PDV — não deixa o restante da lógica rodar
-          return;
+        }
+        // 2. Lógica para Admin/Master: Se não houver nada salvo, usa o do perfil como fallback inicial
+        else if ((userRole === 'admin' || userRole === 'master') && !persisted && profileLocalId) {
+          setActiveLocalId(profileLocalId);
         }
 
-        // 3. SE FOR ADMIN (Sem local fixo): usa persisted se existir
-        if (persisted) {
-          try {
-            const { data } = await supabase
-              .from('locais')
-              .select('nome')
-              .eq('id', persisted)
-              .maybeSingle();
-            setActiveLocalName(data?.nome || null);
-          } catch (e) {
-            setActiveLocalName(null);
-          }
-        } else {
-          setActiveLocalName(null);
-        }
+        // 3. Atualiza o nome visual no Header baseado no que está DESTRAVADO no localStorage
+        await refreshName();
       } catch (e) {
-        // garante que não quebre a renderização
-        setActiveLocalName(null);
+        console.error('Erro na sincronização de unidade:', e);
       }
     };
 
     void syncLocal();
-  }, [profile?.id, (profile as any)?.local_id]);
+  }, [profile?.id, (profile as any)?.local_id, profile?.role]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -975,7 +937,7 @@ export default function DashboardHeader({
                           }}
                           onClick={() => {
                             setShowQuickMenu(false);
-                            trackPageAccess(action.href, action.label, action.icon.name);
+                            trackPageAccess(action.href, action.label, (action.icon as any).name);
                           }}
                         >
                           <action.icon className="h-4 w-4" />
@@ -1017,7 +979,7 @@ export default function DashboardHeader({
                                 }}
                                 onClick={() => {
                                   setShowQuickMenu(false);
-                                  trackPageAccess(href, page.label, page.icon.name);
+                                  trackPageAccess(href, page.label, (page.icon as any).name);
                                 }}
                               >
                                 <page.icon className="h-4 w-4" />
@@ -1090,6 +1052,9 @@ export default function DashboardHeader({
         )}
 
         {/* Atualizar */}
+        {/* Toggle full-screen global */}
+        <FullScreenToggle />
+
         <button
           onClick={() => window.location.reload()}
           className="rounded-md p-2"
@@ -1355,5 +1320,18 @@ export default function DashboardHeader({
         </Popover>
       </div>
     </header>
+  );
+}
+
+function FullScreenToggle() {
+  const { isFullScreen, toggleForTarget } = useFullScreenSafe();
+  return (
+    <button
+      title="Alternar tela cheia"
+      onClick={toggleForTarget}
+      className="rounded-md p-2 mr-1 flex items-center justify-center hover:bg-black/5 transition-colors"
+    >
+      {isFullScreen ? <X className="h-5 w-5" /> : <ExternalLink className="h-5 w-5" />}
+    </button>
   );
 }

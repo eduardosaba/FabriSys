@@ -333,45 +333,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         const totalDuration = performance.now() - startTime;
         console.log(`[AuthProvider] fetchProfile finalizado em ${totalDuration.toFixed(2)}ms`);
-        try {
-          if (totalDuration > 2000) {
-            toast({
-              title: 'Atenção: demora no carregamento',
-              description: `Carregamento do perfil demorou ${Math.round(totalDuration)}ms.`,
-              variant: 'warning',
-              duration: 6000,
-            });
-          }
-        } catch (e) {
-          void e;
-        }
       }
     },
     []
   );
 
   useEffect(() => {
-    // Timeout de segurança: evita loading infinito se houver problemas de rede
-    // Se o profile não carregar dentro de `AUTH_TIMEOUT_MS`, marca timeout e avisa o usuário.
+    // Timeout de segurança em background (sem exibir popup invasivo para o usuário)
     const timeoutOccurred = { value: false } as { value: boolean };
     const _timeout = setTimeout(() => {
       timeoutOccurred.value = true;
       setAuthTimeout(true);
       setLoading(false);
       console.warn(
-        `⚠️ Auth: Timeout de ${AUTH_TIMEOUT_MS}ms atingido. O carregamento do perfil pode continuar em segundo plano; algumas informações podem demorar a aparecer.`
+        `⚠️ Auth: Timeout de ${AUTH_TIMEOUT_MS}ms atingido. O carregamento do perfil continua em segundo plano.`
       );
-      try {
-        toast({
-          title: 'Atenção: demora no login',
-          description:
-            'O carregamento do perfil está demorando. Algumas informações podem aparecer em seguida.',
-          variant: 'warning',
-          duration: 8000,
-        });
-      } catch (e) {
-        void e;
-      }
     }, AUTH_TIMEOUT_MS);
 
     const getInitialSession = async () => {

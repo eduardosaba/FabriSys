@@ -173,12 +173,12 @@ export default function AuditoriaPDVPage() {
   // Carregar locais de PDV para o filtro
   useEffect(() => {
     async function carregarLocais() {
-      if (!profile?.organization_id) return;
       try {
-        const { data } = await supabase
-          .from('locais')
-          .select('id, nome, tipo')
-          .eq('organization_id', profile.organization_id);
+        let query = supabase.from('locais').select('id, nome, tipo');
+        if (profile?.organization_id) {
+          query = query.eq('organization_id', profile.organization_id);
+        }
+        const { data } = await query.order('nome');
 
         if (data) {
           const pdvs = data.filter((loc) => {

@@ -99,14 +99,14 @@ export default function AcertoDiarioPage() {
   // Carregar PDVs e Produtos
   useEffect(() => {
     async function carregarDadosIniciais() {
-      if (!profile?.organization_id) return;
       setLoading(true);
       try {
         // Carregar PDVs (apenas pontos de venda, excluindo a Fábrica)
-        const { data: dataLocais } = await supabase
-          .from('locais')
-          .select('id, nome, tipo')
-          .eq('organization_id', profile.organization_id);
+        let queryLocais = supabase.from('locais').select('id, nome, tipo');
+        if (profile?.organization_id) {
+          queryLocais = queryLocais.eq('organization_id', profile.organization_id);
+        }
+        const { data: dataLocais } = await queryLocais.order('nome');
 
         if (dataLocais && dataLocais.length > 0) {
           const pdvsApenas = dataLocais.filter((loc) => {
@@ -128,10 +128,11 @@ export default function AcertoDiarioPage() {
         }
 
         // Carregar Produtos Finais cadastrados na confeitaria
-        const { data: dataProds } = await supabase
-          .from('produtos_finais')
-          .select('id, nome, preco_venda')
-          .eq('organization_id', profile.organization_id);
+        let queryProds = supabase.from('produtos_finais').select('id, nome, preco_venda');
+        if (profile?.organization_id) {
+          queryProds = queryProds.eq('organization_id', profile.organization_id);
+        }
+        const { data: dataProds } = await queryProds.order('nome');
 
         let lista: ProdutoItem[] = [];
         if (dataProds && dataProds.length > 0) {

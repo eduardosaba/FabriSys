@@ -24,25 +24,22 @@ import { FontSettingsSection } from '@/components/configuracao/FontSettingsSecti
 import { SystemNameSection } from '@/components/configuracao/SystemNameSection';
 
 export default function CustomizacaoTab() {
-  const { theme, updateTheme, loading } = useTheme();
+  const { theme, updateTheme, loading, resolvedTheme } = useTheme();
   // Aplica as variáveis CSS do tema customizado (dark ou light)
   useEffect(() => {
     if (!theme) return;
-    const themeMode = theme.theme_mode === 'system' ? 'light' : theme.theme_mode || 'light';
-    const themeColors = theme.colors?.[themeMode];
+    const activeMode = theme.theme_mode === 'system' ? (resolvedTheme || 'light') : (theme.theme_mode || 'light');
+    const themeColors = theme.colors?.[activeMode];
     if (themeColors && typeof themeColors === 'object') {
       Object.entries(themeColors).forEach(([key, value]) => {
         const colorValue = typeof value === 'string' ? value : String(value);
-        document.documentElement.style.setProperty(`--${themeMode}-${key}`, colorValue);
-        if (themeMode === 'dark') {
-          document.documentElement.style.setProperty(`--${key}`, colorValue);
-        }
-        if (themeMode === 'light') {
-          document.documentElement.style.setProperty(`--${key}`, colorValue);
-        }
+        const normalized = String(key).replace(/_/g, '-');
+        document.documentElement.style.setProperty(`--${activeMode}-${normalized}`, colorValue);
+        document.documentElement.style.setProperty(`--${normalized}`, colorValue);
+        document.documentElement.style.setProperty(`--${key}`, colorValue);
       });
     }
-  }, [theme]);
+  }, [theme, resolvedTheme]);
   const { profile, loading: authLoading } = useAuth();
   const isMasterAdmin = profile?.role === 'master';
 
@@ -63,10 +60,10 @@ export default function CustomizacaoTab() {
     if (authLoading) return;
     if (!profile?.id) return;
 
-    const themeMode = theme.theme_mode;
+    const activeMode = theme.theme_mode === 'system' ? (resolvedTheme || 'light') : (theme.theme_mode || 'light');
     const themeColors = theme.colors as Record<string, any> | undefined;
-    if (themeColors && typeof themeColors === 'object' && themeMode in themeColors) {
-      const currentColors = themeColors[themeMode as keyof typeof themeColors];
+    if (themeColors && typeof themeColors === 'object' && activeMode in themeColors) {
+      const currentColors = themeColors[activeMode as keyof typeof themeColors];
       if (currentColors && typeof currentColors === 'object') {
         const initialSettings: Record<string, string | number> = {
           logo_url: theme.logo_url || '/logo.png',
@@ -77,7 +74,7 @@ export default function CustomizacaoTab() {
           name: theme.name || 'Confectio',
           footer_company_name: theme.footer_company_name || 'Eduardo Saba',
           footer_system_version: theme.footer_system_version || '1.0.0',
-          sidebar_bg: currentColors.sidebar_bg || theme.sidebar_bg || '#4a2c2b',
+          sidebar_bg: currentColors.sidebar_bg || theme.sidebar_bg || (activeMode === 'dark' ? '#4a2c2b' : '#e9c4c2'),
           sidebar_hover_bg: currentColors.sidebar_hover_bg || theme.sidebar_hover_bg || '#88544c',
           header_bg: currentColors.header_bg || theme.header_bg || '#88544c',
         };
@@ -93,7 +90,7 @@ export default function CustomizacaoTab() {
         setSettings(initialSettings);
       }
     }
-  }, [authLoading, profile?.id, theme, availableFields]);
+  }, [authLoading, profile?.id, theme, resolvedTheme, availableFields]);
 
   // Handler para mudanças nos campos
   const handleFieldChange = (key: string, value: string | number) => {
@@ -177,8 +174,8 @@ export default function CustomizacaoTab() {
     const darkColors = preset.colors.dark || {};
 
     // Determinar quais cores aplicar ao preview baseado no modo atual
-    const themeMode = theme.theme_mode === 'system' ? 'light' : theme.theme_mode;
-    const currentModeColors = preset.colors[themeMode] || {};
+    const currentActiveMode = theme.theme_mode === 'system' ? (resolvedTheme || 'light') : (theme.theme_mode || 'light');
+    const currentModeColors = preset.colors[currentActiveMode] || {};
 
     // Atualizar o estado 'settings' (o que aparece nos inputs)
     Object.entries(currentModeColors).forEach(([key, value]) => {
@@ -186,7 +183,7 @@ export default function CustomizacaoTab() {
     });
 
     // Garantir que a cor do sidebar corresponda à cor secundária da predefinição
-    const secondaryColor = currentModeColors.secondary || currentModeColors.sidebar_bg || '#e9c4c2';
+    const secondaryColor = currentModeColors.secondary || currentModeColors.sidebar_bg || (currentActiveMode === 'dark' ? '#4a2c2b' : '#e9c4c2');
     newSettings.sidebar_bg = currentModeColors.sidebar_bg || preset.sidebar_bg || secondaryColor;
     newSettings.sidebar_hover_bg =
       currentModeColors.sidebar_hover_bg ||
@@ -199,16 +196,19 @@ export default function CustomizacaoTab() {
     try {
       Object.entries(currentModeColors).forEach(([key, value]) => {
         if (typeof value === 'string' && value) {
+          const normalized = String(key).replace(/_/g, '-');
+          document.documentElement.style.setProperty(`--${normalized}`, value);
           document.documentElement.style.setProperty(`--${key}`, value);
-          document.documentElement.style.setProperty(`--${themeMode}-${key}`, value);
+          document.documentElement.style.setProperty(`--${currentActiveMode}-${normalized}`, value);
         }
       });
-      document.documentElement.style.setProperty('--sidebar-bg', newSettings.sidebar_bg);
+      document.documentElement.style.setProperty('--sidebar-bg', newSettings.sidebar_bg as string);
+      document.documentElement.style.setProperty('--sidebar_bg', newSettings.sidebar_bg as string);
       document.documentElement.style.setProperty(
         '--sidebar-hover-bg',
-        newSettings.sidebar_hover_bg
+        newSettings.sidebar_hover_bg as string
       );
-      document.documentElement.style.setProperty('--header-bg', newSettings.header_bg);
+      document.documentElement.style.setProperty('--header-bg', newSettings.header_bg as string);
     } catch (e) {
       void e;
     }
@@ -244,7 +244,7 @@ export default function CustomizacaoTab() {
 
       const updatedSettings = { ...theme, ...settings };
 
-      // Se uma predefinição foi aplicada, salvar para ambos os modos
+      // Se uma predefinição foi appliedPreset, salvar para ambos os modos
       // resolve userId: prefer profile, caso não esteja disponível tentar buscar via supabase.auth
       let userId = profile?.id;
       if (!userId) {
@@ -286,7 +286,7 @@ export default function CustomizacaoTab() {
           sidebar_bg: darkColors.sidebar_bg || darkSec,
         } as unknown as import('@/lib/types').ThemeColors;
 
-        const currentActiveMode = themeMode === 'system' ? 'light' : themeMode;
+        const currentActiveMode = themeMode === 'system' ? (resolvedTheme || 'light') : themeMode;
         updatedSettings.sidebar_bg = currentActiveMode === 'dark' ? darkSec : lightSec;
         updatedSettings.header_bg = currentActiveMode === 'dark' ? darkSec : lightSec;
         if ('sidebar_hover_bg' in appliedPreset && appliedPreset.sidebar_hover_bg) {

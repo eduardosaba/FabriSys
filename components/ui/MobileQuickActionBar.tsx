@@ -26,14 +26,14 @@ export default function MobileQuickActionBar() {
     },
     {
       id: 'lancar',
-      label: 'Novo Romaneio',
+      label: 'Controles PDV',
       href: '/dashboard/acerto-diario',
       icon: <Store className="h-5 w-5" />,
       exact: true,
     },
     {
       id: 'fechamento',
-      label: 'Fechamento',
+      label: 'Fechamento PDV',
       href: '/dashboard/acerto-diario/fechamento',
       icon: <Lock className="h-5 w-5" />,
     },
@@ -58,11 +58,10 @@ export default function MobileQuickActionBar() {
             <Link
               key={item.id}
               href={item.href}
-              className={`flex flex-1 flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all active:scale-95 ${
-                isActive
+              className={`flex flex-1 flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all active:scale-95 ${isActive
                   ? 'bg-primary text-white font-bold shadow-sm'
                   : 'text-[var(--text)] opacity-80 hover:opacity-100 hover:bg-black/5'
-              }`}
+                }`}
             >
               <div className={`transition-transform ${isActive ? 'scale-110' : ''}`}>
                 {item.icon}

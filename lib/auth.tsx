@@ -100,18 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cached && cached.id === userId) {
           setProfile(cached);
           setLoading(false);
-        } else {
-          // setar um perfil mínimo imediatamente para não bloquear a UI
-          setProfile({ id: userId, role: 'user', email: userEmail ?? undefined });
-          setLoading(false);
         }
       } catch (e) {
-        try {
-          setProfile({ id: userId, role: 'user', email: userEmail ?? undefined });
-          setLoading(false);
-        } catch (err) {
-          void err;
-        }
+        void e;
       }
 
       try {
@@ -170,6 +161,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               ativo: prof.ativo ?? baseProfile?.ativo ?? undefined,
               status_conta: prof.status_conta ?? baseProfile?.status_conta ?? undefined,
             } as Profile & { organizations?: any };
+
+            // Se o perfil não possuir organization_id vinculado, resgata a organização principal
+            if (!profileData.organization_id) {
+              try {
+                const { data: mainOrg } = await supabase
+                  .from('organizations')
+                  .select('id')
+                  .limit(1)
+                  .maybeSingle();
+                if (mainOrg?.id) {
+                  profileData.organization_id = mainOrg.id;
+                }
+              } catch (e) {
+                void e;
+              }
+            }
 
             setProfile(profileData as Profile);
             try {
@@ -360,11 +367,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(initialSession?.user ?? null);
 
         if (initialSession?.user) {
-          // tenta buscar o perfil, mas fetchProfile agora é seguro e sempre resolve
-          void fetchProfile(initialSession.user.id, initialSession.user.email);
+          await fetchProfile(initialSession.user.id, initialSession.user.email);
+        } else {
+          setLoading(false);
         }
       } catch (error) {
         console.error('Erro na sessão inicial:', error);
+        setLoading(false);
       } finally {
         clearTimeout(_timeout);
         if (timeoutOccurred.value) {
@@ -372,7 +381,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             '[AuthProvider] fetchProfile pode ter finalizado após o timeout; perfil pode ter sido carregado posteriormente.'
           );
         }
-        setLoading(false);
       }
     };
 

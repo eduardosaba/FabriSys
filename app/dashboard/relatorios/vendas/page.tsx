@@ -37,7 +37,7 @@ export default function RelatorioVendasPage() {
     if (!profile?.organization_id) return;
 
     async function fetchLocais() {
-      const { data } = await supabase.from('locais').select('id, nome').eq('tipo', 'pdv');
+      const { data } = await supabase.from('locais').select('id, nome, tipo, logo_url').eq('tipo', 'pdv');
       setLocais(data || []);
     }
     void fetchLocais();

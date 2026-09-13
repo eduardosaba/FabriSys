@@ -32,7 +32,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const defaultTheme: ThemeSettings = {
-  name: 'Confectio',
+  name: 'Larissa Saba - Doces Gourmet',
   logo_url: '/logo.png',
   logo_scale: 1.0,
   company_logo_url: undefined,
@@ -41,7 +41,7 @@ const defaultTheme: ThemeSettings = {
   border_radius: '0.5rem',
   theme_mode: 'light' as const,
   density: 'comfortable' as const,
-  footer_company_name: 'Eduardo Saba',
+  footer_company_name: 'Larissa Saba - Doces Gourmet',
   footer_system_version: '1.0.0',
   sidebar_bg: '#e9c4c2',
   sidebar_hover_bg: '#88544c',
@@ -145,6 +145,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const applyTheme = useCallback(
     (themeToApply: ThemeSettings) => {
       if (typeof window === 'undefined') return;
+      
+      const host = window.location.hostname.toLowerCase();
+      if (host.includes('larissasaba') || host.includes('repvendas')) {
+        document.title = 'Larissa Saba - Doces Gourmet';
+      }
+
       const mode = themeToApply.theme_mode === 'system' ? resolvedTheme : themeToApply.theme_mode;
 
       const themeKey = `${mode}-${JSON.stringify(themeToApply.colors[mode])}-${themeToApply.border_radius}`;
@@ -174,9 +180,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           });
         });
 
-        // Forçar resolução da cor de fundo do Sidebar para SEMPRE utilizar a cor secundária (secondary)
+        // Forçar resolução da cor de fundo do Sidebar para utilizar a cor do modo atual ou secundária
         const currentModeColors = (themeToApply.colors?.[mode] || {}) as Record<string, any>;
         const effectiveSidebarBg =
+          currentModeColors.sidebar_bg ||
           currentModeColors.secondary ||
           currentModeColors.secondary_color ||
           (themeToApply as any).secondary;

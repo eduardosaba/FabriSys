@@ -43,6 +43,42 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
   supabase = dummy;
 } else {
+  const createSafeStorage = () => {
+    const memoryStore = new Map<string, string>();
+    return {
+      getItem: (key: string): string | null => {
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            return window.localStorage.getItem(key);
+          }
+        } catch (e) {
+          // Fallback para navegadores Android/WebViews com restrições de localStorage
+        }
+        return memoryStore.get(key) ?? null;
+      },
+      setItem: (key: string, value: string): void => {
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem(key, value);
+          }
+        } catch (e) {
+          // Fallback
+        }
+        memoryStore.set(key, value);
+      },
+      removeItem: (key: string): void => {
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.removeItem(key);
+          }
+        } catch (e) {
+          // Fallback
+        }
+        memoryStore.delete(key);
+      },
+    };
+  };
+
   const getClient = (): SupabaseClient => {
     if (typeof globalThis !== 'undefined' && (globalThis as any).__SUPABASE_CLIENT__) {
       return (globalThis as any).__SUPABASE_CLIENT__ as SupabaseClient;
@@ -53,7 +89,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storage: typeof window !== 'undefined' ? (window.localStorage as any) : undefined,
+        storage: createSafeStorage(),
         flowType: 'pkce',
       },
       global: { headers: { Accept: 'application/json, text/plain, */*' } },

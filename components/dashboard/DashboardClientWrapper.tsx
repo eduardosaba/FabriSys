@@ -69,6 +69,10 @@ export default function DashboardClientWrapper({
 
       // Trava de Rota para Perfil Express / PDV Simples
       if (profile.role === 'express' || profile.role === 'pdv_simples') {
+        if (pathname === '/dashboard/producao' || pathname === '/dashboard/producao/') {
+          router.replace('/dashboard/producao/produtos');
+          return;
+        }
         const rotasPermitidas = [
           '/dashboard/acerto-diario',
           '/dashboard/acerto-diario/auditoria',
@@ -101,7 +105,7 @@ export default function DashboardClientWrapper({
   if (isOnboardingPage) {
     return (
       <AuthGuard requiredRoles={['admin', 'master', 'gerente']}>
-        <div className="min-h-screen bg-slate-50">{children}</div>
+        <div className="min-h-screen bg-[var(--background)] text-[var(--text)] transition-colors duration-300">{children}</div>
       </AuthGuard>
     );
   }
@@ -120,7 +124,7 @@ export default function DashboardClientWrapper({
       ]}
     >
       <LicenseGuard>
-        <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
+        <div className="flex min-h-screen bg-[var(--background)] font-sans text-[var(--text)] transition-colors duration-300">
           {isSidebarOpen && (
             <div
               className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden transition-opacity"

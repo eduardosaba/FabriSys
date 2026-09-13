@@ -101,7 +101,7 @@ const merriweather = Merriweather({
 });
 
 export const metadata: Metadata = {
-  title: 'Confectio v. 1.0.0',
+  title: 'Larissa Saba - Doces Gourmet',
   description: 'Sistema de Gestão para Salgados e Confeitaria',
   icons: {
     icon: [{ url: '/c..svg', type: 'image/svg+xml' }],

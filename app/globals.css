@@ -76,13 +76,55 @@
 }
 
 .dark {
-  --background: #4a2c2b;
-  --text: #f2e8e3;
-  --foreground: #f2e8e3;
-  --primary: #e9c4c2;
-  --secondary: #4a2c2b;
-  --sidebar-bg: #4a2c2b;
-  --header-bg: #4a2c2b;
+  color-scheme: dark;
+  --foreground: var(--text, #f2e8e3);
+}
+
+/* Adaptabilidade Dinâmica de Tema Escuro para Containers, Cards, Tabelas e Inputs */
+.dark .bg-white {
+  background-color: var(--secondary, #1e293b);
+  color: var(--text, #f2e8e3);
+}
+
+.dark .bg-slate-50,
+.dark .bg-gray-50,
+.dark .bg-slate-100,
+.dark .bg-gray-100 {
+  background-color: var(--background, #0b1220);
+  color: var(--text, #f2e8e3);
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700,
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: var(--text, #f2e8e3);
+}
+
+.dark .text-slate-500,
+.dark .text-slate-600,
+.dark .text-gray-500,
+.dark .text-gray-600 {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.dark .border-slate-200,
+.dark .border-gray-200,
+.dark .border-slate-100,
+.dark .border-gray-100,
+.dark .border-slate-300,
+.dark .border-gray-300 {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.dark input:not([type='button']):not([type='submit']):not([type='checkbox']):not([type='radio']),
+.dark select,
+.dark textarea {
+  background-color: var(--background, #0b1220);
+  color: var(--text, #f2e8e3);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 body {

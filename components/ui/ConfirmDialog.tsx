@@ -8,7 +8,7 @@ interface ConfirmDialogProps {
   onClose: () => void;
   onConfirm: () => void;
   title: string;
-  message: string;
+  message: React.ReactNode | string;
   confirmText?: string;
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
@@ -40,7 +40,7 @@ export default function ConfirmDialog({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title}>
       <div className="p-4 md:p-4 space-y-4">
-        <p className="text-slate-700">{message}</p>
+        <div className="text-slate-700 text-sm">{message}</div>
 
         <div className="flex flex-col-reverse md:flex-row justify-end gap-2 md:gap-2 pt-4">
           <Button variant="secondary" onClick={onClose} className="w-full md:w-auto min-h-[44px]">

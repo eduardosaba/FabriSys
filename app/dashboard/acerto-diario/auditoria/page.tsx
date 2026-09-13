@@ -174,11 +174,24 @@ export default function AuditoriaPDVPage() {
   useEffect(() => {
     async function carregarLocais() {
       try {
-        let query = supabase.from('locais').select('id, nome, tipo');
+        let query = supabase.from('locais').select('id, nome, tipo, logo_url, ordem');
         if (profile?.organization_id) {
           query = query.eq('organization_id', profile.organization_id);
         }
-        const { data } = await query.order('nome');
+        let { data, error } = await query.order('ordem', { ascending: true }).order('nome');
+        if (error && error.message?.includes('ordem')) {
+          const res = await query.order('nome');
+          data = res.data;
+        }
+
+        if (!data || data.length === 0) {
+          let { data: fallbackData } = await supabase.from('locais').select('id, nome, tipo, logo_url, ordem').order('ordem', { ascending: true }).order('nome');
+          if (!fallbackData) {
+            const resFallback = await supabase.from('locais').select('id, nome, tipo, logo_url').order('nome');
+            fallbackData = resFallback.data;
+          }
+          data = fallbackData;
+        }
 
         if (data) {
           const pdvs = data.filter((loc) => {
@@ -458,38 +471,64 @@ export default function AuditoriaPDVPage() {
     if (!printWindow) return;
 
     const nomeEmpresa =
-      profile?.organizations?.nome || profile?.organization_name || theme?.name || 'Larissa Saba';
+      profile?.organizations?.nome ||
+      profile?.organization_name ||
+      (profile as any)?.empresa_nome ||
+      (profile as any)?.nome_empresa ||
+      'Larissa Saba - Doces Gourmet';
     const dataAtual = new Date().toLocaleDateString('pt-BR');
+
+    const rawLogoUrl =
+      profile?.company_logo_url ||
+      profile?.organizations?.logo_url ||
+      theme?.company_logo_url ||
+      theme?.logo_url ||
+      '/logolarissa.png';
+
+    const logoSrc = rawLogoUrl.startsWith('http')
+      ? rawLogoUrl
+      : typeof window !== 'undefined'
+        ? `${window.location.origin}${rawLogoUrl.startsWith('/') ? '' : '/'}${rawLogoUrl}`
+        : rawLogoUrl;
 
     const html = `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Relatório Executivo de Fechamentos PDV — ${nomeEmpresa}</title>
+          <title>Relatório Executivo — ${nomeEmpresa}</title>
           <style>
-            body { font-family: 'Segoe UI', Arial, sans-serif; margin: 24px; color: #1e293b; background: #fff; }
-            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 20px; }
-            .header h1 { font-size: 20px; margin: 0; color: #0f172a; }
-            .header p { font-size: 12px; color: #64748b; margin: 4px 0 0 0; }
+            @page { size: A4 landscape; margin: 12mm; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; margin: 16px; color: #4a2c2b; background: #fff; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #88544c; padding-bottom: 14px; margin-bottom: 18px; }
+            .brand-box { display: flex; align-items: center; gap: 14px; }
+            .brand-logo { max-height: 60px; max-width: 180px; object-fit: contain; }
+            .brand-titles h1 { font-size: 20px; font-weight: 800; margin: 0; color: #4a2c2b; letter-spacing: -0.3px; }
+            .brand-titles p { font-size: 12px; color: #88544c; font-weight: 600; margin: 3px 0 0 0; }
+            .meta-info { text-align: right; font-size: 11px; color: #64748b; line-height: 1.4; }
+            .meta-info strong { color: #4a2c2b; }
             .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
-            .kpi-card { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; font-size: 11px; }
-            .kpi-title { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; }
-            .kpi-value { font-size: 16px; font-weight: bold; margin-top: 4px; color: #0284c7; }
+            .kpi-card { background: #fdfafa; border: 1px solid #e9c4c2; padding: 12px; border-radius: 8px; font-size: 11px; }
+            .kpi-title { font-size: 10px; text-transform: uppercase; color: #88544c; font-weight: 700; }
+            .kpi-value { font-size: 17px; font-weight: 900; margin-top: 4px; color: #4a2c2b; }
             table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
-            th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
-            th { background-color: #f1f5f9; text-transform: uppercase; font-size: 10px; color: #475569; }
+            th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
+            th { background-color: #f5e4e2; text-transform: uppercase; font-size: 10px; font-weight: 800; color: #4a2c2b; border-bottom: 2px solid #e9c4c2; }
+            tbody tr:nth-child(even) { background-color: #fdfafa; }
             .text-right { text-align: right; }
             .text-center { text-align: center; }
-            .footer { margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 8px; font-size: 10px; color: #94a3b8; text-align: center; }
+            .footer { margin-top: 24px; border-top: 1px solid #e9c4c2; padding-top: 10px; font-size: 10px; color: #88544c; text-align: center; font-weight: 500; }
           </style>
         </head>
         <body>
           <div class="header">
-            <div>
-              <h1>${nomeEmpresa} — Relatório de Fechamentos & Auditoria PDV</h1>
-              <p>Relatório Gerencial de Prestação de Contas</p>
+            <div class="brand-box">
+              <img src="${logoSrc}" alt="${nomeEmpresa}" class="brand-logo" onerror="this.style.display='none'" />
+              <div class="brand-titles">
+                <h1>${nomeEmpresa}</h1>
+                <p>Relatório Executivo de Fechamentos & Auditoria PDV</p>
+              </div>
             </div>
-            <div style="text-align: right; font-size: 11px; color: #64748b;">
+            <div class="meta-info">
               <p>Data Emissão: <strong>${dataAtual}</strong></p>
               <p>Total Lançamentos: <strong>${registros.length}</strong></p>
             </div>
@@ -506,11 +545,11 @@ export default function AuditoriaPDVPage() {
             </div>
             <div class="kpi-card">
               <div class="kpi-title">Pix / Cartão Esperado</div>
-              <div class="kpi-value" style="color: #0284c7;">R$ ${totalPixCartaoEsperado.toFixed(2)}</div>
+              <div class="kpi-value" style="color: #88544c;">R$ ${totalPixCartaoEsperado.toFixed(2)}</div>
             </div>
             <div class="kpi-card">
               <div class="kpi-title">Diferença de Caixa</div>
-              <div class="kpi-value" style="color: ${totalFurosDeCaixa > 0 ? '#dc2626' : '#059669'}">
+              <div class="kpi-value" style="color: ${totalFurosDeCaixa < 0 ? '#dc2626' : '#059669'}">
                 R$ ${totalFurosDeCaixa.toFixed(2)}
               </div>
             </div>
@@ -565,7 +604,7 @@ export default function AuditoriaPDVPage() {
           </table>
 
           <div class="footer">
-            <p>${nomeEmpresa} — Documento gerado automaticamente para fins de controle interno.</p>
+            <p>${nomeEmpresa} — Documento gerado automaticamente para fins de controle interno e auditoria.</p>
           </div>
 
           <script>
@@ -830,15 +869,23 @@ export default function AuditoriaPDVPage() {
     try {
       const { error } = await supabase
         .from('remessas_cargas_pdv')
-        .update({ status: 'aberto' })
+        .update({
+          status: 'aberto',
+          diferenca_auditoria: 0,
+        })
         .eq('organization_id', profile.organization_id)
         .eq('data', targetData);
 
       if (error) throw error;
 
+      setJustificativaAuditoria('');
+      setPixExtratoBanco(0);
+      setCartaoMaquininha(0);
+      setRegistros((prev) => prev.map((r) => ({ ...r, status: 'aberto', diferenca_auditoria: 0 })));
+
       toast({
         title: 'Fechamento Reaberto com Sucesso!',
-        description: `O status do dia ${targetData.split('-').reverse().join('/')} voltou para 'Em Aberto'. Os relatórios dos PDVs foram liberados para edição.`,
+        description: `O status do dia ${targetData.split('-').reverse().join('/')} voltou para 'Em Aberto'. A diferença foi zerada e os relatórios liberados para edição.`,
         variant: 'success',
       });
 
@@ -883,15 +930,33 @@ export default function AuditoriaPDVPage() {
           </p>
         </div>
 
-        {statusGeralDia === 'auditado' && tipoPeriodo === 'dia' && (
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
           <button
             type="button"
-            onClick={() => handleReabrirFechamento()}
-            className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-200 transition-all shrink-0 self-start md:self-auto"
+            onClick={handleExportarCSV}
+            className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 transition-all shadow-xs shrink-0"
           >
-            <Unlock className="h-3.5 w-3.5" /> Reabrir Fechamento
+            <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Excel (CSV)
           </button>
-        )}
+
+          <button
+            type="button"
+            onClick={handleExportarPDF}
+            className="flex items-center gap-1.5 rounded-xl border border-cyan-300 bg-cyan-50 dark:bg-cyan-950/40 px-3.5 py-2 text-xs font-bold text-cyan-800 dark:text-cyan-200 hover:bg-cyan-100 transition-all shadow-xs shrink-0"
+          >
+            <Printer className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" /> PDF Executivo
+          </button>
+
+          {statusGeralDia === 'auditado' && tipoPeriodo === 'dia' && (
+            <button
+              type="button"
+              onClick={() => handleReabrirFechamento()}
+              className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-200 transition-all shrink-0"
+            >
+              <Unlock className="h-3.5 w-3.5" /> Reabrir Fechamento
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Barra de Filtros Avançados: Granularidade Temporal & Seleção de PDV */}

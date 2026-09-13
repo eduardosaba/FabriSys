@@ -32,11 +32,9 @@ export const produtoFinalSchema = z
     // aceitarmos strings numéricas vindas de formulários: coerce para número
     peso_unitario: z.coerce.number().optional(),
     categoria_id: z.preprocess((val) => {
-      // aceitar string vazia => null, string numérica => number, ou number direto
-      if (val === '') return null;
-      if (typeof val === 'string' && /^\d+$/.test(val)) return parseInt(val, 10);
+      if (val === '' || val === undefined || val === null) return null;
       return val;
-    }, z.number().int().nullable().optional()),
+    }, z.union([z.number(), z.string()]).nullable().optional()),
     created_at: z.string().datetime().optional(),
     updated_at: z.string().datetime().optional(),
   })

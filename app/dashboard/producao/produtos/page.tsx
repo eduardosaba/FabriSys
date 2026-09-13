@@ -20,14 +20,40 @@ export default function ProdutosPage() {
 
   const loadProdutos = async () => {
     try {
-      const { data, error } = await supabase.from('produtos_finais').select('*').order('nome');
+      const { data: prodsData, error: prodsErr } = await supabase
+        .from('produtos_finais')
+        .select('*')
+        .order('nome');
 
-      if (error) {
-        console.error('Erro na query:', error);
-        throw error;
+      if (prodsErr) {
+        console.error('Erro na query produtos_finais:', prodsErr);
+        throw prodsErr;
       }
 
-      setProdutos(data || []);
+      let categoriasMap: Record<string, string> = {};
+      try {
+        const { data: catsData } = await supabase.from('categorias').select('id, nome');
+        if (catsData) {
+          catsData.forEach((c: any) => {
+            categoriasMap[String(c.id)] = c.nome;
+          });
+        }
+      } catch {
+        /* ignore fallback */
+      }
+
+      const mapped = (prodsData || []).map((p: any) => {
+        const catNome =
+          p.categoria ||
+          (p.categoria_id ? categoriasMap[String(p.categoria_id)] : null) ||
+          null;
+        return {
+          ...p,
+          categoria: catNome,
+        };
+      });
+
+      setProdutos(mapped);
     } catch (error) {
       console.error('Erro completo ao carregar produtos:', error);
       toast({

@@ -54,7 +54,7 @@ export default function Pagination({
     return rangeWithDots;
   };
 
-  if (totalPages <= 1) return null;
+  if (totalItems === 0) return null;
 
   return (
     <div

@@ -140,7 +140,7 @@ export default function Header({ onMenuClick }: Props) {
                     maxHeight: '160px',
                   }}
                   onError={(e) => {
-                    const systemName = theme?.name || 'Confectio v. 1.0.0';
+                    const systemName = theme?.name || 'Larissa Saba - Doces Gourmet';
                     const initials = systemName
                       .split(' ')
                       .map((word) => word[0])
@@ -169,7 +169,7 @@ export default function Header({ onMenuClick }: Props) {
                   minWidth: `${32 * (theme.logo_scale || 1)}px`,
                 }}
               >
-                {(theme?.name || 'SL')
+                {(theme?.name || 'LS')
                   .split(' ')
                   .map((word) => word[0])
                   .join('')
@@ -183,7 +183,7 @@ export default function Header({ onMenuClick }: Props) {
               theme.logo_url.trim() === '' ||
               theme.logo_url === '/logo.png') && (
               <Text variant="h4" weight="medium">
-                {(orgName ? `${orgName} - ` : '') + (theme?.name || 'Confectio v. 1.0.0')}
+                {(orgName ? `${orgName} - ` : '') + (theme?.name || 'Larissa Saba - Doces Gourmet')}
               </Text>
             )}
           </div>
@@ -280,7 +280,7 @@ function FullScreenToggle() {
     <button
       title="Alternar tela cheia"
       onClick={toggleForTarget}
-      className="ml-3 inline-flex items-center rounded-md p-2 text-slate-500 hover:bg-slate-100 transition"
+      className="hidden md:inline-flex ml-3 items-center rounded-md p-2 text-slate-500 hover:bg-slate-100 transition"
     >
       {isFullScreen ? <X size={18} /> : <ExternalLink size={18} />}
     </button>

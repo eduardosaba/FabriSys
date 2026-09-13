@@ -153,6 +153,7 @@ const ForgotPasswordModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    const cleanEmail = email.trim().toLowerCase();
     try {
       let supabaseClient = null;
       try {
@@ -163,9 +164,9 @@ const ForgotPasswordModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
       }
 
       if (supabaseClient) {
-        await supabaseClient.auth.resetPasswordForEmail(email);
+        await supabaseClient.auth.resetPasswordForEmail(cleanEmail);
       } else {
-        await supabaseMock.auth.resetPasswordForEmail(email);
+        await supabaseMock.auth.resetPasswordForEmail(cleanEmail);
       }
     } catch {
       // ignorar — mantemos UX simples
@@ -210,6 +211,9 @@ const ForgotPasswordModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
                   placeholder="exemplo@empresa.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   required
                 />
                 <Button
@@ -262,6 +266,7 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    const cleanEmail = email.trim().toLowerCase();
     try {
       // Tenta usar o cliente Supabase real se disponível (import dinâmico)
       let supabaseClient = null;
@@ -275,9 +280,9 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
 
       let result;
       if (supabaseClient) {
-        result = await supabaseClient.auth.signInWithPassword({ email, password });
+        result = await supabaseClient.auth.signInWithPassword({ email: cleanEmail, password });
       } else {
-        result = await supabaseMock.auth.signInWithPassword({ email, password });
+        result = await supabaseMock.auth.signInWithPassword({ email: cleanEmail, password });
       }
 
       const { data, error } = result;
@@ -365,6 +370,9 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
               placeholder="seu@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               autoComplete="email"
             />
             <div>

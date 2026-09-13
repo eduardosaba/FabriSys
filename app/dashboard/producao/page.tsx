@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import RegistroPerdaModal from '@/components/logistica/RegistroPerdaModal';
 import { Trash2 } from 'lucide-react';
@@ -47,6 +48,18 @@ function DashboardProducaoContent() {
   const profile = profileResult.data;
   const profileError = profileResult.error;
   const profileLoading = Boolean(profileResult.isLoading);
+
+  const router = useRouter();
+
+  useEffect(() => {
+    if (profile?.role === 'express') {
+      router.replace('/dashboard/producao/produtos');
+    }
+  }, [profile?.role, router]);
+
+  if (profile?.role === 'express') {
+    return null;
+  }
 
   const productionData = productionResult.data;
   const kpisError = productionResult.error;

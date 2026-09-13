@@ -134,8 +134,9 @@ const DEFAULT_PERMISSOES: Record<string, string[]> = {
     'conciliacao_bancaria',
     'ranking_produtos',
     'produtos',
+    'agenda',
   ],
-  pdv_simples: ['acertos_rapidos', 'lancar_turno', 'pdv', 'pdv_caixa'],
+  pdv_simples: ['acertos_rapidos', 'lancar_turno', 'pdv', 'pdv_caixa', 'agenda'],
   user: [],
 };
 
@@ -335,6 +336,9 @@ export default function PermissoesTab() {
 
       // Atualiza o estado local com a versão mesclada
       setPermissoes(mergedPerms);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('permissoes_updated'));
+      }
     } catch (err) {
       console.error(err);
       toast.error('Erro ao salvar permissões');

@@ -7,16 +7,22 @@ import { useTheme } from '@/lib/theme';
 import { supabase } from '@/lib/supabase-client';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/useToast';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useConfirm } from '@/hooks/useConfirm';
 import { PDVSelectorCards } from '@/components/ui/shared/PDVSelectorCards';
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowRight,
   Banknote,
+  Calendar,
   CheckCircle2,
   Clock,
   DollarSign,
   Download,
+  Edit3,
   FileText,
+  Filter,
   Layers,
   ListOrdered,
   MinusCircle,
@@ -24,14 +30,18 @@ import {
   Plus,
   PlusCircle,
   Printer,
+  RefreshCw,
   Store,
   Trash2,
   User,
+  X,
 } from 'lucide-react';
 
 interface LocalPDV {
   id: string;
   nome: string;
+  tipo?: string;
+  logo_url?: string;
 }
 
 interface ProdutoItem {
@@ -59,6 +69,7 @@ export default function AcertoDiarioPage() {
   const { profile } = useAuth();
   const { theme } = useTheme();
   const { toast } = useToast();
+  const confirmDialog = useConfirm();
 
   const [locais, setLocais] = useState<LocalPDV[]>([]);
   const [produtosBase, setProdutosBase] = useState<ProdutoItem[]>([]);
@@ -67,6 +78,12 @@ export default function AcertoDiarioPage() {
 
   // Modo de Operação: 'detalhado' (Romaneio / Substitui Caderno) ou 'rapido' (Volume Global)
   const [modo, setModo] = useState<'detalhado' | 'rapido'>('detalhado');
+
+  // Etapa do Lançamento: 'envio' (1. Envio de Carga), 'fechamento' (2. Sobras & Financeiro) ou 'tudo' (Modo Unificado)
+  const [etapaAcerto, setEtapaAcerto] = useState<'envio' | 'fechamento' | 'tudo'>('envio');
+
+  // Status do Fechamento do PDV Selecionado: 'aberto' (pendente de encerramento), 'encerrado' (já concluído), 'sem_carga' ou 'sobra_acumulada' (com produtos no estoque)
+  const [statusFechamentoPDV, setStatusFechamentoPDV] = useState<'aberto' | 'encerrado' | 'sem_carga' | 'sobra_acumulada'>('sem_carga');
 
   // Tipo de Fechamento: 'diario' (Padrão), 'parcial' (Sobra Acumulada no PDV) ou 'semanal' (Encerramento do Ciclo)
   const [tipoFechamento, setTipoFechamento] = useState<'diario' | 'parcial' | 'semanal'>('parcial');
@@ -96,17 +113,214 @@ export default function AcertoDiarioPage() {
   const [valorCartao, setValorCartao] = useState<number>(0);
   const [observacoes, setObservacoes] = useState<string>('');
 
+  // Estados da Aba 3 - Ver Tudo Unificado
+  const [dataInicioTudo, setDataInicioTudo] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  });
+  const [dataFimTudo, setDataFimTudo] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [turnoTudo, setTurnoTudo] = useState<string>('todos');
+  const [pdvTudo, setPdvTudo] = useState<string>('todos');
+  const [historicoTudo, setHistoricoTudo] = useState<any[]>([]);
+  const [loadingTudo, setLoadingTudo] = useState<boolean>(false);
+
+  // Effect para buscar o histórico unificado na Aba 3
+  useEffect(() => {
+    if (etapaAcerto !== 'tudo') return;
+
+    async function carregarHistoricoTudo() {
+      setLoadingTudo(true);
+      try {
+        let query = supabase
+          .from('remessas_cargas_pdv')
+          .select('*, locais:local_id(nome)')
+          .gte('data', dataInicioTudo)
+          .lte('data', dataFimTudo)
+          .order('data', { ascending: false })
+          .order('created_at', { ascending: false });
+
+        if (profile?.organization_id) {
+          query = query.eq('organization_id', profile.organization_id);
+        }
+
+        if (turnoTudo && turnoTudo !== 'todos') {
+          query = query.eq('turno', turnoTudo);
+        }
+
+        if (pdvTudo && pdvTudo !== 'todos') {
+          query = query.eq('local_id', pdvTudo);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        setHistoricoTudo(data || []);
+      } catch (err: any) {
+        console.error('Erro ao carregar histórico unificado:', err);
+      } finally {
+        setLoadingTudo(false);
+      }
+    }
+
+    carregarHistoricoTudo();
+  }, [etapaAcerto, dataInicioTudo, dataFimTudo, turnoTudo, pdvTudo, profile?.organization_id]);
+
+  // Totais Agregados para a Aba 3
+  const totEnviadoTudo = historicoTudo.reduce((acc, r) => acc + (Number(r.qtd_total_enviada) || 0), 0);
+  const totSobraTudo = historicoTudo.reduce((acc, r) => acc + (Number(r.qtd_total_retorno) || 0), 0);
+  const totVendidosTudo = historicoTudo.reduce(
+    (acc, r) => acc + Math.max(0, (Number(r.qtd_total_enviada) || 0) - (Number(r.qtd_total_retorno) || 0)),
+    0
+  );
+  const totDinheiroTudo = historicoTudo.reduce((acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0), 0);
+  const totCartaoTudo = historicoTudo.reduce((acc, r) => acc + (Number(r.valor_cartao_declarado) || 0), 0);
+  const totPixTudo = historicoTudo.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
+  const totFaturamentoTudo = historicoTudo.reduce((acc, r) => {
+    const liq = Number(r.faturamento_liquido_esperado) || Number(r.faturamento_bruto_teorico) || 0;
+    const meiopag = (Number(r.valor_dinheiro_gaveta) || 0) + (Number(r.valor_cartao_declarado) || 0) + (Number(r.valor_pix_declarado) || 0);
+    return acc + (liq > 0 ? liq : meiopag);
+  }, 0);
+
+  // Estados para Edição e Exclusão na Aba 3
+  const [editandoItem, setEditandoItem] = useState<any | null>(null);
+  const [salvandoEdicao, setSalvandoEdicao] = useState<boolean>(false);
+  const [editData, setEditData] = useState<string>('');
+  const [editTurno, setEditTurno] = useState<string>('integral');
+  const [editVendedor, setEditVendedor] = useState<string>('');
+  const [editQtdEnviada, setEditQtdEnviada] = useState<number>(0);
+  const [editQtdRetorno, setEditQtdRetorno] = useState<number>(0);
+  const [editValorDinheiro, setEditValorDinheiro] = useState<number>(0);
+  const [editValorPix, setEditValorPix] = useState<number>(0);
+  const [editValorCartao, setEditValorCartao] = useState<number>(0);
+  const [editStatus, setEditStatus] = useState<string>('encerrado');
+
+  function abrirModalEdicao(item: any) {
+    setEditandoItem(item);
+    setEditData(item.data || new Date().toISOString().split('T')[0]);
+    setEditTurno(item.turno || 'integral');
+    setEditVendedor(item.vendedor_nome || '');
+    setEditQtdEnviada(Number(item.qtd_total_enviada) || 0);
+    setEditQtdRetorno(Number(item.qtd_total_retorno) || 0);
+    setEditValorDinheiro(Number(item.valor_dinheiro_gaveta) || 0);
+    setEditValorPix(Number(item.valor_pix_declarado) || 0);
+    setEditValorCartao(Number(item.valor_cartao_declarado) || 0);
+    setEditStatus(item.status || 'encerrado');
+  }
+
+  async function handleSalvarEdicao() {
+    if (!editandoItem) return;
+    setSalvandoEdicao(true);
+    try {
+      const somaValores = editValorDinheiro + editValorPix + editValorCartao;
+      const faturEsperado =
+        Number(editandoItem.faturamento_liquido_esperado) > 0
+          ? Number(editandoItem.faturamento_liquido_esperado)
+          : somaValores;
+
+      const payload: any = {
+        data: editData,
+        turno: editTurno,
+        vendedor_nome: editVendedor.trim() || null,
+        qtd_total_enviada: editQtdEnviada,
+        qtd_total_retorno: editQtdRetorno,
+        valor_dinheiro_gaveta: editValorDinheiro,
+        valor_pix_declarado: editValorPix,
+        valor_cartao_declarado: editValorCartao,
+        faturamento_liquido_esperado: faturEsperado,
+        status: editStatus,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from('remessas_cargas_pdv')
+        .update(payload)
+        .eq('id', editandoItem.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Lançamento Atualizado!',
+        description: 'As alterações foram salvas com sucesso.',
+        variant: 'success',
+      });
+
+      setHistoricoTudo((prev) =>
+        prev.map((r) => (r.id === editandoItem.id ? { ...r, ...payload } : r))
+      );
+
+      setEditandoItem(null);
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao salvar alterações',
+        description: err.message,
+        variant: 'error',
+      });
+    } finally {
+      setSalvandoEdicao(false);
+    }
+  }
+
+  async function handleExcluirRemessa(item: any) {
+    const pdvNome = item.locais?.nome || locais.find((l) => l.id === item.local_id)?.nome || 'PDV';
+    const dataFormatada = item.data ? item.data.split('-').reverse().join('/') : '';
+
+    const confirmou = await confirmDialog.confirm({
+      title: 'Excluir Lançamento?',
+      message: `Tem certeza que deseja excluir o lançamento de ${dataFormatada} (${item.turno}) do PDV "${pdvNome}"? Esta ação não poderá ser desfeita.`,
+      confirmText: 'Excluir Lançamento',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+
+    if (!confirmou) return;
+
+    try {
+      const { error } = await supabase.from('remessas_cargas_pdv').delete().eq('id', item.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Lançamento Excluído',
+        description: `O lançamento do PDV "${pdvNome}" foi removido com sucesso.`,
+        variant: 'success',
+      });
+
+      setHistoricoTudo((prev) => prev.filter((r) => r.id !== item.id));
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao excluir lançamento',
+        description: err.message,
+        variant: 'error',
+      });
+    }
+  }
+
   // Carregar PDVs e Produtos
   useEffect(() => {
     async function carregarDadosIniciais() {
       setLoading(true);
       try {
         // Carregar PDVs (apenas pontos de venda, excluindo a Fábrica)
-        let queryLocais = supabase.from('locais').select('id, nome, tipo');
+        let queryLocais = supabase.from('locais').select('id, nome, tipo, logo_url, ordem');
         if (profile?.organization_id) {
           queryLocais = queryLocais.eq('organization_id', profile.organization_id);
         }
-        const { data: dataLocais } = await queryLocais.order('nome');
+        let { data: dataLocais, error: errorLocais } = await queryLocais.order('ordem', { ascending: true }).order('nome');
+
+        if (errorLocais && errorLocais.message?.includes('ordem')) {
+          const res = await queryLocais.order('nome');
+          dataLocais = res.data;
+        }
+
+        // Se a busca por organization_id não retornar nenhum local, busca sem filtro para garantir exibição
+        if (!dataLocais || dataLocais.length === 0) {
+          let { data: fallbackLocais } = await supabase.from('locais').select('id, nome, tipo, logo_url, ordem').order('ordem', { ascending: true }).order('nome');
+          if (!fallbackLocais) {
+            const resFallback = await supabase.from('locais').select('id, nome, tipo, logo_url').order('nome');
+            fallbackLocais = resFallback.data;
+          }
+          dataLocais = fallbackLocais ?? [];
+        }
 
         if (dataLocais && dataLocais.length > 0) {
           const pdvsApenas = dataLocais.filter((loc) => {
@@ -127,12 +341,27 @@ export default function AcertoDiarioPage() {
           setLocalId(listaFinal[0].id);
         }
 
-        // Carregar Produtos Finais cadastrados na confeitaria
-        let queryProds = supabase.from('produtos_finais').select('id, nome, preco_venda');
+        // Carregar Produtos Finais cadastrados na confeitaria (Apenas Ativos)
+        let queryProds = supabase
+          .from('produtos_finais')
+          .select('id, nome, preco_venda, ativo')
+          .neq('ativo', false);
         if (profile?.organization_id) {
           queryProds = queryProds.eq('organization_id', profile.organization_id);
         }
-        const { data: dataProds } = await queryProds.order('nome');
+        let { data: dataProds } = await queryProds.order('nome');
+
+        // Se a busca por organization_id não retornar nenhum produto, busca sem o filtro de organização
+        if (!dataProds || dataProds.length === 0) {
+          const { data: fallbackProds } = await supabase
+            .from('produtos_finais')
+            .select('id, nome, preco_venda, ativo')
+            .neq('ativo', false)
+            .order('nome');
+          if (fallbackProds && fallbackProds.length > 0) {
+            dataProds = fallbackProds;
+          }
+        }
 
         let lista: ProdutoItem[] = [];
         if (dataProds && dataProds.length > 0) {
@@ -163,52 +392,92 @@ export default function AcertoDiarioPage() {
     carregarDadosIniciais();
   }, [profile?.organization_id]);
 
-  // Carregar Sobra Anterior do PDV Selecionado sempre que mudar o localId ou produtosBase
+  // Carregar Sobra Anterior ou Remessa Aberta do PDV Selecionado
   useEffect(() => {
-    async function carregarSobraAnterior() {
+    async function carregarSobraAnteriorOuRemessaAberta() {
       if (!profile?.organization_id || !localId || produtosBase.length === 0) return;
 
       try {
-        // Buscar o último romaneio do PDV
-        const { data: ultimoRomaneio } = await supabase
+        // 1. Tentar buscar romaneio com status 'aberto' especificamente na data selecionada
+        const { data: romaneioAbertoNaData } = await supabase
           .from('remessas_cargas_pdv')
-          .select('itens_grade, modo_lancamento')
+          .select('id, status, itens_grade, modo_lancamento, vendedor_nome, qtd_total_enviada, data, turno')
           .eq('organization_id', profile.organization_id)
           .eq('local_id', localId)
+          .eq('data', dataAcerto)
+          .eq('status', 'aberto')
+          .maybeSingle();
+
+        // Se houver uma carga com status 'aberto' lançada especificamente nesta data
+        if (romaneioAbertoNaData && Array.isArray(romaneioAbertoNaData.itens_grade)) {
+          setStatusFechamentoPDV('aberto');
+          const itemMap: Record<string, { qtd_sobra_anterior: number; qtd_enviada: number; qtd_retorno: number }> = {};
+          romaneioAbertoNaData.itens_grade.forEach((it: any) => {
+            if (it.produto_id) {
+              itemMap[it.produto_id] = {
+                qtd_sobra_anterior: Number(it.qtd_sobra_anterior) || 0,
+                qtd_enviada: Number(it.qtd_enviada) || 0,
+                qtd_retorno: Number(it.qtd_retorno) || 0,
+              };
+            }
+          });
+
+          setGradeItens(
+            produtosBase.map((p) => ({
+              produto_id: p.id,
+              nome: p.nome,
+              preco_unitario: p.preco,
+              qtd_sobra_anterior: itemMap[p.id]?.qtd_sobra_anterior || 0,
+              qtd_enviada: itemMap[p.id]?.qtd_enviada || 0,
+              qtd_retorno: itemMap[p.id]?.qtd_retorno || 0,
+            }))
+          );
+
+          if (romaneioAbertoNaData.modo_lancamento) setModo(romaneioAbertoNaData.modo_lancamento as any);
+          setVendedorNome(romaneioAbertoNaData.vendedor_nome || '');
+          if (romaneioAbertoNaData.qtd_total_enviada) setQtdEnviadaRapida(romaneioAbertoNaData.qtd_total_enviada);
+          if (romaneioAbertoNaData.turno) setTurno(romaneioAbertoNaData.turno as any);
+          return;
+        }
+
+        // 2. Verificar se existe algum romaneio já encerrado ou auditado na data selecionada
+        const { data: romaneioEncerradoNaData } = await supabase
+          .from('remessas_cargas_pdv')
+          .select('id, status, itens_grade, modo_lancamento, vendedor_nome, qtd_total_enviada, data, turno')
+          .eq('organization_id', profile.organization_id)
+          .eq('local_id', localId)
+          .eq('data', dataAcerto)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        const sobraMap: Record<string, number> = {};
-
-        if (ultimoRomaneio?.itens_grade && Array.isArray(ultimoRomaneio.itens_grade)) {
-          ultimoRomaneio.itens_grade.forEach((it: any) => {
-            if (it.produto_id) {
-              const prevAnterior = Number(it.qtd_sobra_anterior) || 0;
-              const prevEnviada = Number(it.qtd_enviada) || 0;
-              const prevRetorno = Number(it.qtd_retorno) || 0;
-
-              // Sobra remanescente que ficou no PDV do último lançamento
-              // Se o último foi parcial, a sobra é (Anterior + Enviada) - Vendidos (Retorno Declarado)
-              const disponivelAnterior = prevAnterior + prevEnviada;
-              const sobraRemanescente = Math.max(0, disponivelAnterior - prevRetorno);
-              sobraMap[it.produto_id] = sobraRemanescente;
-            }
-          });
+        if (romaneioEncerradoNaData) {
+          setStatusFechamentoPDV(romaneioEncerradoNaData.status as any);
+          setVendedorNome(romaneioEncerradoNaData.vendedor_nome || '');
+          if (romaneioEncerradoNaData.turno) setTurno(romaneioEncerradoNaData.turno as any);
+          if (romaneioEncerradoNaData.modo_lancamento) setModo(romaneioEncerradoNaData.modo_lancamento as any);
+          return;
         }
 
+        // 3. Se não houver nenhum lançamento registrado para a data selecionada:
+        setStatusFechamentoPDV('sem_carga');
+        setVendedorNome('');
         setGradeItens(
           produtosBase.map((p) => ({
             produto_id: p.id,
             nome: p.nome,
             preco_unitario: p.preco,
-            qtd_sobra_anterior: sobraMap[p.id] || 0,
+            qtd_sobra_anterior: 0,
             qtd_enviada: 0,
             qtd_retorno: 0,
           }))
         );
+        setQtdEnviadaRapida(0);
+        setQtdRetornoRapida(0);
       } catch (err) {
-        console.error('Erro ao carregar sobra anterior:', err);
+        console.error('Erro ao carregar dados do romaneio:', err);
+        setStatusFechamentoPDV('sem_carga');
+        setVendedorNome('');
         setGradeItens(
           produtosBase.map((p) => ({
             produto_id: p.id,
@@ -222,8 +491,8 @@ export default function AcertoDiarioPage() {
       }
     }
 
-    carregarSobraAnterior();
-  }, [profile?.organization_id, localId, produtosBase]);
+    carregarSobraAnteriorOuRemessaAberta();
+  }, [profile?.organization_id, localId, dataAcerto, produtosBase]);
 
   const handleGerarComprovantePDF = () => {
     const localNome = locais.find((l) => l.id === localId)?.nome || 'PDV';
@@ -231,7 +500,10 @@ export default function AcertoDiarioPage() {
     if (!printWindow) return;
 
     const nomeEmpresa =
-      profile?.organizations?.nome || profile?.organization_name || theme?.name || 'Larissa Saba';
+      profile?.organizations?.nome ||
+      profile?.organization_name ||
+      (profile as any)?.empresa_nome ||
+      'Larissa Saba - Doces Gourmet';
     const dataAtual = new Date(dataAcerto + 'T12:00:00').toLocaleDateString('pt-BR');
     const tipoLabel =
       tipoFechamento === 'parcial'
@@ -283,10 +555,10 @@ export default function AcertoDiarioPage() {
               </thead>
               <tbody>
                 ${gradeItens
-                  .map((it) => {
-                    const disp = (it.qtd_sobra_anterior || 0) + (it.qtd_enviada || 0);
-                    const vend = Math.max(0, disp - (it.qtd_retorno || 0));
-                    return `
+        .map((it) => {
+          const disp = (it.qtd_sobra_anterior || 0) + (it.qtd_enviada || 0);
+          const vend = Math.max(0, disp - (it.qtd_retorno || 0));
+          return `
                     <tr>
                       <td>${it.nome}</td>
                       <td class="text-center">${disp}</td>
@@ -294,8 +566,8 @@ export default function AcertoDiarioPage() {
                       <td class="text-right"><strong>${vend}</strong></td>
                     </tr>
                   `;
-                  })
-                  .join('')}
+        })
+        .join('')}
               </tbody>
             </table>
             <div class="divider"></div>
@@ -305,8 +577,13 @@ export default function AcertoDiarioPage() {
             <div class="divider"></div>
             <div class="bold text-center">RECEBIMENTOS</div>
             <div class="flex-between"><span>Vendas Dinheiro:</span><strong>R$ ${valorDinheiro.toFixed(2)}</strong></div>
-            <div class="flex-between"><span>Vendas Pix/Cartão Esperado:</span><strong>R$ ${pixCartaoEsperado.toFixed(2)}</strong></div>
-            ${declaraDigital ? `<div class="flex-between"><span>Diferença Caixa:</span><strong>R$ ${diferencaCaixa.toFixed(2)}</strong></div>` : ''}
+            <div class="flex-between"><span>Pix/Cartão Esperado:</span><strong>R$ ${pixCartaoEsperado.toFixed(2)}</strong></div>
+            ${declaraDigital ? `
+              <div class="flex-between"><span>Pix Declarado:</span><strong>R$ ${(Number(valorPix) || 0).toFixed(2)}</strong></div>
+              <div class="flex-between"><span>Cartão Declarado:</span><strong>R$ ${(Number(valorCartao) || 0).toFixed(2)}</strong></div>
+              <div class="flex-between"><span>Diferença Digital:</span><strong>R$ ${diferencaDigital.toFixed(2)}</strong></div>
+              <div class="flex-between"><span>Diferença Geral Caixa:</span><strong>R$ ${diferencaCaixa.toFixed(2)}</strong></div>
+            ` : ''}
             <div class="divider"></div>
             <p class="text-center" style="font-size:10px; margin: 12px 0 0 0;">Assinatura Operador: ___________________</p>
           </div>
@@ -360,21 +637,34 @@ export default function AcertoDiarioPage() {
     modo === 'detalhado' ? faturamentoLiquidoEsperado : faturamentoBrutoRapido;
 
   // Auditoria Financeira
-  const declaraDigital = (Number(valorPix) || 0) > 0 || (Number(valorCartao) || 0) > 0;
-  const valorRecebidoInformado =
-    (Number(valorDinheiro) || 0) + (Number(valorPix) || 0) + (Number(valorCartao) || 0);
+  const totalDigitalDeclarado = (Number(valorPix) || 0) + (Number(valorCartao) || 0);
+  const declaraDigital = totalDigitalDeclarado > 0;
+  const valorRecebidoInformado = (Number(valorDinheiro) || 0) + totalDigitalDeclarado;
   const pixCartaoEsperado = Math.max(0, faturamentoTeorico - (Number(valorDinheiro) || 0));
+  const diferencaDigital = totalDigitalDeclarado - pixCartaoEsperado;
   const diferencaCaixa = declaraDigital ? valorRecebidoInformado - faturamentoTeorico : 0;
 
   // Manipulação de Grade e Perdas
   const handleAtualizarItemGrade = (
-    index: number,
+    indexOrId: number | string,
     campo: 'qtd_enviada' | 'qtd_retorno',
     val: number
   ) => {
-    const copy = [...gradeItens];
-    copy[index][campo] = Math.max(0, val);
-    setGradeItens(copy);
+    if (typeof indexOrId === 'string') {
+      setGradeItens((prev) =>
+        prev.map((item) =>
+          item.produto_id === indexOrId ? { ...item, [campo]: Math.max(0, val) } : item
+        )
+      );
+    } else {
+      setGradeItens((prev) => {
+        const copy = [...prev];
+        if (copy[indexOrId]) {
+          copy[indexOrId] = { ...copy[indexOrId], [campo]: Math.max(0, val) };
+        }
+        return copy;
+      });
+    }
   };
 
   const handleVendeuTudoZerarSobras = () => {
@@ -425,13 +715,216 @@ export default function AcertoDiarioPage() {
       return;
     }
 
-    if (totalEnviado <= 0) {
-      toast({
-        title: 'Atenção',
-        description: 'Informe a quantidade enviada ao PDV.',
-        variant: 'warning',
+    // Validação e Modal de Romaneio Detalhado para a Aba 1 (Envio de Carga)
+    if (etapaAcerto === 'envio') {
+      if (totalEnviado <= 0) {
+        toast({
+          title: 'Nenhum Dado Preenchido',
+          description: 'Informe a quantidade enviada de pelo menos um produto antes de registrar o envio.',
+          variant: 'warning',
+        });
+        return;
+      }
+
+      const pdvNome = locais.find((l) => l.id === localId)?.nome || 'PDV';
+      const itensEnviados = gradeItens.filter((i) => i.qtd_enviada > 0);
+
+      const confirmou = await confirmDialog.confirm({
+        title: `Confirmar Envio de Produtos - ${pdvNome}`,
+        message: (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 rounded-lg text-xs border border-slate-200">
+              <div>
+                <span className="font-semibold text-slate-700">Data / Turno:</span> {dataAcerto} ({turno.toUpperCase()})
+              </div>
+              {vendedorNome.trim() ? (
+                <div>
+                  <span className="font-semibold text-slate-700">Atendente:</span> {vendedorNome}
+                </div>
+              ) : (
+                <div className="text-amber-700 font-bold">
+                  <span>Atendente:</span> <span className="underline">Não informado</span>
+                </div>
+              )}
+              <div>
+                <span className="font-semibold text-primary">Total Enviado:</span> {totalEnviado} un
+              </div>
+            </div>
+
+            {!vendedorNome.trim() && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2 font-medium">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                <span>Atenção: O nome do Atendente / Vendedor não foi preenchido.</span>
+              </div>
+            )}
+
+            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              Romaneio Detalhado dos Produtos Enviados:
+            </p>
+
+            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 text-xs bg-white">
+              {modo === 'detalhado' ? (
+                itensEnviados.length > 0 ? (
+                  itensEnviados.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-50">
+                      <span className="font-medium text-slate-800 truncate pr-2">{item.nome}</span>
+                      <span className="font-bold text-primary shrink-0 bg-primary/10 px-2 py-0.5 rounded">
+                        {item.qtd_enviada} un
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-3 text-center text-slate-400">Nenhum produto com quantidade enviada.</div>
+                )
+              ) : (
+                <div className="p-3 flex justify-between items-center">
+                  <span className="font-medium text-slate-800">Produtos Enviados (Modo Rápido)</span>
+                  <span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">{totalEnviado} un</span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-500 italic">
+              Confira os itens acima. Ao confirmar, os produtos serão enviados para o PDV.
+            </p>
+          </div>
+        ),
+        confirmText: 'Confirmar Envio',
+        cancelText: 'Revisar Quantidades',
+        variant: 'info',
       });
-      return;
+
+      if (!confirmou) return;
+    } else {
+      // Validação e Modal de Resumo Detalhado para a Aba 2 (Sobras & Fechamento Financeiro)
+      const pdvNome = locais.find((l) => l.id === localId)?.nome || 'PDV';
+      const itensComMovimentacao = gradeItens.filter(
+        (i) => (Number(i.qtd_sobra_anterior) || 0) + (Number(i.qtd_enviada) || 0) > 0
+      );
+
+      const confirmou = await confirmDialog.confirm({
+        title: `Confirmar Fechamento Financeiro - ${pdvNome}`,
+        message: (
+          <div className="space-y-3 text-left">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 bg-slate-50 rounded-lg text-xs border border-slate-200">
+              <div>
+                <span className="font-semibold text-slate-700">Data / Turno:</span> {dataAcerto} ({turno.toUpperCase()})
+              </div>
+              {vendedorNome.trim() ? (
+                <div>
+                  <span className="font-semibold text-slate-700">Atendente:</span> {vendedorNome}
+                </div>
+              ) : (
+                <div className="text-amber-700 font-bold">
+                  <span>Atendente:</span> <span className="underline">Não informado</span>
+                </div>
+              )}
+              <div>
+                <span className="font-semibold text-slate-700">Tipo Fechamento:</span>{' '}
+                <span className="font-bold text-primary capitalize">{tipoFechamento}</span>
+              </div>
+            </div>
+
+            {!vendedorNome.trim() && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2 font-medium">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                <span>Atenção: O nome do Atendente / Vendedor não foi preenchido.</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-2 p-2.5 bg-primary/5 rounded-lg border border-primary/10 text-xs text-center">
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase font-semibold block">Total Disponível</span>
+                <span className="font-bold text-slate-800">{totalDisponivelDetalhado} un</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-amber-700 uppercase font-semibold block">Sobra em Loja</span>
+                <span className="font-bold text-amber-700">{totalRetorno} un</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-primary uppercase font-semibold block">Vendidos</span>
+                <span className="font-bold text-primary">{totalVendidos} un</span>
+              </div>
+            </div>
+
+            {modo === 'detalhado' && itensComMovimentacao.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Resumo dos Produtos e Sobras em Loja:
+                </p>
+                <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 text-xs bg-white">
+                  {itensComMovimentacao.map((item, idx) => {
+                    const disp = (Number(item.qtd_sobra_anterior) || 0) + (Number(item.qtd_enviada) || 0);
+                    const sob = Number(item.qtd_retorno) || 0;
+                    const vend = Math.max(0, disp - sob);
+                    return (
+                      <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-50">
+                        <span className="font-medium text-slate-800 truncate pr-2">{item.nome}</span>
+                        <div className="flex items-center gap-3 text-[11px] shrink-0">
+                          <span className="text-slate-500">Disp: {disp}</span>
+                          <span className="text-amber-700 font-semibold">Sobra: {sob}</span>
+                          <span className="font-bold text-primary">Vend: {vend} un</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="p-3 bg-slate-900 text-white rounded-xl text-xs space-y-1.5 shadow-sm">
+              <div className="flex justify-between text-slate-300">
+                <span>Receita Exigida Teórica:</span>
+                <span className="font-mono font-bold text-white">R$ {faturamentoTeorico.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-slate-300">
+                <span>Dinheiro Físico na Gaveta:</span>
+                <span className="font-mono font-bold text-emerald-400">R$ {(Number(valorDinheiro) || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-slate-300 border-t border-slate-700 pt-1">
+                <span>Vendas Pix / Cartão Esperadas:</span>
+                <span className="font-mono font-bold text-cyan-300">R$ {pixCartaoEsperado.toFixed(2)}</span>
+              </div>
+              {declaraDigital && (
+                <>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Vendas Pix / Cartão Declaradas:</span>
+                    <span className="font-mono font-bold text-cyan-200">
+                      R$ {totalDigitalDeclarado.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 pl-2">
+                    • Pix: R$ {(Number(valorPix) || 0).toFixed(2)} | Cartão: R$ {(Number(valorCartao) || 0).toFixed(2)}
+                  </div>
+                  <div className={`flex justify-between font-bold pt-1 border-t border-slate-700 ${diferencaDigital < -0.05 ? 'text-rose-400' : diferencaDigital > 0.05 ? 'text-emerald-400' : 'text-cyan-300'
+                    }`}>
+                    <span>Diferença Digital (Pix/Cartão):</span>
+                    <span className="font-mono">{diferencaDigital > 0 ? '+' : ''}R$ {diferencaDigital.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
+              {declaraDigital && diferencaCaixa !== 0 && (
+                <div className={`flex justify-between font-bold pt-1 border-t border-slate-700 ${diferencaCaixa < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  <span>{diferencaCaixa < 0 ? 'Furo de Caixa Total:' : 'Sobra no Caixa Total:'}</span>
+                  <span className="font-mono">R$ {diferencaCaixa.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+
+            {(Number(valorDinheiro) || 0) === 0 && (Number(valorPix) || 0) === 0 && (Number(valorCartao) || 0) === 0 && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2 font-medium">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                <span>Atenção: Nenhum valor em dinheiro, Pix ou cartão foi informado.</span>
+              </div>
+            )}
+          </div>
+        ),
+        confirmText: 'Confirmar e Encerrar',
+        cancelText: 'Revisar Fechamento',
+        variant: 'info',
+      });
+
+      if (!confirmou) return;
     }
 
     setSalvando(true);
@@ -466,18 +959,39 @@ export default function AcertoDiarioPage() {
         valor_cartao_declarado: valorCartao,
         diferenca_auditoria: diferencaCaixa,
 
-        status: 'encerrado',
+        status: etapaAcerto === 'envio' ? 'aberto' : 'encerrado',
         observacoes: observacoes.trim() || null,
       };
 
-      const { error } = await supabase.from('remessas_cargas_pdv').insert([payload]);
+      let { error } = await supabase.from('remessas_cargas_pdv').insert([payload]);
+
+      // Fallback gracioso se a coluna tipo_fechamento ainda não tiver sido criada no Supabase
+      if (error && (error.message?.includes('tipo_fechamento') || error.details?.includes('tipo_fechamento'))) {
+        const fallbackPayload = { ...payload };
+        delete (fallbackPayload as any).tipo_fechamento;
+        const res = await supabase.from('remessas_cargas_pdv').insert([fallbackPayload]);
+        error = res.error;
+      }
+
       if (error) throw error;
 
-      toast({
-        title: 'Remessa e Fechamento Salvos!',
-        description: `Romaneio (${tipoFechamento.toUpperCase()}) gravado com sucesso. Pix/Cartão Esperado: R$ ${pixCartaoEsperado.toFixed(2)}`,
-        variant: 'success',
-      });
+      const pdvNome = locais.find((l) => l.id === localId)?.nome || 'PDV';
+
+      if (etapaAcerto === 'envio') {
+        setStatusFechamentoPDV('aberto');
+        toast({
+          title: 'Envio de Produtos Salvo!',
+          description: `Envio de ${totalEnviado} produtos registrado com sucesso para o PDV "${pdvNome}".`,
+          variant: 'success',
+        });
+      } else {
+        setStatusFechamentoPDV('encerrado');
+        toast({
+          title: 'Remessa e Fechamento Salvos!',
+          description: `Fechamento (${tipoFechamento.toUpperCase()}) do PDV "${pdvNome}" gravado com sucesso. Pix/Cartão Esperado: R$ ${pixCartaoEsperado.toFixed(2)}`,
+          variant: 'success',
+        });
+      }
 
       // Reset
       setGradeItens(
@@ -506,638 +1020,1480 @@ export default function AcertoDiarioPage() {
 
   return (
     <div className="mx-auto w-full max-w-5xl min-w-0 overflow-x-hidden space-y-6 p-2 sm:p-4 md:p-8">
-      {/* Header com Toggle de Modo */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text/80">
-            Lançamento de Romaneio, Produtos, Financeiro & Sobras
-          </h1>
-          <p className="text-sm text-text/50">
-            Caderno Digital: Saída por produto, apuração por sobra e Vendas totais (Pix/Cartão).
-          </p>
-        </div>
-
-        {/* Toggle Switch */}
-        <div className="inline-flex rounded-2xl border border-primary/20 bg-primary/5 p-1">
-          <button
-            type="button"
-            onClick={() => setModo('detalhado')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-              modo === 'detalhado'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-text/60 hover:text-text/90'
-            }`}
-          >
-            <ListOrdered className="h-4 w-4" /> Modo Romaneio (Por Doce)
-          </button>
-          <button
-            type="button"
-            onClick={() => setModo('rapido')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-              modo === 'rapido'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-text/60 hover:text-text/90'
-            }`}
-          >
-            <Layers className="h-4 w-4" /> Modo Rápido (Volume Global)
-          </button>
-        </div>
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-text/80">
+          Lançamento de Romaneio, Produtos, Financeiro & Sobras
+        </h1>
+        <p className="text-sm text-text/50">
+          Caderno Digital: Saída por produto, apuração por sobra e Vendas totais (Pix/Cartão).
+        </p>
       </div>
 
-      <form onSubmit={handleSalvarRemessa} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Painel Principal (Carga e Grade) */}
-        <div className="space-y-6 lg:col-span-2">
-          {/* Identificação */}
-          <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm">
-            <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
-              <Store className="h-4 w-4 text-primary" /> Selecione o Ponto de Venda (PDV)
-            </h2>
+      {/* Seletor de Etapas (Abas: 1. Envio de Carga | 2. Sobras & Financeiro | Ver Tudo) */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 p-1.5 shadow-sm">
+        <button
+          type="button"
+          onClick={() => setEtapaAcerto('envio')}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${etapaAcerto === 'envio'
+            ? 'bg-primary text-white shadow ring-2 ring-primary/30'
+            : 'text-text/70 hover:bg-primary/10'
+            }`}
+        >
+          <Package className="h-4 w-4" /> 1. Envio de Produtos para o PDV
+        </button>
 
-            {/* Grid Seletor por Cards Clicáveis */}
-            <PDVSelectorCards
-              locais={locais}
-              selectedId={localId}
-              onSelect={(id) => setLocalId(id)}
-              carregando={loading}
-            />
+        <button
+          type="button"
+          onClick={() => setEtapaAcerto('fechamento')}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${etapaAcerto === 'fechamento'
+            ? 'bg-primary text-white shadow ring-2 ring-primary/30'
+            : 'text-text/70 hover:bg-primary/10'
+            }`}
+        >
+          <CheckCircle2 className="h-4 w-4" /> 2. Sobras & Fechamento Financeiro
+        </button>
 
-            {/* Seletor de Tipo de Registro de Fechamento */}
-            <div className="border-t border-primary/10 pt-4">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-text/60">
-                Selecione o Tipo de Fechamento do Turno/Dia:
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <button
+          type="button"
+          onClick={() => setEtapaAcerto('tudo')}
+          className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${etapaAcerto === 'tudo'
+            ? 'bg-primary text-white shadow ring-2 ring-primary/30'
+            : 'text-text/70 hover:bg-primary/10'
+            }`}
+        >
+          <Layers className="h-4 w-4" /> Ver Tudo (Unificado)
+        </button>
+      </div>
+
+      {/* Aba 3: Relatório Consolidação & Tabela Unificada */}
+      {etapaAcerto === 'tudo' && (
+        <div className="space-y-6 animate-fade-up">
+          {/* Painel de Filtros Gerais */}
+          <div className="rounded-2xl border border-primary/20 bg-background p-5 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-primary/10 pb-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-primary">
+                  <Filter className="h-4 w-4 text-primary" /> Filtros Gerais do Relatório
+                </h2>
+                <p className="text-xs text-text/60">
+                  Filtre as remessas e fechamentos por período (data inicial/final), turno e ponto de venda.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setTipoFechamento('parcial')}
-                  className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
-                    tipoFechamento === 'parcial'
-                      ? 'border-cyan-500 bg-cyan-500/10 text-cyan-900 dark:text-cyan-200 ring-2 ring-cyan-500/30'
-                      : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                  }`}
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    setDataInicioTudo(today);
+                    setDataFimTudo(today);
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-colors"
                 >
-                  <span className="font-bold text-xs">🔵 Fechamento Parcial</span>
-                  <span className="text-[10px] text-text/50 mt-1">
-                    Sobra permanece no PDV para amanhã
-                  </span>
+                  Hoje
                 </button>
-
                 <button
                   type="button"
-                  onClick={() => setTipoFechamento('semanal')}
-                  className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
-                    tipoFechamento === 'semanal'
-                      ? 'border-purple-500 bg-purple-500/10 text-purple-900 dark:text-purple-200 ring-2 ring-purple-500/30'
-                      : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                  }`}
+                  onClick={() => {
+                    const today = new Date();
+                    const d7 = new Date(today);
+                    d7.setDate(today.getDate() - 7);
+                    setDataInicioTudo(d7.toISOString().split('T')[0]);
+                    setDataFimTudo(today.toISOString().split('T')[0]);
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-colors"
                 >
-                  <span className="font-bold text-xs">🟣 Encerramento de Ciclo</span>
-                  <span className="text-[10px] text-text/50 mt-1">
-                    Contagem física final da semana
-                  </span>
+                  Últimos 7 dias
                 </button>
-
                 <button
                   type="button"
-                  onClick={() => setTipoFechamento('diario')}
-                  className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
-                    tipoFechamento === 'diario'
-                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30'
-                      : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                  }`}
+                  onClick={() => {
+                    const today = new Date();
+                    const dMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                    setDataInicioTudo(dMonth.toISOString().split('T')[0]);
+                    setDataFimTudo(today.toISOString().split('T')[0]);
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-colors"
                 >
-                  <span className="font-bold text-xs">🟢 Fechamento Padrão</span>
-                  <span className="text-[10px] text-text/50 mt-1">
-                    Recolhimento diário obrigatório
-                  </span>
+                  Este Mês
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 border-t border-primary/10 pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Data Inicial */}
               <div>
-                <label className="text-xs font-semibold text-text/70">Data</label>
-                <input
-                  type="date"
-                  value={dataAcerto}
-                  onChange={(e) => setDataAcerto(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                />
+                <label className="text-xs font-bold text-text/70 block mb-1">Data Inicial</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-text/40 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={dataInicioTudo}
+                    onChange={(e) => setDataInicioTudo(e.target.value)}
+                    className="w-full rounded-xl border border-primary/20 bg-background pl-9 pr-3 py-2 text-xs font-semibold outline-none focus:border-primary"
+                  />
+                </div>
               </div>
 
+              {/* Data Final */}
               <div>
-                <label className="flex items-center gap-1 text-xs font-semibold text-text/70">
-                  <Clock className="h-3.5 w-3.5 text-text/50" /> Turno
-                </label>
-                <select
-                  value={turno}
-                  onChange={(e) => setTurno(e.target.value as any)}
-                  className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                >
-                  <option value="integral">Integral (Dia Todo)</option>
-                  <option value="manha">Manhã</option>
-                  <option value="tarde">Tarde</option>
-                  <option value="noite">Noite</option>
-                </select>
+                <label className="text-xs font-bold text-text/70 block mb-1">Data Final</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-text/40 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={dataFimTudo}
+                    onChange={(e) => setDataFimTudo(e.target.value)}
+                    className="w-full rounded-xl border border-primary/20 bg-background pl-9 pr-3 py-2 text-xs font-semibold outline-none focus:border-primary"
+                  />
+                </div>
               </div>
 
+              {/* Turno */}
               <div>
-                <label className="flex items-center gap-1 text-xs font-semibold text-text/70">
-                  <User className="h-3.5 w-3.5 text-text/50" /> Atendente / Vendedor
-                </label>
-                <input
-                  type="text"
-                  value={vendedorNome}
-                  onChange={(e) => setVendedorNome(e.target.value)}
-                  placeholder="Ex: Maria"
-                  className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                />
+                <label className="text-xs font-bold text-text/70 block mb-1">Turno</label>
+                <div className="relative">
+                  <Clock className="absolute left-3 top-2.5 h-4 w-4 text-text/40 pointer-events-none" />
+                  <select
+                    value={turnoTudo}
+                    onChange={(e) => setTurnoTudo(e.target.value)}
+                    className="w-full rounded-xl border border-primary/20 bg-background pl-9 pr-3 py-2 text-xs font-semibold outline-none focus:border-primary"
+                  >
+                    <option value="todos">Todos os Turnos</option>
+                    <option value="integral">Integral</option>
+                    <option value="manha">Manhã</option>
+                    <option value="tarde">Tarde</option>
+                    <option value="noite">Noite</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* PDV / Loja */}
+              <div>
+                <label className="text-xs font-bold text-text/70 block mb-1">Ponto de Venda (PDV)</label>
+                <div className="relative">
+                  <Store className="absolute left-3 top-2.5 h-4 w-4 text-text/40 pointer-events-none" />
+                  <select
+                    value={pdvTudo}
+                    onChange={(e) => setPdvTudo(e.target.value)}
+                    className="w-full rounded-xl border border-primary/20 bg-background pl-9 pr-3 py-2 text-xs font-semibold outline-none focus:border-primary"
+                  >
+                    <option value="todos">Todos os PDVs / Lojas</option>
+                    {locais.map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Grade de Produtos (Modo Detalhado - Caderno Digital) */}
-          {modo === 'detalhado' ? (
-            <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-primary/10 pb-3">
-                <div>
-                  <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
-                    <Package className="h-4 w-4 text-primary" /> Romaneio de Carga & Sobras por Doce
-                  </h2>
-                  <span className="text-[11px] text-text/50">
-                    {tipoFechamento === 'parcial'
-                      ? '🔵 Sobra em Loja: Produtos não recolhidos permanecem no estoque do PDV.'
-                      : tipoFechamento === 'semanal'
-                        ? '🟣 Encerramento Semanal: Informe a sobra física final recolhida.'
-                        : '🟢 Fechamento Padrão: Digite o retorno físico do dia.'}
-                  </span>
-                </div>
+          {/* Grid de KPIs do Período Filtrado */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+            {/* 1. Enviado */}
+            <div className="rounded-xl border border-primary/15 bg-background p-3 shadow-2xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text/50 block truncate">Total Enviado</span>
+              <p className="mt-1 font-mono text-lg font-black text-primary">{totEnviadoTudo} un</p>
+              <span className="text-[10px] text-text/40 block truncate">Remessas no Período</span>
+            </div>
 
-                <button
-                  type="button"
-                  onClick={handleVendeuTudoZerarSobras}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors"
-                >
-                  ⚡ Vendeu Tudo (Sobra Zero)
-                </button>
-              </div>
+            {/* 2. Sobras */}
+            <div className="rounded-xl border border-amber-300/40 bg-amber-50/40 dark:bg-amber-950/20 p-3 shadow-2xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block truncate">Sobras em Loja</span>
+              <p className="mt-1 font-mono text-lg font-black text-amber-700 dark:text-amber-300">{totSobraTudo} un</p>
+              <span className="text-[10px] text-amber-600/70 block truncate">Retorno Físico</span>
+            </div>
 
-              <div className="overflow-x-auto">
-                {/* Desktop View: Tabela completa de 8 colunas */}
-                <table className="hidden sm:table w-full text-left text-xs">
-                  <thead className="border-b border-primary/10 bg-primary/5 font-bold uppercase text-text/50">
+            {/* 3. Vendas */}
+            <div className="rounded-xl border border-emerald-300/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-3 shadow-2xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block truncate">Vendas Totais</span>
+              <p className="mt-1 font-mono text-lg font-black text-emerald-700 dark:text-emerald-300">{totVendidosTudo} un</p>
+              <span className="text-[10px] text-emerald-600/70 block truncate">Unidades Vendidas</span>
+            </div>
+
+            {/* 4. Dinheiro */}
+            <div className="rounded-xl border border-emerald-300/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-3 shadow-2xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block truncate">💵 Dinheiro</span>
+              <p className="mt-1 font-mono text-lg font-black text-emerald-700 dark:text-emerald-300">R$ {totDinheiroTudo.toFixed(2)}</p>
+              <span className="text-[10px] text-emerald-600/70 block truncate">Total Gaveta</span>
+            </div>
+
+            {/* 5. Cartão */}
+            <div className="rounded-xl border border-cyan-300/40 bg-cyan-50/40 dark:bg-cyan-950/20 p-3 shadow-2xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-800 dark:text-cyan-300 block truncate">💳 Cartão</span>
+              <p className="mt-1 font-mono text-lg font-black text-cyan-700 dark:text-cyan-300">R$ {totCartaoTudo.toFixed(2)}</p>
+              <span className="text-[10px] text-cyan-600/70 block truncate">Débito / Crédito</span>
+            </div>
+
+            {/* 6. Pix */}
+            <div className="rounded-xl border border-purple-300/40 bg-purple-50/40 dark:bg-purple-950/20 p-3 shadow-2xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-800 dark:text-purple-300 block truncate">📱 Pix</span>
+              <p className="mt-1 font-mono text-lg font-black text-purple-700 dark:text-purple-300">R$ {totPixTudo.toFixed(2)}</p>
+              <span className="text-[10px] text-purple-600/70 block truncate">Transferências Pix</span>
+            </div>
+
+            {/* 7. Total Faturamento */}
+            <div className="rounded-xl border border-primary/30 bg-primary/10 p-3 shadow-2xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-primary block truncate">Faturamento Total</span>
+              <p className="mt-1 font-mono text-lg font-black text-primary">R$ {totFaturamentoTudo.toFixed(2)}</p>
+              <span className="text-[10px] text-primary/70 block truncate">Líquido Acumulado</span>
+            </div>
+          </div>
+
+          {/* Tabela Completa Consolidada */}
+          <div className="rounded-2xl border border-primary/20 bg-background overflow-hidden shadow-sm">
+            <div className="flex items-center justify-between p-4 border-b border-primary/10 bg-primary/5">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-2">
+                <Layers className="h-4 w-4" /> Tabela Completa de Romaneios e Fechamentos ({historicoTudo.length} registros)
+              </h3>
+              {loadingTudo && (
+                <span className="flex items-center gap-1 text-xs text-primary animate-pulse font-bold">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Atualizando...
+                </span>
+              )}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-primary/15 bg-primary/10 text-[11px] font-black uppercase text-primary tracking-wider">
+                    <th className="p-2.5">Data / Turno</th>
+                    <th className="p-2.5">PDV / Loja</th>
+                    <th className="p-2.5 text-center">Enviado</th>
+                    <th className="p-2.5 text-center">Sobra</th>
+                    <th className="p-2.5 text-center">Vendas</th>
+                    <th className="p-2.5 text-right">Dinheiro</th>
+                    <th className="p-2.5 text-right">Cartão</th>
+                    <th className="p-2.5 text-right">Pix</th>
+                    <th className="p-2.5 text-right">Total</th>
+                    <th className="p-2.5 text-center">Status</th>
+                    <th className="p-2.5 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingTudo ? (
                     <tr>
-                      <th className="p-2.5">Doce / Produto</th>
-                      <th className="p-2.5 text-center">Preço Unit</th>
-                      <th className="p-2.5 text-center">Sobra Anterior</th>
-                      <th className="p-2.5 text-center">Envio Hoje</th>
-                      <th className="p-2.5 text-center">Total Disp.</th>
-                      <th className="p-2.5 text-center">Sobras (Retorno)</th>
-                      <th className="p-2.5 text-right">Vendidos</th>
-                      <th className="p-2.5 text-right">Subtotal</th>
+                      <td colSpan={11} className="p-8 text-center text-text/50 text-xs font-semibold">
+                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
+                        Carregando lançamentos unificados...
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-primary/5">
-                    {gradeItens.map((item, idx) => {
-                      const disp = (item.qtd_sobra_anterior || 0) + (item.qtd_enviada || 0);
-                      const vend = Math.max(0, disp - (item.qtd_retorno || 0));
-                      const subtotal = vend * item.preco_unitario;
+                  ) : historicoTudo.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} className="p-8 text-center text-text/50 text-xs">
+                        Nenhum fechamento ou romaneio encontrado no período selecionado.
+                      </td>
+                    </tr>
+                  ) : (
+                    historicoTudo.map((item) => {
+                      const enviada = Number(item.qtd_total_enviada) || 0;
+                      const sobra = Number(item.qtd_total_retorno) || 0;
+                      const vendas = Math.max(0, enviada - sobra);
+                      const din = Number(item.valor_dinheiro_gaveta) || 0;
+                      const car = Number(item.valor_cartao_declarado) || 0;
+                      const pix = Number(item.valor_pix_declarado) || 0;
+                      const liq = Number(item.faturamento_liquido_esperado) || Number(item.faturamento_bruto_teorico) || 0;
+                      const totRow = liq > 0 ? liq : (din + car + pix);
+                      const pdvNome = item.locais?.nome || locais.find((l) => l.id === item.local_id)?.nome || 'PDV';
+                      const dataFormatada = item.data ? item.data.split('-').reverse().join('/') : '-';
+                      const turnoFormatado =
+                        item.turno === 'integral'
+                          ? 'Integral'
+                          : item.turno === 'manha'
+                            ? 'Manhã'
+                            : item.turno === 'tarde'
+                              ? 'Tarde'
+                              : item.turno === 'noite'
+                                ? 'Noite'
+                                : item.turno || '-';
 
                       return (
-                        <tr key={item.produto_id} className="hover:bg-primary/5 transition-colors">
-                          <td className="p-2.5 font-bold text-text/80">{item.nome}</td>
-                          <td className="p-2.5 text-center font-mono text-text/60">
-                            R$ {item.preco_unitario.toFixed(2)}
+                        <tr key={item.id} className="border-b border-primary/5 hover:bg-primary/5 text-xs transition-colors">
+                          <td className="p-2.5 font-semibold text-text/80 whitespace-nowrap">
+                            {dataFormatada} <span className="text-text/40 text-[10px] font-normal">({turnoFormatado})</span>
                           </td>
-                          <td className="p-2.5 text-center font-mono text-cyan-600 font-bold bg-cyan-50/30 dark:bg-cyan-950/10">
-                            {item.qtd_sobra_anterior || 0} un
+                          <td className="p-2.5 font-bold text-primary whitespace-nowrap">{pdvNome}</td>
+                          <td className="p-2.5 font-mono font-bold text-center text-slate-800 dark:text-slate-200">{enviada}</td>
+                          <td className="p-2.5 font-mono font-bold text-center text-amber-600 dark:text-amber-400">{sobra}</td>
+                          <td className="p-2.5 font-mono font-bold text-center text-emerald-600 dark:text-emerald-400">{vendas}</td>
+                          <td className="p-2.5 font-mono text-right text-emerald-700 dark:text-emerald-300">R$ {din.toFixed(2)}</td>
+                          <td className="p-2.5 font-mono text-right text-cyan-700 dark:text-cyan-300">R$ {car.toFixed(2)}</td>
+                          <td className="p-2.5 font-mono text-right text-purple-700 dark:text-purple-300">R$ {pix.toFixed(2)}</td>
+                          <td className="p-2.5 font-mono font-black text-right text-primary">R$ {totRow.toFixed(2)}</td>
+                          <td className="p-2.5 text-center">
+                            <span
+                              className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${item.status === 'encerrado' || item.status === 'auditado'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-300'
+                                }`}
+                            >
+                              {item.status === 'encerrado' ? 'Encerrado' : item.status === 'auditado' ? 'Auditado' : 'Aberto'}
+                            </span>
                           </td>
                           <td className="p-2.5 text-center">
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.qtd_enviada || ''}
-                              onChange={(e) =>
-                                handleAtualizarItemGrade(idx, 'qtd_enviada', Number(e.target.value))
-                              }
-                              placeholder="0"
-                              className="w-16 rounded-lg border border-primary/20 bg-background px-2 py-1 text-center font-semibold outline-none focus:border-primary"
-                            />
-                          </td>
-                          <td className="p-2.5 text-center font-mono font-bold text-text/80">
-                            {disp} un
-                          </td>
-                          <td className="p-2.5 text-center">
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.qtd_retorno || ''}
-                              onChange={(e) =>
-                                handleAtualizarItemGrade(idx, 'qtd_retorno', Number(e.target.value))
-                              }
-                              placeholder="0"
-                              className="w-16 rounded-lg border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 px-2 py-1 text-center font-semibold text-amber-700 outline-none focus:border-amber-500"
-                            />
-                          </td>
-                          <td className="p-2.5 text-right font-mono font-bold text-primary">
-                            {vend} un
-                          </td>
-                          <td className="p-2.5 text-right font-mono font-bold text-text/80">
-                            R$ {subtotal.toFixed(2)}
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => abrirModalEdicao(item)}
+                                title="Editar Lançamento"
+                                className="p-1.5 rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/20 text-primary transition-colors"
+                              >
+                                <Edit3 className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleExcluirRemessa(item)}
+                                title="Excluir Lançamento"
+                                className="p-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-400 transition-colors"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </table>
+                    })
+                  )}
+                </tbody>
 
-                {/* Mobile View: Cards Individuais de Produto com Botões Stepper (- e +) */}
-                <div className="block sm:hidden space-y-3">
-                  {gradeItens.map((item, idx) => {
-                    const disp = (item.qtd_sobra_anterior || 0) + (item.qtd_enviada || 0);
-                    const vend = Math.max(0, disp - (item.qtd_retorno || 0));
-                    const subtotal = vend * item.preco_unitario;
+                <tfoot className="bg-primary/10 border-t-2 border-primary/20 text-xs font-bold">
+                  <tr>
+                    <td colSpan={2} className="p-2.5 text-right uppercase tracking-wider text-primary">
+                      Totais do Período:
+                    </td>
+                    <td className="p-3 font-mono text-center font-black text-slate-800 dark:text-slate-100">{totEnviadoTudo}</td>
+                    <td className="p-3 font-mono text-center font-black text-amber-700 dark:text-amber-300">{totSobraTudo}</td>
+                    <td className="p-3 font-mono text-center font-black text-emerald-700 dark:text-emerald-300">{totVendidosTudo}</td>
+                    <td className="p-3 font-mono text-right font-black text-emerald-700 dark:text-emerald-300">
+                      R$ {totDinheiroTudo.toFixed(2)}
+                    </td>
+                    <td className="p-3 font-mono text-right font-black text-cyan-700 dark:text-cyan-300">
+                      R$ {totCartaoTudo.toFixed(2)}
+                    </td>
+                    <td className="p-3 font-mono text-right font-black text-purple-700 dark:text-purple-300">
+                      R$ {totPixTudo.toFixed(2)}
+                    </td>
+                    <td className="p-3 font-mono text-right font-black text-primary text-sm">
+                      R$ {totFaturamentoTudo.toFixed(2)}
+                    </td>
+                    <td className="p-3"></td>
+                    <td className="p-3"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
 
-                    return (
-                      <div
-                        key={item.produto_id}
-                        className="rounded-2xl border border-primary/15 bg-background p-4 shadow-2xs space-y-3"
-                      >
-                        {/* Header: Nome do Produto e Preço */}
-                        <div className="flex items-center justify-between border-b border-primary/10 pb-2">
-                          <span className="font-bold text-sm text-text/90">{item.nome}</span>
-                          <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary">
-                            R$ {item.preco_unitario.toFixed(2)}/un
-                          </span>
-                        </div>
-
-                        {/* Pílulas de Estoque */}
-                        <div className="grid grid-cols-3 gap-1.5 text-center text-[11px]">
-                          <div className="rounded-xl bg-cyan-50 dark:bg-cyan-950/30 p-1.5 border border-cyan-200 dark:border-cyan-800">
-                            <span className="block text-[10px] text-cyan-800 dark:text-cyan-300 font-semibold">
-                              Sobra Ant.
-                            </span>
-                            <strong className="font-mono text-cyan-900 dark:text-cyan-200">
-                              {item.qtd_sobra_anterior || 0} un
-                            </strong>
-                          </div>
-                          <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-1.5 border border-slate-200 dark:border-slate-700">
-                            <span className="block text-[10px] text-text/60 font-semibold">
-                              Total Disp.
-                            </span>
-                            <strong className="font-mono text-text/90">{disp} un</strong>
-                          </div>
-                          <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 p-1.5 border border-emerald-200 dark:border-emerald-800">
-                            <span className="block text-[10px] text-emerald-800 dark:text-emerald-300 font-semibold">
-                              Vendidos
-                            </span>
-                            <strong className="font-mono text-emerald-900 dark:text-emerald-200">
-                              {vend} un
-                            </strong>
-                          </div>
-                        </div>
-
-                        {/* Campos de Quantidade com Botões Stepper (- e +) */}
-                        <div className="grid grid-cols-2 gap-3 pt-1">
-                          {/* Envio Hoje */}
-                          <div className="space-y-1">
-                            <label className="block text-[11px] font-bold text-text/70">
-                              📦 Envio Hoje:
-                            </label>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleAtualizarItemGrade(
-                                    idx,
-                                    'qtd_enviada',
-                                    Math.max(0, (item.qtd_enviada || 0) - 1)
-                                  )
-                                }
-                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/5 text-base font-bold text-primary active:scale-95 shrink-0 select-none"
-                              >
-                                -
-                              </button>
-                              <input
-                                type="number"
-                                min="0"
-                                value={item.qtd_enviada || ''}
-                                onChange={(e) =>
-                                  handleAtualizarItemGrade(
-                                    idx,
-                                    'qtd_enviada',
-                                    Number(e.target.value)
-                                  )
-                                }
-                                placeholder="0"
-                                className="h-9 w-full rounded-xl border border-primary/20 bg-background px-2 text-center font-bold outline-none focus:border-primary"
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleAtualizarItemGrade(
-                                    idx,
-                                    'qtd_enviada',
-                                    (item.qtd_enviada || 0) + 1
-                                  )
-                                }
-                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-base font-bold text-primary active:scale-95 shrink-0 select-none"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Sobras / Retorno */}
-                          <div className="space-y-1">
-                            <label className="block text-[11px] font-bold text-amber-800 dark:text-amber-300">
-                              ↩️ Sobras (Retorno):
-                            </label>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleAtualizarItemGrade(
-                                    idx,
-                                    'qtd_retorno',
-                                    Math.max(0, (item.qtd_retorno || 0) - 1)
-                                  )
-                                }
-                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 text-base font-bold text-amber-800 active:scale-95 shrink-0 select-none"
-                              >
-                                -
-                              </button>
-                              <input
-                                type="number"
-                                min="0"
-                                value={item.qtd_retorno || ''}
-                                onChange={(e) =>
-                                  handleAtualizarItemGrade(
-                                    idx,
-                                    'qtd_retorno',
-                                    Number(e.target.value)
-                                  )
-                                }
-                                placeholder="0"
-                                className="h-9 w-full rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 px-2 text-center font-bold text-amber-900 dark:text-amber-200 outline-none focus:border-amber-500"
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleAtualizarItemGrade(
-                                    idx,
-                                    'qtd_retorno',
-                                    (item.qtd_retorno || 0) + 1
-                                  )
-                                }
-                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-100 text-base font-bold text-amber-800 active:scale-95 shrink-0 select-none"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Subtotal do Produto */}
-                        <div className="flex items-center justify-between border-t border-primary/10 pt-2 text-xs font-bold">
-                          <span className="text-text/60">Subtotal Parcial:</span>
-                          <span className="font-mono text-primary">R$ {subtotal.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
+            {/* Legenda de Status */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border-t border-primary/10 bg-primary/5 text-xs">
+              <span className="font-bold text-text/70 uppercase tracking-wider text-[11px] flex items-center gap-1.5 shrink-0">
+                <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Legenda de Status:
+              </span>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-300">
+                    Aberto
+                  </span>
+                  <span className="text-text/60 text-[11px]">Carga enviada ao PDV (pendente de encerramento)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300">
+                    Encerrado
+                  </span>
+                  <span className="text-text/60 text-[11px]">Fechamento de turno e financeiro concluído</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-cyan-100 text-cyan-800 dark:bg-cyan-950/50 dark:text-cyan-300 border border-cyan-300">
+                    Auditado
+                  </span>
+                  <span className="text-text/60 text-[11px]">Conferido e validado pela gestão</span>
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Ajustes / Perdas / Cortesias */}
-              <div className="border-t border-primary/10 pt-4">
-                <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-text/60">
-                  Ajustes de Turno (Perdas, Avarias, Brindes ou Descontos)
-                </h3>
-
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    type="text"
-                    value={novaPerdaDesc}
-                    onChange={(e) => setNovaPerdaDesc(e.target.value)}
-                    placeholder="Motivo (ex: 1 brownie caiu no chão)"
-                    className="flex-1 rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary"
-                  />
-                  <BRLCurrencyInput
-                    value={novaPerdaValor}
-                    onChange={(val) => setNovaPerdaValor(val)}
-                    placeholder="R$ 0,00"
-                    className="w-28 rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary"
-                  />
+          {/* Modal de Edição de Lançamento */}
+          {editandoItem && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+              <div className="w-full max-w-lg rounded-2xl border border-primary/20 bg-background p-6 shadow-xl space-y-4 animate-scale-up">
+                <div className="flex items-center justify-between border-b border-primary/10 pb-3">
+                  <h3 className="text-sm font-extrabold uppercase tracking-wider text-primary flex items-center gap-2">
+                    <Edit3 className="h-4 w-4" /> Editar Lançamento ({editandoItem.locais?.nome || 'PDV'})
+                  </h3>
                   <button
                     type="button"
-                    onClick={handleAdicionarPerda}
-                    className="flex items-center justify-center gap-1 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20"
+                    onClick={() => setEditandoItem(null)}
+                    className="rounded-lg p-1 text-text/40 hover:bg-primary/10 hover:text-text transition-colors"
                   >
-                    <Plus className="h-4 w-4" /> Add Ajuste
+                    <X className="h-5 w-5" />
                   </button>
                 </div>
 
-                {perdasList.length > 0 && (
-                  <div className="mt-3 space-y-1">
-                    {perdasList.map((p) => (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between rounded-lg bg-rose-50/60 dark:bg-rose-950/20 px-3 py-1.5 text-xs text-rose-700 dark:text-rose-400"
-                      >
-                        <span>{p.descricao}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold">-R$ {p.valor.toFixed(2)}</span>
-                          <button type="button" onClick={() => handleRemoverPerda(p.id)}>
-                            <Trash2 className="h-3.5 w-3.5 text-rose-500 hover:text-rose-700" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="font-bold text-text/70 block mb-1">Data</label>
+                    <input
+                      type="date"
+                      value={editData}
+                      onChange={(e) => setEditData(e.target.value)}
+                      className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 font-semibold outline-none focus:border-primary"
+                    />
                   </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* Modo Rápido (Volume Global) */
-            <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm">
-              <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
-                <Layers className="h-4 w-4 text-primary" /> Lançamento por Volume Global
-              </h2>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <label className="text-xs font-semibold text-text/70">Qtd Enviada Total</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={qtdEnviadaRapida || ''}
-                    onChange={(e) => setQtdEnviadaRapida(Number(e.target.value))}
-                    placeholder="Ex: 150"
-                    className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-base font-semibold outline-none focus:border-primary"
-                  />
+                  <div>
+                    <label className="font-bold text-text/70 block mb-1">Turno</label>
+                    <select
+                      value={editTurno}
+                      onChange={(e) => setEditTurno(e.target.value)}
+                      className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 font-semibold outline-none focus:border-primary"
+                    >
+                      <option value="integral">Integral</option>
+                      <option value="manha">Manhã</option>
+                      <option value="tarde">Tarde</option>
+                      <option value="noite">Noite</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="font-bold text-text/70 block mb-1">Nome do Vendedor / Atendente</label>
+                    <input
+                      type="text"
+                      value={editVendedor}
+                      onChange={(e) => setEditVendedor(e.target.value)}
+                      placeholder="Ex: Maria"
+                      className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 font-semibold outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-text/70 block mb-1">Qtd Enviada</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editQtdEnviada}
+                      onChange={(e) => setEditQtdEnviada(Number(e.target.value) || 0)}
+                      className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 font-mono font-bold outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-text/70 block mb-1">Qtd Sobra (Retorno)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editQtdRetorno}
+                      onChange={(e) => setEditQtdRetorno(Number(e.target.value) || 0)}
+                      className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 font-mono font-bold outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-emerald-700 dark:text-emerald-400 block mb-1">💵 Dinheiro Gaveta (R$)</label>
+                    <BRLCurrencyInput
+                      value={editValorDinheiro}
+                      onChange={(val) => setEditValorDinheiro(val)}
+                      className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 font-mono font-bold text-emerald-700 dark:text-emerald-300 outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-cyan-700 dark:text-cyan-400 block mb-1">💳 Cartão Declarado (R$)</label>
+                    <BRLCurrencyInput
+                      value={editValorCartao}
+                      onChange={(val) => setEditValorCartao(val)}
+                      className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 font-mono font-bold text-cyan-700 dark:text-cyan-300 outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-purple-700 dark:text-purple-400 block mb-1">📱 Pix Declarado (R$)</label>
+                    <BRLCurrencyInput
+                      value={editValorPix}
+                      onChange={(val) => setEditValorPix(val)}
+                      className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 font-mono font-bold text-purple-700 dark:text-purple-300 outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-text/70 block mb-1">Status</label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value)}
+                      className="w-full rounded-xl border border-primary/20 bg-background px-3 py-2 font-semibold outline-none focus:border-primary"
+                    >
+                      <option value="aberto">Aberto (Pendente)</option>
+                      <option value="encerrado">Encerrado</option>
+                      <option value="auditado">Auditado</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-text/70">Qtd Retorno (Sobras)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={qtdRetornoRapida || ''}
-                    onChange={(e) => setQtdRetornoRapida(Number(e.target.value))}
-                    placeholder="Ex: 15"
-                    className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-base font-semibold outline-none focus:border-primary"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-text/70">Preço Médio Estimado</label>
-                  <BRLCurrencyInput
-                    value={precoMedioRapido}
-                    onChange={(val) => setPrecoMedioRapido(val)}
-                    placeholder="R$ 8,00"
-                    className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-base font-semibold outline-none focus:border-primary"
-                  />
+                <div className="flex justify-end gap-2 border-t border-primary/10 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setEditandoItem(null)}
+                    disabled={salvandoEdicao}
+                    className="px-4 py-2 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 text-xs font-bold text-text/70 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSalvarEdicao}
+                    disabled={salvandoEdicao}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-primary/95 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-50"
+                  >
+                    {salvandoEdicao ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Salvar Alterações
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
           )}
         </div>
+      )}
 
-        {/* Painel Lateral Financeiro (Conferência de Gaveta & Metas Digitais) */}
-        <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm h-fit">
-          <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
-            <DollarSign className="h-4 w-4 text-primary" /> Apuração Financeira do PDV
-          </h2>
+      {etapaAcerto !== 'tudo' && (
+        <form onSubmit={handleSalvarRemessa} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Painel Principal (Carga e Grade) */}
+          <div className="space-y-6 lg:col-span-2">
+            {/* Identificação */}
+            <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm">
+              <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
+                <Store className="h-4 w-4 text-primary" /> Selecione o Ponto de Venda (PDV)
+              </h2>
 
-          <div className="space-y-3">
-            <div>
-              <label className="flex items-center justify-between text-xs font-bold text-text/70">
-                <span className="flex items-center gap-1">
-                  <Banknote className="h-3.5 w-3.5 text-emerald-600" /> Dinheiro Físico (Gaveta)
-                </span>
-              </label>
-              <BRLCurrencyInput
-                value={valorDinheiro}
-                onChange={(val) => setValorDinheiro(val)}
-                placeholder="R$ 0,00"
-                className="mt-1 w-full rounded-xl border border-emerald-300 bg-emerald-50/30 dark:bg-emerald-950/20 px-3 py-2 text-base font-mono font-bold text-emerald-700 outline-none focus:border-emerald-500"
+              {/* Grid Seletor por Cards Clicáveis */}
+              <PDVSelectorCards
+                locais={locais}
+                selectedId={localId}
+                onSelect={(id) => setLocalId(id)}
+                carregando={loading}
               />
-              <span className="text-[10px] text-text/40">
-                Dinheiro recolhido no envelope/gaveta
-              </span>
+
+              {/* Alerta de Status do Fechamento na Aba 2 */}
+              {etapaAcerto === 'fechamento' && statusFechamentoPDV === 'sobra_acumulada' && (
+                <div className="rounded-xl border border-cyan-300 bg-cyan-50 dark:bg-cyan-950/30 p-4 space-y-2 animate-fade-up">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-600 text-white font-bold shadow-sm shrink-0">
+                      <Package size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xs font-bold text-cyan-900 dark:text-cyan-200 truncate uppercase tracking-wider">
+                        🔵 Fechamento com Sobras Acumuladas ({totalSobraAnteriorDetalhado} un)
+                      </h3>
+                      <p className="text-xs text-cyan-800 dark:text-cyan-300 leading-snug">
+                        Existe um saldo de <strong>{totalSobraAnteriorDetalhado} unidades</strong> de sobra em loja do fechamento anterior. Você pode contabilizar e fechar estas sobras abaixo ou registrar nova carga na Aba 1.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEtapaAcerto('envio')}
+                      className="hidden sm:flex items-center gap-1 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs rounded-lg shadow-xs transition-colors shrink-0"
+                    >
+                      <Package size={14} /> Novo Envio (Aba 1)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {etapaAcerto === 'fechamento' && statusFechamentoPDV === 'encerrado' && (
+                <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 space-y-2 animate-fade-up">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold shadow-sm shrink-0">
+                      <CheckCircle2 size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xs font-bold text-emerald-900 truncate uppercase tracking-wider">
+                        Fechamento Concluído e Encerrado
+                      </h3>
+                      <p className="text-xs text-emerald-700 leading-snug">
+                        O fechamento deste PDV ({locais.find((l) => l.id === localId)?.nome || 'PDV'}) já foi realizado e encerrado. Não há cargas pendentes no momento.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setStatusFechamentoPDV('aberto')}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow-xs transition-colors"
+                      >
+                        Novo Fechamento
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEtapaAcerto('envio')}
+                        className="hidden sm:flex items-center gap-1 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow-xs transition-colors"
+                      >
+                        <Package size={14} /> Novo Envio (Aba 1)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {etapaAcerto === 'fechamento' && statusFechamentoPDV === 'sem_carga' && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-2 animate-fade-up">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-600 text-white font-bold shadow-sm shrink-0">
+                      <AlertTriangle size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xs font-bold text-amber-900 dark:text-amber-200 truncate uppercase tracking-wider">
+                        Nenhum Envio Pendente nesta Data ({dataAcerto.split('-').reverse().join('/')})
+                      </h3>
+                      <p className="text-xs text-amber-800 dark:text-amber-300 leading-snug">
+                        Não existem envios de produtos ou pendências de fechamento registrados para este dia no PDV ({locais.find((l) => l.id === localId)?.nome || 'PDV'}). Selecione outra data no campo acima ou registre um novo envio na Aba 1.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEtapaAcerto('envio')}
+                      className="hidden sm:flex items-center gap-1 px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs rounded-lg shadow-xs transition-colors shrink-0"
+                    >
+                      <Package size={14} /> Ir para Envio (Aba 1)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Seletor de Modo de Lançamento (Apenas na Aba 1 Envio / Unificado) */}
+              {etapaAcerto !== 'fechamento' && (
+                <div className="border-t border-primary/10 pt-4">
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-text/60">
+                    Selecione o Modo de Lançamento:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setModo('detalhado')}
+                      className={`flex items-center justify-center gap-2 rounded-xl p-3 text-xs font-bold transition-all border ${modo === 'detalhado'
+                        ? 'border-primary bg-primary text-white shadow-sm ring-2 ring-primary/30'
+                        : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                        }`}
+                    >
+                      <ListOrdered className="h-4 w-4" /> Modo Romaneio (Por Doce)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModo('rapido')}
+                      className={`flex items-center justify-center gap-2 rounded-xl p-3 text-xs font-bold transition-all border ${modo === 'rapido'
+                        ? 'border-primary bg-primary text-white shadow-sm ring-2 ring-primary/30'
+                        : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                        }`}
+                    >
+                      <Layers className="h-4 w-4" /> Modo Rápido (Volume Global)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Seletor de Tipo de Registro de Fechamento (Apenas no Fechamento/Unificado) */}
+              {etapaAcerto !== 'envio' && (
+                <div className="border-t border-primary/10 pt-4">
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-text/60">
+                    Selecione o Tipo de Fechamento do Turno/Dia:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTipoFechamento('parcial')}
+                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${tipoFechamento === 'parcial'
+                        ? 'border-cyan-500 bg-cyan-500/10 text-cyan-900 dark:text-cyan-200 ring-2 ring-cyan-500/30 font-bold'
+                        : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                        }`}
+                    >
+                      <span className="font-bold text-xs">🔵 Fechamento Parcial</span>
+                      <span className="text-[10px] text-text/50 mt-1 leading-snug">
+                        Sobra fica no PDV para o próximo turno ou dia seguinte
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setTipoFechamento('semanal')}
+                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${tipoFechamento === 'semanal'
+                        ? 'border-purple-500 bg-purple-500/10 text-purple-900 dark:text-purple-200 ring-2 ring-purple-500/30 font-bold'
+                        : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                        }`}
+                    >
+                      <span className="font-bold text-xs">🟣 Encerramento Semanal</span>
+                      <span className="text-[10px] text-text/50 mt-1 leading-snug">
+                        Contabilidade e baixa final das sobras acumuladas no ciclo
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setTipoFechamento('diario')}
+                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${tipoFechamento === 'diario'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30 font-bold'
+                        : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                        }`}
+                    >
+                      <span className="font-bold text-xs">🟢 Fechamento Padrão</span>
+                      <span className="text-[10px] text-text/50 mt-1 leading-snug">
+                        Recolhimento e acerto diário obrigatório
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 border-t border-primary/10 pt-4 items-end">
+                <div className="flex flex-col">
+                  <label className="flex h-5 items-center gap-1 text-xs font-semibold text-text/70 mb-1">
+                    <Calendar className="h-3.5 w-3.5 text-text/50 shrink-0" /> Data
+                  </label>
+                  <input
+                    type="date"
+                    value={dataAcerto}
+                    onChange={(e) => setDataAcerto(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-primary/20 bg-background px-3 text-sm outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="flex h-5 items-center gap-1 text-xs font-semibold text-text/70 mb-1">
+                    <Clock className="h-3.5 w-3.5 text-text/50 shrink-0" /> Turno
+                  </label>
+                  <select
+                    value={turno}
+                    onChange={(e) => setTurno(e.target.value as any)}
+                    className="h-10 w-full rounded-xl border border-primary/20 bg-background px-3 text-sm outline-none focus:border-primary"
+                  >
+                    <option value="integral">Integral (Dia Todo)</option>
+                    <option value="manha">Manhã</option>
+                    <option value="tarde">Tarde</option>
+                    <option value="noite">Noite</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="flex h-5 items-center justify-between text-xs font-semibold text-text/70 mb-1">
+                    <span className="flex items-center gap-1">
+                      <User className="h-3.5 w-3.5 text-text/50 shrink-0" /> Atendente / Vendedor
+                    </span>
+                    {etapaAcerto === 'fechamento' && (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold flex items-center gap-0.5">
+                        🔒 Registrado
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    value={vendedorNome}
+                    onChange={(e) => setVendedorNome(e.target.value)}
+                    disabled={etapaAcerto === 'fechamento'}
+                    placeholder={etapaAcerto === 'fechamento' ? 'Carregado do Envio (Aba 1)' : 'Ex: Maria'}
+                    className={`h-10 w-full rounded-xl border border-primary/20 bg-background px-3 text-sm outline-none focus:border-primary ${etapaAcerto === 'fechamento'
+                        ? 'bg-primary/5 text-text/80 cursor-not-allowed font-semibold opacity-90'
+                        : ''
+                      }`}
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="border-t border-primary/10 pt-3">
-              <label className="text-xs font-semibold text-text/70">Pix Declarado (Opcional)</label>
-              <BRLCurrencyInput
-                value={valorPix}
-                onChange={(val) => setValorPix(val)}
-                placeholder="R$ 0,00"
-                className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-mono outline-none focus:border-primary"
-              />
-            </div>
+            {/* Grade de Produtos (Modo Detalhado - Caderno Digital) */}
+            {modo === 'detalhado' ? (
+              <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-primary/10 pb-3">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
+                      <Package className="h-4 w-4 text-primary" />
+                      {etapaAcerto === 'envio'
+                        ? '1. Envio de Produtos para o PDV'
+                        : 'Romaneio de Produtos enviados por PDV'}
+                    </h2>
+                    <span className="text-[11px] text-text/50">
+                      {etapaAcerto === 'envio'
+                        ? '📦 Digite a quantidade enviada de cada produto para o PDV selecionado.'
+                        : tipoFechamento === 'parcial'
+                          ? '🔵 Sobra em Loja: Produtos não recolhidos permanecem no estoque do PDV.'
+                          : tipoFechamento === 'semanal'
+                            ? '🟣 Encerramento Semanal: Informe a sobra física final recolhida.'
+                            : '🟢 Fechamento Padrão: Digite o retorno físico do dia.'}
+                    </span>
+                  </div>
 
-            <div>
-              <label className="text-xs font-semibold text-text/70">
-                Cartão / POS Declarado (Opcional)
-              </label>
-              <BRLCurrencyInput
-                value={valorCartao}
-                onChange={(val) => setValorCartao(val)}
-                placeholder="R$ 0,00"
-                className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-mono outline-none focus:border-primary"
-              />
-            </div>
+                  {etapaAcerto !== 'envio' && (
+                    <button
+                      type="button"
+                      onClick={handleVendeuTudoZerarSobras}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors"
+                    >
+                      ⚡ Vendeu Tudo (Sobra Zero)
+                    </button>
+                  )}
+                </div>
 
-            <div>
-              <label className="text-xs font-semibold text-text/70">Observações do Turno</label>
-              <textarea
-                rows={2}
-                value={observacoes}
-                onChange={(e) => setObservacoes(e.target.value)}
-                placeholder="Ex: Troca de turno rápida"
-                className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary"
-              />
-            </div>
-          </div>
+                <div className="overflow-x-auto">
+                  {(() => {
+                    const itensExibidos =
+                      etapaAcerto !== 'envio'
+                        ? gradeItens.filter(
+                          (item) => (Number(item.qtd_enviada) || 0) + (Number(item.qtd_sobra_anterior) || 0) > 0
+                        )
+                        : gradeItens;
 
-          {/* Card Resumo Teórico & Compromisso Digital */}
-          <div className="space-y-2 border-t border-primary/10 pt-4 text-xs">
-            <div className="flex justify-between text-text/60">
-              <span>Unidades Vendidas:</span>
-              <span className="font-mono font-bold text-primary">{totalVendidos} un</span>
-            </div>
-            <div className="flex justify-between text-text/60">
-              <span>Faturamento Bruto Teórico:</span>
-              <span className="font-mono font-bold text-text/80">
-                R${' '}
-                {(modo === 'detalhado'
-                  ? faturamentoBrutoDetalhado
-                  : faturamentoBrutoRapido
-                ).toFixed(2)}
-              </span>
-            </div>
-            {modo === 'detalhado' && totalPerdas > 0 && (
-              <div className="flex justify-between text-rose-600">
-                <span>Total Perdas/Ajustes:</span>
-                <span className="font-mono font-bold">-R$ {totalPerdas.toFixed(2)}</span>
+                    if (etapaAcerto !== 'envio' && itensExibidos.length === 0) {
+                      return (
+                        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-8 text-center space-y-2 my-2">
+                          <Package className="mx-auto h-8 w-8 text-primary/60" />
+                          <h3 className="font-bold text-sm text-text/80">
+                            Nenhum produto com quantidade enviado para este PDV
+                          </h3>
+                          <p className="text-xs text-text/60 max-w-md mx-auto">
+                            Acesse a aba <strong>"1. Envio de Produtos para o PDV"</strong> para cadastrar a quantidade enviada antes de realizar o fechamento.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <>
+                        {/* Desktop View: Tabela adaptável por Etapa */}
+                        <table className="hidden sm:table w-full text-left text-xs">
+                          <thead className="border-b border-primary/10 bg-primary/5 font-bold uppercase text-text/50">
+                            {etapaAcerto === 'envio' ? (
+                              <tr>
+                                <th className="p-2.5">Doce / Produto</th>
+                                <th className="p-2.5 text-center">Preço Unit</th>
+                                <th className="p-2.5 text-center bg-primary/10 text-primary">Quantidade Enviada</th>
+                              </tr>
+                            ) : (
+                              <tr>
+                                <th className="p-2.5">Doce / Produto</th>
+                                <th className="p-2.5 text-center">Preço Unit</th>
+                                <th className="p-2.5 text-center">Sobra Anterior</th>
+                                <th className="p-2.5 text-center">Envio Hoje</th>
+                                <th className="p-2.5 text-center">Total Disp.</th>
+                                <th className="p-2.5 text-center bg-amber-100/50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300">Sobras (Retorno)</th>
+                                <th className="p-2.5 text-right">Vendidos</th>
+                                <th className="p-2.5 text-right">Subtotal</th>
+                              </tr>
+                            )}
+                          </thead>
+                          <tbody className="divide-y divide-primary/5">
+                            {itensExibidos.map((item) => {
+                              const disp = (item.qtd_sobra_anterior || 0) + (item.qtd_enviada || 0);
+                              const vend = Math.max(0, disp - (item.qtd_retorno || 0));
+                              const subtotal = vend * item.preco_unitario;
+
+                              if (etapaAcerto === 'envio') {
+                                return (
+                                  <tr key={item.produto_id} className="hover:bg-primary/5 transition-colors">
+                                    <td className="p-2.5 font-bold text-text/80">{item.nome}</td>
+                                    <td className="p-2.5 text-center font-mono text-text/60">
+                                      R$ {item.preco_unitario.toFixed(2)}
+                                    </td>
+                                    <td className="p-2.5 text-center">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={item.qtd_enviada || ''}
+                                        onChange={(e) =>
+                                          handleAtualizarItemGrade(item.produto_id, 'qtd_enviada', Number(e.target.value))
+                                        }
+                                        placeholder="0"
+                                        className="w-20 rounded-xl border border-primary/40 bg-background px-3 py-1.5 text-center font-bold text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                      />
+                                    </td>
+                                  </tr>
+                                );
+                              }
+
+                              return (
+                                <tr key={item.produto_id} className="hover:bg-primary/5 transition-colors">
+                                  <td className="p-2.5 font-bold text-text/80">{item.nome}</td>
+                                  <td className="p-2.5 text-center font-mono text-text/60">
+                                    R$ {item.preco_unitario.toFixed(2)}
+                                  </td>
+                                  <td className="p-2.5 text-center font-mono text-cyan-600 font-bold bg-cyan-50/30 dark:bg-cyan-950/10">
+                                    {item.qtd_sobra_anterior || 0} un
+                                  </td>
+                                  <td className="p-2.5 text-center font-mono font-semibold">
+                                    {item.qtd_enviada || 0} un
+                                  </td>
+                                  <td className="p-2.5 text-center font-mono font-bold text-text/80">
+                                    {disp} un
+                                  </td>
+                                  <td className="p-2.5 text-center">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={item.qtd_retorno || ''}
+                                      onChange={(e) =>
+                                        handleAtualizarItemGrade(item.produto_id, 'qtd_retorno', Number(e.target.value))
+                                      }
+                                      placeholder="0"
+                                      className="w-16 rounded-lg border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 px-2 py-1 text-center font-semibold text-amber-700 outline-none focus:border-amber-500"
+                                    />
+                                  </td>
+                                  <td className="p-2.5 text-right font-mono font-bold text-primary">
+                                    {vend} un
+                                  </td>
+                                  <td className="p-2.5 text-right font-mono font-bold text-text/80">
+                                    R$ {subtotal.toFixed(2)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+
+                        {/* Mobile View: Cards Adaptáveis por Etapa */}
+                        <div className="block sm:hidden space-y-3">
+                          {itensExibidos.map((item) => {
+                            const disp = (item.qtd_sobra_anterior || 0) + (item.qtd_enviada || 0);
+                            const vend = Math.max(0, disp - (item.qtd_retorno || 0));
+                            const subtotal = vend * item.preco_unitario;
+
+                            if (etapaAcerto === 'envio') {
+                              return (
+                                <div
+                                  key={item.produto_id}
+                                  className="rounded-2xl border border-primary/20 bg-background p-4 shadow-2xs space-y-3"
+                                >
+                                  <div className="flex items-center justify-between border-b border-primary/10 pb-2">
+                                    <span className="font-bold text-sm text-text/90">{item.nome}</span>
+                                    <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary">
+                                      R$ {item.preco_unitario.toFixed(2)}/un
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="block text-xs font-bold text-primary">
+                                      📦 Quantidade Enviada:
+                                    </label>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleAtualizarItemGrade(
+                                            item.produto_id,
+                                            'qtd_enviada',
+                                            Math.max(0, (item.qtd_enviada || 0) - 1)
+                                          )
+                                        }
+                                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/20 bg-primary/5 text-lg font-bold text-primary active:scale-95 shrink-0 select-none"
+                                      >
+                                        -
+                                      </button>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={item.qtd_enviada || ''}
+                                        onChange={(e) =>
+                                          handleAtualizarItemGrade(
+                                            item.produto_id,
+                                            'qtd_enviada',
+                                            Number(e.target.value)
+                                          )
+                                        }
+                                        placeholder="0"
+                                        className="h-10 w-full rounded-xl border border-primary/30 bg-background px-2 text-center font-bold text-primary text-base outline-none focus:border-primary"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleAtualizarItemGrade(
+                                            item.produto_id,
+                                            'qtd_enviada',
+                                            (item.qtd_enviada || 0) + 1
+                                          )
+                                        }
+                                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-lg font-bold text-primary active:scale-95 shrink-0 select-none"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div
+                                key={item.produto_id}
+                                className="rounded-2xl border border-primary/15 bg-background p-4 shadow-2xs space-y-3"
+                              >
+                                {/* Header: Nome do Produto e Preço */}
+                                <div className="flex items-center justify-between border-b border-primary/10 pb-2">
+                                  <span className="font-bold text-sm text-text/90">{item.nome}</span>
+                                  <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary">
+                                    R$ {item.preco_unitario.toFixed(2)}/un
+                                  </span>
+                                </div>
+
+                                {/* Pílulas de Estoque */}
+                                <div className="grid grid-cols-3 gap-1.5 text-center text-[11px]">
+                                  <div className="rounded-xl bg-cyan-50 dark:bg-cyan-950/30 p-1.5 border border-cyan-200 dark:border-cyan-800">
+                                    <span className="block text-[10px] text-cyan-800 dark:text-cyan-300 font-semibold">
+                                      Sobra Ant.
+                                    </span>
+                                    <strong className="font-mono text-cyan-900 dark:text-cyan-200">
+                                      {item.qtd_sobra_anterior || 0} un
+                                    </strong>
+                                  </div>
+                                  <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-1.5 border border-slate-200 dark:border-slate-700">
+                                    <span className="block text-[10px] text-text/60 font-semibold">
+                                      Total Disp.
+                                    </span>
+                                    <strong className="font-mono text-text/90">{disp} un</strong>
+                                  </div>
+                                  <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 p-1.5 border border-emerald-200 dark:border-emerald-800">
+                                    <span className="block text-[10px] text-emerald-800 dark:text-emerald-300 font-semibold">
+                                      Vendidos
+                                    </span>
+                                    <strong className="font-mono text-emerald-900 dark:text-emerald-200">
+                                      {vend} un
+                                    </strong>
+                                  </div>
+                                </div>
+
+                                {/* Campos de Quantidade com Botões Stepper (- e +) */}
+                                <div className="grid grid-cols-2 gap-3 pt-1">
+                                  {/* Envio Hoje */}
+                                  <div className="space-y-1">
+                                    <label className="block text-[11px] font-bold text-text/70">
+                                      📦 Envio Hoje:
+                                    </label>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleAtualizarItemGrade(
+                                            item.produto_id,
+                                            'qtd_enviada',
+                                            Math.max(0, (item.qtd_enviada || 0) - 1)
+                                          )
+                                        }
+                                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/5 text-base font-bold text-primary active:scale-95 shrink-0 select-none"
+                                      >
+                                        -
+                                      </button>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={item.qtd_enviada || ''}
+                                        onChange={(e) =>
+                                          handleAtualizarItemGrade(
+                                            item.produto_id,
+                                            'qtd_enviada',
+                                            Number(e.target.value)
+                                          )
+                                        }
+                                        placeholder="0"
+                                        className="h-9 w-full rounded-xl border border-primary/20 bg-background px-2 text-center font-bold outline-none focus:border-primary"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleAtualizarItemGrade(
+                                            item.produto_id,
+                                            'qtd_enviada',
+                                            (item.qtd_enviada || 0) + 1
+                                          )
+                                        }
+                                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-base font-bold text-primary active:scale-95 shrink-0 select-none"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Sobras / Retorno */}
+                                  <div className="space-y-1">
+                                    <label className="block text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                                      ↩️ Sobras (Retorno):
+                                    </label>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleAtualizarItemGrade(
+                                            item.produto_id,
+                                            'qtd_retorno',
+                                            Math.max(0, (item.qtd_retorno || 0) - 1)
+                                          )
+                                        }
+                                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 text-base font-bold text-amber-800 active:scale-95 shrink-0 select-none"
+                                      >
+                                        -
+                                      </button>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={item.qtd_retorno || ''}
+                                        onChange={(e) =>
+                                          handleAtualizarItemGrade(
+                                            item.produto_id,
+                                            'qtd_retorno',
+                                            Number(e.target.value)
+                                          )
+                                        }
+                                        placeholder="0"
+                                        className="h-9 w-full rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 px-2 text-center font-bold text-amber-900 dark:text-amber-200 outline-none focus:border-amber-500"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleAtualizarItemGrade(
+                                            item.produto_id,
+                                            'qtd_retorno',
+                                            (item.qtd_retorno || 0) + 1
+                                          )
+                                        }
+                                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-100 text-base font-bold text-amber-900 active:scale-95 shrink-0 select-none"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Subtotal do Produto */}
+                                <div className="flex items-center justify-between border-t border-primary/10 pt-2 text-xs font-bold">
+                                  <span className="text-text/60">Subtotal Parcial:</span>
+                                  <span className="font-mono text-primary">R$ {subtotal.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* Ajustes / Perdas / Cortesias (Apenas no Fechamento/Unificado) */}
+                {etapaAcerto !== 'envio' && (
+                  <div className="border-t border-primary/10 pt-4">
+                    <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-text/60">
+                      Ajustes de Turno (Perdas, Avarias, Brindes ou Descontos)
+                    </h3>
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="text"
+                        value={novaPerdaDesc}
+                        onChange={(e) => setNovaPerdaDesc(e.target.value)}
+                        placeholder="Motivo (ex: 1 brownie caiu no chão)"
+                        className="flex-1 rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary"
+                      />
+                      <BRLCurrencyInput
+                        value={novaPerdaValor}
+                        onChange={(val) => setNovaPerdaValor(val)}
+                        placeholder="R$ 0,00"
+                        className="w-28 rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAdicionarPerda}
+                        className="flex items-center justify-center gap-1 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20"
+                      >
+                        <Plus className="h-4 w-4" /> Add Ajuste
+                      </button>
+                    </div>
+
+                    {perdasList.length > 0 && (
+                      <div className="mt-3 space-y-1">
+                        {perdasList.map((p) => (
+                          <div
+                            key={p.id}
+                            className="flex items-center justify-between rounded-lg bg-rose-50/60 dark:bg-rose-950/20 px-3 py-1.5 text-xs text-rose-700 dark:text-rose-400"
+                          >
+                            <span>{p.descricao}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold">-R$ {p.valor.toFixed(2)}</span>
+                              <button type="button" onClick={() => handleRemoverPerda(p.id)}>
+                                <Trash2 className="h-3.5 w-3.5 text-rose-500 hover:text-rose-700" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Modo Rápido (Volume Global) */
+              <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm">
+                <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
+                  <Layers className="h-4 w-4 text-primary" /> Lançamento por Volume Global (Sem discriminar produtos)
+                </h2>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="text-xs font-semibold text-text/70">Qtd Enviada Total</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={qtdEnviadaRapida || ''}
+                      onChange={(e) => setQtdEnviadaRapida(Number(e.target.value))}
+                      placeholder="Ex: 150"
+                      className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-base font-semibold outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  {etapaAcerto !== 'envio' && (
+                    <>
+                      <div>
+                        <label className="text-xs font-semibold text-text/70">Qtd Retorno (Sobras)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={qtdRetornoRapida || ''}
+                          onChange={(e) => setQtdRetornoRapida(Number(e.target.value))}
+                          placeholder="Ex: 15"
+                          className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-base font-semibold outline-none focus:border-primary"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-text/70">Preço Médio Estimado</label>
+                        <BRLCurrencyInput
+                          value={precoMedioRapido}
+                          onChange={(val) => setPrecoMedioRapido(val)}
+                          placeholder="R$ 8,00"
+                          className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-base font-semibold outline-none focus:border-primary"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {etapaAcerto === 'envio' && (
+                  <div className="rounded-xl border border-amber-300/40 bg-amber-50/50 dark:bg-amber-950/20 p-3 text-xs text-amber-800 dark:text-amber-300">
+                    ⚠️ <strong>Lançamento por Volume Global:</strong> Ao enviar o total acumulado sem discriminar produtos, a apuração detalhada por item fica desabilitada e a conferência financeira precisará ser realizada por volume global no fechamento.
+                  </div>
+                )}
               </div>
             )}
-            <div className="flex justify-between font-bold text-text/90">
-              <span>Receita Líquida Exigida:</span>
-              <span className="font-mono text-sm text-primary">
-                R$ {faturamentoTeorico.toFixed(2)}
-              </span>
-            </div>
+          </div>
 
-            {/* Destaque do Compromisso Digital Pix/Cartão */}
-            <div className="mt-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/30 p-3 border border-cyan-200 dark:border-cyan-800">
-              <span className="text-[11px] font-bold text-cyan-800 dark:text-cyan-300">
-                🎯 Total Vendas do PDV (Pix + Cartão):
-              </span>
-              <p className="mt-1 font-mono text-xl font-black text-cyan-700 dark:text-cyan-300">
-                R$ {pixCartaoEsperado.toFixed(2)}
-              </p>
-              <span className="text-[10px] text-cyan-600/80 dark:text-cyan-400/70">
-                Cálculo: (Receita Exigida - Dinheiro Físico na Gaveta)
-              </span>
-            </div>
+          {/* Painel Lateral (Modo Envio de Carga vs Modo Fechamento) */}
+          {etapaAcerto === 'envio' ? (
+            <div className="space-y-4 rounded-2xl border border-primary/15 bg-background p-5 shadow-sm h-fit">
+              <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary">
+                <Package className="h-4 w-4 text-primary" /> 1. Resumo do Envio ao PDV
+              </h2>
 
-            {declaraDigital && (
-              <div
-                className={`mt-2 flex items-center justify-between rounded-xl p-3 font-bold ${
-                  diferencaCaixa < -1
-                    ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 border border-rose-200'
-                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 border border-emerald-200'
-                }`}
-              >
-                <span>{diferencaCaixa < -1 ? 'Furo no Caixa:' : 'Diferença:'}</span>
-                <span className="font-mono">R$ {diferencaCaixa.toFixed(2)}</span>
+              <div className="rounded-xl border border-primary/10 bg-primary/5 p-4 space-y-3">
+                <p className="text-xs text-text/70 leading-relaxed">
+                  Nesta etapa você registra a <strong>quantidade de produtos enviada</strong> ao ponto de venda selecionado.
+                </p>
+
+                <div className="flex items-center justify-between rounded-xl bg-background p-3 border border-primary/10">
+                  <span className="text-xs font-semibold text-text/60">Total Unidades Enviadas:</span>
+                  <span className="font-mono text-base font-bold text-primary">{totalEnviado} un</span>
+                </div>
               </div>
-            )}
-          </div>
 
-          <div className="flex flex-col gap-2">
-            <button
-              type="submit"
-              disabled={salvando || totalEnviado <= 0}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-sm transition-all hover:opacity-95 active:scale-95 disabled:opacity-50"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              {salvando ? 'Gravando...' : 'Salvar Romaneio'}
-            </button>
+              <div className="space-y-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={salvando || totalEnviado <= 0}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-sm transition-all hover:opacity-95 active:scale-95 disabled:opacity-50"
+                >
+                  <Package className="h-4 w-4" />
+                  {salvando ? 'Gravando Envio...' : 'Registrar Envio de Produtos'}
+                </button>
 
-            <button
-              type="button"
-              onClick={handleGerarComprovantePDF}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 py-2.5 text-xs font-bold text-primary hover:bg-primary/10 transition-all"
-            >
-              <Printer className="h-4 w-4" /> Gerar Recibo / PDF do Romaneio
-            </button>
-          </div>
-        </div>
-      </form>
+                <button
+                  type="button"
+                  onClick={() => setEtapaAcerto('fechamento')}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 py-2.5 text-xs font-bold text-primary hover:bg-primary/10 transition-all"
+                >
+                  <span>Avançar para Sobras & Fechamento</span>
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm h-fit">
+              <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
+                <DollarSign className="h-4 w-4 text-primary" /> 2. Apuração Financeira do PDV
+              </h2>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="flex items-center justify-between text-xs font-bold text-text/70">
+                    <span className="flex items-center gap-1">
+                      <Banknote className="h-3.5 w-3.5 text-emerald-600" /> Valor em Dinheiro R$
+                    </span>
+                  </label>
+                  <BRLCurrencyInput
+                    value={valorDinheiro}
+                    onChange={(val) => setValorDinheiro(val)}
+                    placeholder="R$ 0,00"
+                    className="mt-1 w-full rounded-xl border border-emerald-300 bg-emerald-50/30 dark:bg-emerald-950/20 px-3 py-2 text-base font-mono font-bold text-emerald-700 outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-[10px] text-text/40">
+                    Dinheiro recolhido no envelope/gaveta
+                  </span>
+                </div>
+
+                <div className="border-t border-primary/10 pt-3">
+                  <label className="text-xs font-semibold text-text/70">Valor em Pix no PDV R$ (Opcional)</label>
+                  <BRLCurrencyInput
+                    value={valorPix}
+                    onChange={(val) => setValorPix(val)}
+                    placeholder="R$ 0,00"
+                    className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-mono outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-text/70">
+                    Valor em Cartão no PDV R$ (Opcional)
+                  </label>
+                  <BRLCurrencyInput
+                    value={valorCartao}
+                    onChange={(val) => setValorCartao(val)}
+                    placeholder="R$ 0,00"
+                    className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-mono outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-text/70">Observações do Turno</label>
+                  <textarea
+                    rows={2}
+                    value={observacoes}
+                    onChange={(e) => setObservacoes(e.target.value)}
+                    placeholder="Ex: Troca de turno rápida"
+                    className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              {/* Card Resumo Teórico & Compromisso Digital */}
+              <div className="space-y-2 border-t border-primary/10 pt-4 text-xs">
+                <div className="flex justify-between text-text/60">
+                  <span>Unidades Vendidas:</span>
+                  <span className="font-mono font-bold text-primary">{totalVendidos} un</span>
+                </div>
+                <div className="flex justify-between text-text/60">
+                  <span>Faturamento Bruto Teórico:</span>
+                  <span className="font-mono font-bold text-text/80">
+                    R${' '}
+                    {(modo === 'detalhado'
+                      ? faturamentoBrutoDetalhado
+                      : faturamentoBrutoRapido
+                    ).toFixed(2)}
+                  </span>
+                </div>
+                {modo === 'detalhado' && totalPerdas > 0 && (
+                  <div className="flex justify-between text-rose-600">
+                    <span>Total Perdas/Ajustes:</span>
+                    <span className="font-mono font-bold">-R$ {totalPerdas.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-text/90">
+                  <span>Receita Líquida Exigida:</span>
+                  <span className="font-mono text-sm text-primary">
+                    R$ {faturamentoTeorico.toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Destaque do Compromisso Digital Pix/Cartão e Contabilização das Diferenças */}
+                <div className="mt-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/30 p-3 border border-cyan-200 dark:border-cyan-800 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] font-bold text-cyan-800 dark:text-cyan-300">
+                      🎯 Pix + Cartão Esperado:
+                    </span>
+                    <span className="font-mono text-base font-black text-cyan-700 dark:text-cyan-300">
+                      R$ {pixCartaoEsperado.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {declaraDigital && (
+                    <>
+                      <div className="flex justify-between items-center text-xs border-t border-cyan-200/60 dark:border-cyan-800/60 pt-1.5">
+                        <span className="text-[11px] font-semibold text-cyan-800 dark:text-cyan-300">
+                          📱 Pix + Cartão Declarado:
+                        </span>
+                        <span className="font-mono font-bold text-cyan-900 dark:text-cyan-200">
+                          R$ {totalDigitalDeclarado.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-cyan-700 dark:text-cyan-400 flex justify-between">
+                        <span>(Pix: R$ {(Number(valorPix) || 0).toFixed(2)} | Cartão: R$ {(Number(valorCartao) || 0).toFixed(2)})</span>
+                      </div>
+                      <div className={`flex justify-between items-center text-xs font-bold pt-1 border-t border-cyan-200/60 dark:border-cyan-800/60 ${diferencaDigital < -0.05
+                          ? 'text-rose-600 dark:text-rose-400'
+                          : diferencaDigital > 0.05
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-cyan-700 dark:text-cyan-300'
+                        }`}>
+                        <span>Diferença Digital (Pix/Cartão):</span>
+                        <span className="font-mono">
+                          {diferencaDigital > 0 ? '+' : ''}R$ {diferencaDigital.toFixed(2)}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {declaraDigital && (
+                  <div
+                    className={`mt-2 flex items-center justify-between rounded-xl p-3 font-bold ${diferencaCaixa < -1
+                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 border border-rose-200'
+                        : diferencaCaixa > 1
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 border border-emerald-200'
+                          : 'bg-cyan-50 text-cyan-800 dark:bg-cyan-950/30 border border-cyan-200'
+                      }`}
+                  >
+                    <span>{diferencaCaixa < -1 ? 'Furo no Caixa:' : diferencaCaixa > 1 ? 'Sobra no Caixa:' : 'Diferença Global:'}</span>
+                    <span className="font-mono">R$ {diferencaCaixa.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  type="submit"
+                  disabled={salvando || (totalEnviado + totalSobraAnteriorDetalhado) <= 0}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-sm transition-all hover:opacity-95 active:scale-95 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {salvando ? 'Gravando...' : 'Salvar Romaneio & Fechamento'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleGerarComprovantePDF}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 py-2.5 text-xs font-bold text-primary hover:bg-primary/10 transition-all"
+                >
+                  <Printer className="h-4 w-4" /> Gerar Recibo / PDF do Romaneio
+                </button>
+              </div>
+            </div>
+          )}
+        </form>
+      )}
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={confirmDialog.handleCancel}
+        onConfirm={confirmDialog.handleConfirm}
+        title={confirmDialog.options.title}
+        message={confirmDialog.options.message}
+        confirmText={confirmDialog.options.confirmText}
+        cancelText={confirmDialog.options.cancelText}
+        variant={confirmDialog.options.variant}
+      />
     </div>
   );
 }

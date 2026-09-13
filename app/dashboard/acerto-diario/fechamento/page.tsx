@@ -6,6 +6,7 @@ import { PDVSelectorCards } from '@/components/ui/shared/PDVSelectorCards';
 import { supabase } from '@/lib/supabase-client';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/useToast';
+import { useTheme } from '@/lib/theme';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import confetti from 'canvas-confetti';
 import {
@@ -29,6 +30,8 @@ import {
   Unlock,
   PartyPopper,
   Sparkles,
+  Download,
+  Printer,
 } from 'lucide-react';
 
 interface LocalPDV {
@@ -63,6 +66,7 @@ interface RomaneioRegistro {
 export default function FechamentoDiarioPage() {
   const { profile } = useAuth();
   const { toast } = useToast();
+  const { theme } = useTheme();
 
   const [abaAtiva, setAbaAtiva] = useState<'conciliacao' | 'historico'>('conciliacao');
   const [filtroData, setFiltroData] = useState<string>(() => {
@@ -125,11 +129,15 @@ export default function FechamentoDiarioPage() {
   useEffect(() => {
     async function carregarLocais() {
       try {
-        let query = supabase.from('locais').select('id, nome, tipo');
+        let query = supabase.from('locais').select('id, nome, tipo, logo_url, ordem');
         if (profile?.organization_id) {
           query = query.eq('organization_id', profile.organization_id);
         }
-        const { data } = await query.order('nome');
+        let { data, error } = await query.order('ordem', { ascending: true }).order('nome');
+        if (error && error.message?.includes('ordem')) {
+          const res = await query.order('nome');
+          data = res.data;
+        }
 
         if (data) {
           const pdvs = data.filter((loc) => {
@@ -173,57 +181,78 @@ export default function FechamentoDiarioPage() {
   }, [profile?.organization_id]);
 
   const carregarHistoricoFechamentos = useCallback(async () => {
-    if (!profile?.organization_id) return;
     setLoadingHistorico(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('remessas_cargas_pdv')
         .select(
           `
+          id,
           data,
+          turno,
+          vendedor_nome,
+          local_id,
           status,
           valor_dinheiro_gaveta,
           valor_pix_declarado,
           valor_cartao_declarado,
           diferenca_auditoria,
           observacoes,
-          locais(nome)
+          locais(id, nome)
         `
         )
-        .eq('organization_id', profile.organization_id)
-        .order('data', { ascending: false });
+        .order('data', { ascending: false })
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
-
-      if (data) {
-        const mapData: Record<string, any> = {};
-        data.forEach((r: any) => {
-          const dt = r.data;
-          if (!mapData[dt]) {
-            mapData[dt] = {
-              data: dt,
-              status: r.status || 'aberto',
-              total_dinheiro: 0,
-              total_pix: 0,
-              total_cartao: 0,
-              total_furos: 0,
-              observacoes: r.observacoes || '',
-              total_pdvs: 0,
-            };
-          }
-          mapData[dt].total_dinheiro += Number(r.valor_dinheiro_gaveta || 0);
-          mapData[dt].total_pix += Number(r.valor_pix_declarado || 0);
-          mapData[dt].total_cartao += Number(r.valor_cartao_declarado || 0);
-          mapData[dt].total_furos += Math.abs(
-            r.diferenca_auditoria < 0 ? r.diferenca_auditoria : 0
-          );
-          mapData[dt].total_pdvs += 1;
-          if (r.status === 'auditado') {
-            mapData[dt].status = 'auditado';
-          }
-        });
-        setHistoricoFechamentos(Object.values(mapData));
+      if (profile?.organization_id) {
+        query = query.eq('organization_id', profile.organization_id);
       }
+
+      let { data, error } = await query;
+
+      if (!data || data.length === 0) {
+        const fallback = await supabase
+          .from('remessas_cargas_pdv')
+          .select(
+            `
+            id,
+            data,
+            turno,
+            vendedor_nome,
+            local_id,
+            status,
+            valor_dinheiro_gaveta,
+            valor_pix_declarado,
+            valor_cartao_declarado,
+            diferenca_auditoria,
+            observacoes,
+            locais(id, nome)
+          `
+          )
+          .order('data', { ascending: false })
+          .order('created_at', { ascending: false });
+        if (fallback.data && fallback.data.length > 0) {
+          data = fallback.data;
+        }
+      }
+
+      if (error && (!data || data.length === 0)) throw error;
+
+      const formatados = (data || []).map((r: any) => ({
+        id: r.id,
+        data: r.data,
+        turno: r.turno || 'integral',
+        vendedor_nome: r.vendedor_nome || 'Atendente',
+        pdv_nome: r.locais?.nome || 'PDV',
+        status: r.status || 'aberto',
+        valor_dinheiro_gaveta: Number(r.valor_dinheiro_gaveta || 0),
+        valor_pix_declarado: Number(r.valor_pix_declarado || 0),
+        valor_cartao_declarado: Number(r.valor_cartao_declarado || 0),
+        diferenca_auditoria: Number(r.diferenca_auditoria || 0),
+        observacoes: r.observacoes || '',
+      }));
+
+      setHistoricoFechamentos(formatados);
     } catch (err: any) {
       console.error('Erro ao carregar histórico:', err);
     } finally {
@@ -266,7 +295,7 @@ export default function FechamentoDiarioPage() {
         valor_cartao_declarado: Number(r.valor_cartao_declarado || 0),
         faturamento_liquido_esperado: Number(r.faturamento_liquido_esperado || 0),
         pix_cartao_esperado: Number(r.pix_cartao_esperado || 0),
-        diferenca_auditoria: Number(r.diferenca_auditoria || 0),
+        diferenca_auditoria: (r.status || 'aberto') === 'aberto' ? 0 : Number(r.diferenca_auditoria || 0),
         observacoes: r.observacoes || '',
         qtd_total_enviada: Number(r.qtd_total_enviada || 0),
         qtd_total_retorno: Number(r.qtd_total_retorno || 0),
@@ -286,13 +315,8 @@ export default function FechamentoDiarioPage() {
           setJustificativaAuditoria(obsParts[1]?.trim() || '');
         }
       } else {
-        const sumPix = formatados.reduce((acc, r) => acc + Number(r.valor_pix_declarado || 0), 0);
-        const sumCartao = formatados.reduce(
-          (acc, r) => acc + Number(r.valor_cartao_declarado || 0),
-          0
-        );
-        setPixExtratoBanco(sumPix);
-        setCartaoMaquininha(sumCartao);
+        setPixExtratoBanco(0);
+        setCartaoMaquininha(0);
         setJustificativaAuditoria('');
       }
     } catch (err: any) {
@@ -457,14 +481,221 @@ export default function FechamentoDiarioPage() {
     0
   );
   const totalFurosDeCaixa = registros.reduce(
-    (acc, r) => acc + Math.abs(r.diferenca_auditoria < 0 ? r.diferenca_auditoria : 0),
+    (acc, r) => acc + (r.status === 'aberto' ? 0 : Math.abs(r.diferenca_auditoria < 0 ? r.diferenca_auditoria : 0)),
     0
   );
 
   const pixReal = Number(pixExtratoBanco || 0);
   const cartaoReal = Number(cartaoMaquininha || 0);
   const totalDigitalRealDeclarado = pixReal + cartaoReal;
-  const diferencaConciliacaoDigital = totalDigitalRealDeclarado - totalPixCartaoEsperado;
+  const diferencaConciliacaoDigital =
+    totalDigitalRealDeclarado > 0 ? totalDigitalRealDeclarado - totalPixCartaoEsperado : 0;
+
+  const handleExportarCSV = () => {
+    if (registros.length === 0) {
+      toast({ title: 'Aviso', description: 'Nenhum registro para exportar.', variant: 'warning' });
+      return;
+    }
+
+    const headers = [
+      'Data',
+      'PDV / Loja',
+      'Turno',
+      'Vendedor',
+      'Qtd Enviada',
+      'Qtd Retorno',
+      'Qtd Vendida',
+      'Faturamento Esperado (R$)',
+      'Dinheiro Gaveta (R$)',
+      'Pix/Cartão Esperado (R$)',
+      'Pix Declarado (R$)',
+      'Cartão Declarado (R$)',
+      'Diferença Auditoria (R$)',
+      'Status',
+      'Observações',
+    ];
+
+    const rows = registros.map((r) => {
+      const vend = Math.max(0, (r.qtd_total_enviada || 0) - (r.qtd_total_retorno || 0));
+      return [
+        r.data,
+        `"${(r.locais?.nome || 'PDV Geral').replace(/"/g, '""')}"`,
+        r.turno || 'Integral',
+        `"${(r.vendedor_nome || '—').replace(/"/g, '""')}"`,
+        r.qtd_total_enviada || 0,
+        r.qtd_total_retorno || 0,
+        vend,
+        Number(r.faturamento_liquido_esperado || 0).toFixed(2),
+        Number(r.valor_dinheiro_gaveta || 0).toFixed(2),
+        Number(r.pix_cartao_esperado || 0).toFixed(2),
+        Number(r.valor_pix_declarado || 0).toFixed(2),
+        Number(r.valor_cartao_declarado || 0).toFixed(2),
+        Number(r.diferenca_auditoria || 0).toFixed(2),
+        r.status,
+        `"${(r.observacoes || '').replace(/"/g, '""')}"`,
+      ].join(';');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `fechamento_diario_${filtroData}.csv`;
+    link.click();
+
+    toast({
+      title: 'Planilha Exportada!',
+      description: 'Arquivo CSV baixado com sucesso.',
+      variant: 'success',
+    });
+  };
+
+  const handleExportarPDF = () => {
+    if (registros.length === 0) {
+      toast({ title: 'Aviso', description: 'Nenhum registro para exportar.', variant: 'warning' });
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const nomeEmpresa =
+      profile?.organizations?.nome ||
+      profile?.organization_name ||
+      (profile as any)?.empresa_nome ||
+      (profile as any)?.nome_empresa ||
+      'Larissa Saba - Doces Gourmet';
+    const dataAtual = new Date().toLocaleDateString('pt-BR');
+
+    const rawLogoUrl =
+      profile?.company_logo_url ||
+      profile?.organizations?.logo_url ||
+      theme?.company_logo_url ||
+      theme?.logo_url ||
+      '/logolarissa.png';
+
+    const logoSrc = rawLogoUrl.startsWith('http')
+      ? rawLogoUrl
+      : typeof window !== 'undefined'
+        ? `${window.location.origin}${rawLogoUrl.startsWith('/') ? '' : '/'}${rawLogoUrl}`
+        : rawLogoUrl;
+
+    const totalFaturamentoLiquido = registros.reduce(
+      (acc, r) => acc + Number(r.faturamento_liquido_esperado || 0),
+      0
+    );
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Relatório Executivo — ${nomeEmpresa}</title>
+          <style>
+            @page { size: A4 landscape; margin: 12mm; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; margin: 16px; color: #4a2c2b; background: #fff; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #88544c; padding-bottom: 14px; margin-bottom: 18px; }
+            .brand-box { display: flex; align-items: center; gap: 14px; }
+            .brand-logo { max-height: 60px; max-width: 180px; object-fit: contain; }
+            .brand-titles h1 { font-size: 20px; font-weight: 800; margin: 0; color: #4a2c2b; letter-spacing: -0.3px; }
+            .brand-titles p { font-size: 12px; color: #88544c; font-weight: 600; margin: 3px 0 0 0; }
+            .meta-info { text-align: right; font-size: 11px; color: #64748b; line-height: 1.4; }
+            .meta-info strong { color: #4a2c2b; }
+            .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+            .kpi-card { background: #fdfafa; border: 1px solid #e9c4c2; padding: 12px; border-radius: 8px; font-size: 11px; }
+            .kpi-title { font-size: 10px; text-transform: uppercase; color: #88544c; font-weight: 700; }
+            .kpi-value { font-size: 17px; font-weight: 900; margin-top: 4px; color: #4a2c2b; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+            th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
+            th { background-color: #f5e4e2; text-transform: uppercase; font-size: 10px; font-weight: 800; color: #4a2c2b; border-bottom: 2px solid #e9c4c2; }
+            tbody tr:nth-child(even) { background-color: #fdfafa; }
+            .text-right { text-align: right; }
+            .text-center { text-align: center; }
+            .footer { margin-top: 24px; border-top: 1px solid #e9c4c2; padding-top: 10px; font-size: 10px; color: #88544c; text-align: center; font-weight: 500; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="brand-box">
+              <img src="${logoSrc}" alt="${nomeEmpresa}" class="brand-logo" onerror="this.style.display='none'" />
+              <div class="brand-titles">
+                <h1>${nomeEmpresa}</h1>
+                <p>Relatório Executivo de Fechamentos & Auditoria PDV</p>
+              </div>
+            </div>
+            <div class="meta-info">
+              <p>Data Emissão: <strong>${dataAtual}</strong></p>
+              <p>Total Lançamentos: <strong>${registros.length}</strong></p>
+            </div>
+          </div>
+
+          <div class="kpis">
+            <div class="kpi-card">
+              <div class="kpi-title">Faturamento Esperado</div>
+              <div class="kpi-value">R$ ${totalFaturamentoLiquido.toFixed(2)}</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">Dinheiro Gaveta</div>
+              <div class="kpi-value" style="color: #059669;">R$ ${totalDinheiroGaveta.toFixed(2)}</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">Pix / Cartão Esperado</div>
+              <div class="kpi-value" style="color: #88544c;">R$ ${totalPixCartaoEsperado.toFixed(2)}</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">Diferença Conciliação</div>
+              <div class="kpi-value" style="color: ${diferencaConciliacaoDigital < 0 ? '#dc2626' : '#059669'}">
+                R$ ${diferencaConciliacaoDigital.toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>PDV / Loja</th>
+                <th>Turno</th>
+                <th>Atendente</th>
+                <th class="text-right">Fat. Esperado</th>
+                <th class="text-right">Dinheiro Gaveta</th>
+                <th class="text-right">Pix/Cartão Esperado</th>
+                <th class="text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${registros
+                .map(
+                  (r) => `
+                <tr>
+                  <td>${r.data.split('-').reverse().join('/')}</td>
+                  <td><strong>${r.locais?.nome || 'PDV Geral'}</strong></td>
+                  <td>${r.turno || 'Integral'}</td>
+                  <td>${r.vendedor_nome || '—'}</td>
+                  <td class="text-right">R$ ${Number(r.faturamento_liquido_esperado || 0).toFixed(2)}</td>
+                  <td class="text-right">R$ ${Number(r.valor_dinheiro_gaveta || 0).toFixed(2)}</td>
+                  <td class="text-right">R$ ${Number(r.pix_cartao_esperado || 0).toFixed(2)}</td>
+                  <td class="text-center"><strong>${r.status.toUpperCase()}</strong></td>
+                </tr>
+              `
+                )
+                .join('')}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <p>FabriSys — Larissa Saba Doces Gourmet | Documento gerado automaticamente para conferência financeira.</p>
+          </div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
 
   // Quando o modo de edição está ativo, a página NÃO considera o dia como bloqueado/auditado
   const isDiaAuditado =
@@ -552,7 +783,10 @@ export default function FechamentoDiarioPage() {
     try {
       const { error } = await supabase
         .from('remessas_cargas_pdv')
-        .update({ status: 'aberto' })
+        .update({
+          status: 'aberto',
+          diferenca_auditoria: 0,
+        })
         .eq('organization_id', profile.organization_id)
         .eq('data', targetData);
 
@@ -561,9 +795,12 @@ export default function FechamentoDiarioPage() {
       // Reseta modos para o dia voltar limpo ao estado 'Em Aberto'
       setModoEdicaoDia(false);
       setTentouFinalizar(false);
+      setJustificativaAuditoria('');
+      setPixExtratoBanco(0);
+      setCartaoMaquininha(0);
 
-      // Atualiza o estado local dos registros para 'aberto'
-      setRegistros((prev) => prev.map((r) => ({ ...r, status: 'aberto' })));
+      // Atualiza o estado local dos registros para 'aberto' com diferença zerada
+      setRegistros((prev) => prev.map((r) => ({ ...r, status: 'aberto', diferenca_auditoria: 0 })));
 
       if (dataReabrir) {
         setFiltroData(dataReabrir);
@@ -576,7 +813,7 @@ export default function FechamentoDiarioPage() {
 
       toast({
         title: 'Fechamento Reaberto com Sucesso!',
-        description: `O status do dia ${targetData.split('-').reverse().join('/')} voltou para 'Em Aberto'. Os relatórios dos PDVs foram liberados para edição e correção.`,
+        description: `O status do dia ${targetData.split('-').reverse().join('/')} voltou para 'Em Aberto'. A diferença foi zerada e os relatórios liberados para edição.`,
         variant: 'success',
       });
     } catch (err: any) {
@@ -614,7 +851,23 @@ export default function FechamentoDiarioPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          <button
+            type="button"
+            onClick={handleExportarCSV}
+            className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 transition-all shadow-xs shrink-0"
+          >
+            <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Excel (CSV)
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportarPDF}
+            className="flex items-center gap-1.5 rounded-xl border border-cyan-300 bg-cyan-50 dark:bg-cyan-950/40 px-3 py-2 text-xs font-bold text-cyan-800 dark:text-cyan-200 hover:bg-cyan-100 transition-all shadow-xs shrink-0"
+          >
+            <Printer className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" /> PDF Executivo
+          </button>
+
           {isDiaAuditado && abaAtiva === 'conciliacao' && (
             <button
               type="button"
@@ -1105,11 +1358,11 @@ export default function FechamentoDiarioPage() {
                 Histórico de Fechamentos Realizados
               </h2>
               <p className="text-[11px] text-text/50">
-                Lista de todos os dias processados com saldos, furos e botão para reabertura/edição.
+                Lista de todos os fechamentos e romaneios processados com saldos, furos e opção de reabertura.
               </p>
             </div>
             <span className="text-xs text-text/50 font-medium">
-              Total: {historicoFechamentos.length} dia(s)
+              Total: {historicoFechamentos.length} fechamento(s)
             </span>
           </div>
 
@@ -1117,12 +1370,13 @@ export default function FechamentoDiarioPage() {
             <table className="w-full text-left text-xs">
               <thead className="bg-primary/5 text-text/60 uppercase font-bold border-b border-primary/10">
                 <tr>
-                  <th className="p-3">Data</th>
-                  <th className="p-3 text-center">PDVs</th>
-                  <th className="p-3 text-right">VEndas em Dinheiro R$</th>
-                  <th className="p-3 text-right">Vendas Pix R$</th>
-                  <th className="p-3 text-right">Vendas Cartão R$</th>
-                  <th className="p-3 text-right">Diferenças nos Caixas R$</th>
+                  <th className="p-3">Data / Turno</th>
+                  <th className="p-3">PDV / Loja</th>
+                  <th className="p-3">Atendente</th>
+                  <th className="p-3 text-right">Dinheiro R$</th>
+                  <th className="p-3 text-right">Pix R$</th>
+                  <th className="p-3 text-right">Cartão R$</th>
+                  <th className="p-3 text-right">Diferenças R$</th>
                   <th className="p-3 text-center">Status</th>
                   <th className="p-3 text-center">Ação</th>
                 </tr>
@@ -1130,48 +1384,66 @@ export default function FechamentoDiarioPage() {
               <tbody className="divide-y divide-primary/5">
                 {loadingHistorico ? (
                   <tr>
-                    <td colSpan={8} className="p-6 text-center text-text/50">
+                    <td colSpan={9} className="p-6 text-center text-text/50">
                       Carregando histórico de fechamentos...
                     </td>
                   </tr>
                 ) : historicoFechamentos.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-6 text-center text-text/50">
+                    <td colSpan={9} className="p-6 text-center text-text/50">
                       Nenhum fechamento registrado até o momento.
                     </td>
                   </tr>
                 ) : (
                   historicoFechamentos.map((item) => (
-                    <tr key={item.data} className="hover:bg-primary/5">
-                      <td className="p-3 font-bold text-text/80">
-                        {item.data.split('-').reverse().join('/')}
+                    <tr key={item.id} className="hover:bg-primary/5">
+                      <td className="p-3 font-bold text-text/80 whitespace-nowrap">
+                        {item.data ? item.data.split('-').reverse().join('/') : '-'}
+                        <span className="text-text/40 text-[10px] font-normal block">
+                          {item.turno ? item.turno.charAt(0).toUpperCase() + item.turno.slice(1) : ''}
+                        </span>
                       </td>
-                      <td className="p-3 text-center text-text/70">{item.total_pdvs} PDV(s)</td>
+                      <td className="p-3 font-bold text-primary whitespace-nowrap">
+                        {item.pdv_nome}
+                      </td>
+                      <td className="p-3 text-text/70">
+                        {item.vendedor_nome || '-'}
+                      </td>
                       <td className="p-3 text-right font-mono text-emerald-600 font-bold">
-                        R$ {item.total_dinheiro.toFixed(2)}
+                        R$ {item.valor_dinheiro_gaveta.toFixed(2)}
                       </td>
                       <td className="p-3 text-right font-mono text-cyan-600 font-bold">
-                        R$ {item.total_pix.toFixed(2)}
+                        R$ {item.valor_pix_declarado.toFixed(2)}
                       </td>
                       <td className="p-3 text-right font-mono text-purple-600 font-bold">
-                        R$ {item.total_cartao.toFixed(2)}
+                        R$ {item.valor_cartao_declarado.toFixed(2)}
                       </td>
                       <td
                         className={`p-3 text-right font-mono font-bold ${
-                          item.total_furos > 0 ? 'text-rose-600' : 'text-emerald-600'
+                          item.diferenca_auditoria < 0
+                            ? 'text-rose-600'
+                            : item.diferenca_auditoria > 0
+                              ? 'text-emerald-600'
+                              : 'text-text/60'
                         }`}
                       >
-                        R$ {item.total_furos.toFixed(2)}
+                        R$ {item.diferenca_auditoria.toFixed(2)}
                       </td>
                       <td className="p-3 text-center">
                         <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
                             item.status === 'auditado'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-amber-100 text-amber-800'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : item.status === 'encerrado'
+                                ? 'bg-cyan-100 text-cyan-800 border border-cyan-300'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300'
                           }`}
                         >
-                          {item.status === 'auditado' ? 'Auditado' : 'Em Aberto'}
+                          {item.status === 'auditado'
+                            ? 'Auditado'
+                            : item.status === 'encerrado'
+                              ? 'Encerrado'
+                              : 'Aberto'}
                         </span>
                       </td>
                       <td className="p-3 text-center">

@@ -60,8 +60,18 @@ const DEFAULT_PERMISSOES: Record<string, string[]> = {
   compras: [],
   fabrica: [],
   pdv: ['pdv', 'relatorios'],
-  express: ['acertos_rapidos', 'lancar_turno', 'fechamento_diario', 'auditoria_geral', 'produtos'],
-  pdv_simples: ['acertos_rapidos', 'lancar_turno', 'fechamento_diario', 'pdv', 'pdv_caixa'],
+  express: [
+    'acertos_rapidos',
+    'lancar_turno',
+    'fechamento_diario',
+    'auditoria_geral',
+    'conciliacao_bancaria',
+    'ranking_produtos',
+    'produtos',
+    'agenda',
+    'ajuda',
+  ],
+  pdv_simples: ['acertos_rapidos', 'lancar_turno', 'fechamento_diario', 'pdv', 'pdv_caixa', 'agenda', 'ajuda'],
   user: [],
 };
 
@@ -96,7 +106,7 @@ const sidebarItems: SidebarItem[] = [
         name: 'Painel Gerencial & Analitico',
         href: '/dashboard/acerto-diario/auditoria',
       },
-      { id: 'lancar_turno', name: 'Novo Romaneio (PDV)', href: '/dashboard/acerto-diario' },
+      { id: 'lancar_turno', name: 'Controles PDV', href: '/dashboard/acerto-diario' },
       {
         id: 'fechamento_diario',
         name: 'Fechamento Diário & Conciliação',
@@ -121,7 +131,7 @@ const sidebarItems: SidebarItem[] = [
     name: 'Fábrica',
     href: '/dashboard/producao',
     icon: <Factory className="h-5 w-5" />,
-    allowedRoles: ['fabrica', 'admin', 'master'],
+    allowedRoles: ['fabrica', 'admin', 'master', 'express'],
     children: [
       { id: 'fabrica_dashboard', name: 'Dashboard Fábrica', href: '/dashboard/producao/fabrica' },
       {
@@ -272,6 +282,7 @@ const sidebarItems: SidebarItem[] = [
         id: 'configuracoes_customizacao',
         name: 'Aparência & Tema',
         href: '/dashboard/configuracoes/customizacao',
+        allowedRoles: ['admin', 'master', 'gerente'],
       },
       {
         id: 'configuracoes_lojas',
@@ -378,8 +389,8 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
     async function carregarPermissoes() {
-      if (!profile?.organization_id) return setPermissoesLoading(false);
       try {
         const { data: globalData } = await supabase
           .from('configuracoes_sistema')
@@ -388,12 +399,16 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
           .is('organization_id', null)
           .maybeSingle();
 
-        const { data: orgData } = await supabase
-          .from('configuracoes_sistema')
-          .select('valor')
-          .eq('chave', 'permissoes_acesso')
-          .eq('organization_id', profile.organization_id)
-          .maybeSingle();
+        let orgData = null;
+        if (profile?.organization_id) {
+          const { data } = await supabase
+            .from('configuracoes_sistema')
+            .select('valor')
+            .eq('chave', 'permissoes_acesso')
+            .eq('organization_id', profile.organization_id)
+            .maybeSingle();
+          orgData = data;
+        }
 
         const parseValor = (valor: unknown): Record<string, string[]> => {
           if (!valor) return {};
@@ -413,15 +428,45 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
           ...parseValor(globalData?.valor),
           ...parseValor(orgData?.valor),
         };
-        setPermissoes(merged);
+        if (mounted) setPermissoes(merged);
       } catch (e) {
-        setPermissoes(DEFAULT_PERMISSOES);
+        if (mounted) setPermissoes(DEFAULT_PERMISSOES);
         void e;
       } finally {
-        setPermissoesLoading(false);
+        if (mounted) setPermissoesLoading(false);
       }
     }
     void carregarPermissoes();
+
+    const handlePermChange = () => {
+      void carregarPermissoes();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('permissoes_updated', handlePermChange);
+    }
+
+    const channel = supabase
+      .channel('public:configuracoes_sistema:permissoes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'configuracoes_sistema' },
+        () => {
+          void carregarPermissoes();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('permissoes_updated', handlePermChange);
+      }
+      try {
+        channel.unsubscribe();
+      } catch {
+        /* ignore */
+      }
+    };
   }, [profile?.organization_id]);
 
   const logoSrc = useMemo(() => {
@@ -468,16 +513,23 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
       // 'admin'/'master' elevated privileges; compare as string to avoid TS literal type issues
       const roleStr = String(profile?.role ?? '');
       if (roleStr === 'express' || roleStr === 'pdv_simples') {
-        const rolePerms = permissoes[profile?.role ?? ''] ||
+        const rolePerms =
+          permissoes[profile?.role ?? ''] ||
           DEFAULT_PERMISSOES[profile?.role ?? ''] || [
             'acertos_rapidos',
             'lancar_turno',
             'fechamento_diario',
             'auditoria_geral',
             'produtos',
+            'agenda',
             'ajuda',
           ];
-        return rolePerms.includes(item.id || '');
+        const directMatch = rolePerms.includes(item.id || '');
+        if (directMatch) return true;
+        if (item.children?.length) {
+          return item.children.some((child) => rolePerms.includes(child.id || ''));
+        }
+        return false;
       }
       if (item.adminOnly) return roleStr === 'master';
       if (roleStr === 'admin' || roleStr === 'master') return true;
@@ -510,9 +562,8 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
   );
 
   const visibleMenu = useMemo(() => {
-    return sidebarItems.filter(hasAccess).map((item) => ({
-      ...item,
-      children: item.children?.filter((child) => {
+    return sidebarItems.filter(hasAccess).map((item) => {
+      const filteredChildren = item.children?.filter((child) => {
         const roleStr = String(profile?.role ?? '');
         if (roleStr === 'admin' || roleStr === 'master') return true;
         if (child.allowedRoles && !child.allowedRoles.includes(profile?.role ?? '')) return false;
@@ -521,8 +572,23 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
         if (rolePerms.includes('all')) return true;
         const childId = child.id || child.href.split('/').pop() || '';
         return rolePerms.includes(childId);
-      }),
-    }));
+      });
+
+      let effectiveHref = item.href;
+      if (
+        filteredChildren &&
+        filteredChildren.length > 0 &&
+        (profile?.role === 'express' || profile?.role === 'pdv_simples')
+      ) {
+        effectiveHref = filteredChildren[0].href;
+      }
+
+      return {
+        ...item,
+        href: effectiveHref,
+        children: filteredChildren,
+      };
+    });
   }, [hasAccess, profile?.role, permissoes]);
 
   const handleNavClick = () => {

@@ -32,7 +32,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(produto?.imagem_url || null);
   const [precoDisplay, setPrecoDisplay] = useState<string>('');
 
-  const [categorias, setCategorias] = useState<Array<{ id: number; nome: string }>>([]);
+  const [categorias, setCategorias] = useState<Array<{ id: number | string; nome: string }>>([]);
   const [isCategoriaModalOpen, setIsCategoriaModalOpen] = useState(false);
   const [newCategoriaName, setNewCategoriaName] = useState('');
 
@@ -72,7 +72,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
         tipo: produto.tipo === 'semi_acabado' ? 'semi_acabado' : 'final',
         ativo: produto.ativo !== false, // Padrão true se undefined
         categoria_id: (produto as any)?.categoria_id
-          ? Number((produto as any).categoria_id)
+          ? String((produto as any).categoria_id)
           : undefined,
         codigo_interno: produto.codigo_interno || '',
         descricao: produto.descricao || null,
@@ -100,7 +100,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
       .order('nome');
 
     if (data) {
-      setCategorias(data.map((c: any) => ({ ...c, id: Number(c.id) })));
+      setCategorias(data.map((c: any) => ({ id: c.id, nome: c.nome })));
     }
   }, [profile?.organization_id]);
 
@@ -144,7 +144,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
 
       if (error) throw error;
       await fetchCategorias();
-      setValue('categoria_id', Number(data.id));
+      setValue('categoria_id', String(data.id) as any);
       setIsCategoriaModalOpen(false);
       setNewCategoriaName('');
       toast({ title: 'Categoria criada!', variant: 'success' });
@@ -165,18 +165,27 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
     };
 
     try {
-      // Preparar payload para o banco
-      const payload = {
+      const rawCatId = data.categoria_id;
+      const selectedCatId =
+        rawCatId && String(rawCatId).trim() !== ''
+          ? isNaN(Number(rawCatId))
+            ? String(rawCatId).trim()
+            : Number(rawCatId)
+          : null;
+      const isAtivo = data.ativo === true || String(data.ativo) === 'true';
+
+      // Preparar payload para o banco (apenas colunas reais da tabela produtos_finais)
+      const payload: any = {
         nome: data.nome,
         tipo: data.tipo,
-        ativo: data.ativo,
+        ativo: isAtivo,
         preco_venda: data.tipo === 'semi_acabado' ? 0 : Number(data.preco_venda || 0),
         peso_unitario: Number(data.peso_unitario || 0),
         // Converter strings vazias para null
         codigo_interno: data.codigo_interno || null,
         descricao: data.descricao || null,
         imagem_url: data.imagem_url || null,
-        categoria_id: data.categoria_id ? Number(data.categoria_id) : null,
+        categoria_id: selectedCatId,
         // Auditoria
         organization_id: profile?.organization_id,
       };
@@ -185,11 +194,14 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
       if (!payload.organization_id)
         throw new Error('Organização não identificada. Recarregue a página.');
 
-      let error;
       if (produto?.id) {
         // UPDATE
-        const res = await supabase.from('produtos_finais').update(payload).eq('id', produto.id);
-        error = res.error;
+        const { error: updateErr } = await supabase
+          .from('produtos_finais')
+          .update(payload)
+          .eq('id', produto.id);
+
+        if (updateErr) throw updateErr;
       } else {
         // INSERT (Adiciona created_by apenas no insert)
         // Se codigo_interno não foi fornecido, gerar um automaticamente.
@@ -409,12 +421,13 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
           <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
           <div className="flex gap-2">
             <select
-              {...register('categoria_id')}
+              value={watch('categoria_id') ? String(watch('categoria_id')) : ''}
+              onChange={(e) => setValue('categoria_id', e.target.value ? e.target.value : null)}
               className="flex-1 rounded-lg border border-gray-300 p-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-100"
             >
               <option value="">Sem categoria</option>
               {categorias.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={String(c.id)} value={String(c.id)}>
                   {c.nome}
                 </option>
               ))}
@@ -447,8 +460,7 @@ export default function ProdutoForm({ produto, onSuccess }: ProdutoFormProps) {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Disponibilidade</label>
           <select
-            {...register('ativo')}
-            // Converte string "true"/"false" para boolean
+            value={watch('ativo') === false || String(watch('ativo')) === 'false' ? 'false' : 'true'}
             onChange={(e) => setValue('ativo', e.target.value === 'true')}
             className="w-full rounded-lg border border-gray-300 p-2.5 bg-white outline-none"
           >

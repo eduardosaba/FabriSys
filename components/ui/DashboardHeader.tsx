@@ -1333,7 +1333,7 @@ function FullScreenToggle() {
     <button
       title="Alternar tela cheia"
       onClick={toggleForTarget}
-      className="rounded-md p-2 mr-1 flex items-center justify-center hover:bg-black/5 transition-colors"
+      className="hidden md:flex rounded-md p-2 mr-1 items-center justify-center hover:bg-black/5 transition-colors"
     >
       {isFullScreen ? <X className="h-5 w-5" /> : <ExternalLink className="h-5 w-5" />}
     </button>

@@ -96,7 +96,7 @@ const sidebarItems: SidebarItem[] = [
         name: 'Painel Gerencial & Analitico',
         href: '/dashboard/acerto-diario/auditoria',
       },
-      { id: 'lancar_turno', name: 'Lançar Turno (PDV)', href: '/dashboard/acerto-diario' },
+      { id: 'lancar_turno', name: 'Novo Romaneio (PDV)', href: '/dashboard/acerto-diario' },
       {
         id: 'fechamento_diario',
         name: 'Fechamento Diário & Conciliação',

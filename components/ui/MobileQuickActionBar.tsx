@@ -4,17 +4,16 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { Store, BarChart3, Lock, Package, LayoutDashboard } from 'lucide-react';
+import { Store, BarChart3, Lock, Package } from 'lucide-react';
 
 export default function MobileQuickActionBar() {
   const pathname = usePathname();
   const { profile } = useAuth();
 
-  // Roles permitidas para a barra fixa mobile de operações e gerência
-  const allowedRoles = ['gerente', 'express', 'pdv_simples', 'pdv', 'admin', 'master'];
+  // Barra fixa mobile exclusiva para perfil express
   const userRole = (profile?.role ?? '') as string;
 
-  if (!profile || !allowedRoles.includes(userRole)) {
+  if (!profile || userRole !== 'express') {
     return null;
   }
 
@@ -27,7 +26,7 @@ export default function MobileQuickActionBar() {
     },
     {
       id: 'lancar',
-      label: 'Lançar Turno',
+      label: 'Novo Romaneio',
       href: '/dashboard/acerto-diario',
       icon: <Store className="h-5 w-5" />,
       exact: true,
@@ -45,17 +44,6 @@ export default function MobileQuickActionBar() {
       icon: <Package className="h-5 w-5" />,
     },
   ];
-
-  // Adiciona Visão Geral para papéis gerenciais/administrativos
-  if (userRole !== 'express' && userRole !== 'pdv_simples') {
-    items.unshift({
-      id: 'visao_geral',
-      label: 'Visão Geral',
-      href: '/dashboard',
-      icon: <LayoutDashboard className="h-5 w-5" />,
-      exact: true,
-    });
-  }
 
   return (
     <div

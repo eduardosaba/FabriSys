@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import BRLCurrencyInput from '@/components/ui/shared/BRLCurrencyInput';
-import { PDVSelectorChips } from '@/components/ui/shared/PDVSelectorCards';
+import { PDVSelectorCards } from '@/components/ui/shared/PDVSelectorCards';
 import { supabase } from '@/lib/supabase-client';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/useToast';
@@ -717,8 +717,8 @@ export default function FechamentoDiarioPage() {
           )}
 
           {/* Seleção de Data & PDV */}
-          <div className="flex flex-col gap-4 rounded-2xl border border-primary/20 bg-background p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-3">
+          <div className="space-y-4">
+            <div className="flex flex-col gap-4 rounded-2xl border border-primary/20 bg-background p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-primary" />
                 <span className="text-xs font-bold text-text/70">Data de Referência:</span>
@@ -733,16 +733,22 @@ export default function FechamentoDiarioPage() {
                 />
               </div>
 
-              <PDVSelectorChips
+              <div className="text-right text-xs text-text/50 font-medium">
+                {registros.length} relatório(s) financeiro(s) registrado(s)
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
+                <Store className="h-4 w-4 text-primary" /> Filtrar por Ponto de Venda (PDV)
+              </label>
+              <PDVSelectorCards
                 locais={locais}
                 selectedId={filtroPDV}
                 onSelect={(id) => setFiltroPDV(id)}
-                todosLabel="Todos os PDVs"
+                incluirTodos={true}
+                todosLabel="Todos os PDVs (Visão Geral)"
               />
-            </div>
-
-            <div className="text-right text-xs text-text/50 font-medium">
-              {registros.length} relatório(s) financeiro(s) registrado(s)
             </div>
           </div>
 

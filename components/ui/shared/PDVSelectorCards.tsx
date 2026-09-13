@@ -14,6 +14,8 @@ export interface PDVSelectorCardsProps {
   selectedId: string;
   onSelect: (id: string) => void;
   carregando?: boolean;
+  incluirTodos?: boolean;
+  todosLabel?: string;
 }
 
 export interface PDVSelectorChipsProps {
@@ -33,6 +35,8 @@ export function PDVSelectorCards({
   selectedId,
   onSelect,
   carregando = false,
+  incluirTodos = false,
+  todosLabel = 'Todos os PDVs',
 }: PDVSelectorCardsProps) {
   if (carregando) {
     return (
@@ -47,7 +51,7 @@ export function PDVSelectorCards({
     );
   }
 
-  if (locais.length === 0) {
+  if (locais.length === 0 && !incluirTodos) {
     return (
       <div className="rounded-2xl border border-dashed border-primary/20 bg-primary/5 p-4 text-center text-xs text-text/50 w-full">
         Nenhum ponto de venda (PDV) cadastrado.
@@ -57,6 +61,50 @@ export function PDVSelectorCards({
 
   return (
     <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 w-full max-w-full min-w-0">
+      {incluirTodos && (
+        <button
+          type="button"
+          onClick={() => onSelect('todos')}
+          className={`group relative flex flex-col items-start justify-between rounded-2xl border p-3 sm:p-4 text-left transition-all duration-200 active:scale-[0.98] min-w-0 w-full overflow-hidden ${
+            selectedId === 'todos' || selectedId === ''
+              ? 'border-primary bg-primary/10 shadow-sm shadow-primary/15 ring-2 ring-primary/30 font-bold'
+              : 'border-primary/15 bg-background hover:border-primary/40 hover:bg-primary/[0.03]'
+          }`}
+        >
+          {/* Ícone e Indicador de Seleção */}
+          <div className="flex w-full items-center justify-between">
+            <div
+              className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl transition-colors shrink-0 ${
+                selectedId === 'todos' || selectedId === ''
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'bg-primary/10 text-primary group-hover:bg-primary/20'
+              }`}
+            >
+              <Store className="h-4 w-4 sm:h-5 sm:w-5" />
+            </div>
+
+            {(selectedId === 'todos' || selectedId === '') && (
+              <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-primary animate-in fade-in zoom-in-75 duration-150 shrink-0" />
+            )}
+          </div>
+
+          {/* Informações */}
+          <div className="mt-2 sm:mt-3 w-full min-w-0">
+            <p
+              className={`text-xs sm:text-sm font-bold tracking-tight transition-colors truncate w-full ${
+                selectedId === 'todos' || selectedId === ''
+                  ? 'text-primary'
+                  : 'text-text/80 group-hover:text-text'
+              }`}
+            >
+              {todosLabel}
+            </p>
+            <span className="text-[10px] sm:text-[11px] font-medium text-text/50 capitalize truncate block w-full">
+              Visão Geral
+            </span>
+          </div>
+        </button>
+      )}
       {locais.map((pdv) => {
         const isSelected = selectedId === pdv.id;
 

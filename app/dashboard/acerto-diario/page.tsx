@@ -509,7 +509,9 @@ export default function AcertoDiarioPage() {
       {/* Header com Toggle de Modo */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text/80">Romaneio de Carga & Fechamento PDV</h1>
+          <h1 className="text-2xl font-bold text-text/80">
+            Lançamento de Romaneio, Produtos, Financeiro & Sobras
+          </h1>
           <p className="text-sm text-text/50">
             Caderno Digital: Saída por produto, apuração por sobra e Vendas totais (Pix/Cartão).
           </p>
@@ -681,7 +683,8 @@ export default function AcertoDiarioPage() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                {/* Desktop View: Tabela completa de 8 colunas */}
+                <table className="hidden sm:table w-full text-left text-xs">
                   <thead className="border-b border-primary/10 bg-primary/5 font-bold uppercase text-text/50">
                     <tr>
                       <th className="p-2.5">Doce / Produto</th>
@@ -747,6 +750,163 @@ export default function AcertoDiarioPage() {
                     })}
                   </tbody>
                 </table>
+
+                {/* Mobile View: Cards Individuais de Produto com Botões Stepper (- e +) */}
+                <div className="block sm:hidden space-y-3">
+                  {gradeItens.map((item, idx) => {
+                    const disp = (item.qtd_sobra_anterior || 0) + (item.qtd_enviada || 0);
+                    const vend = Math.max(0, disp - (item.qtd_retorno || 0));
+                    const subtotal = vend * item.preco_unitario;
+
+                    return (
+                      <div
+                        key={item.produto_id}
+                        className="rounded-2xl border border-primary/15 bg-background p-4 shadow-2xs space-y-3"
+                      >
+                        {/* Header: Nome do Produto e Preço */}
+                        <div className="flex items-center justify-between border-b border-primary/10 pb-2">
+                          <span className="font-bold text-sm text-text/90">{item.nome}</span>
+                          <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary">
+                            R$ {item.preco_unitario.toFixed(2)}/un
+                          </span>
+                        </div>
+
+                        {/* Pílulas de Estoque */}
+                        <div className="grid grid-cols-3 gap-1.5 text-center text-[11px]">
+                          <div className="rounded-xl bg-cyan-50 dark:bg-cyan-950/30 p-1.5 border border-cyan-200 dark:border-cyan-800">
+                            <span className="block text-[10px] text-cyan-800 dark:text-cyan-300 font-semibold">
+                              Sobra Ant.
+                            </span>
+                            <strong className="font-mono text-cyan-900 dark:text-cyan-200">
+                              {item.qtd_sobra_anterior || 0} un
+                            </strong>
+                          </div>
+                          <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-1.5 border border-slate-200 dark:border-slate-700">
+                            <span className="block text-[10px] text-text/60 font-semibold">
+                              Total Disp.
+                            </span>
+                            <strong className="font-mono text-text/90">{disp} un</strong>
+                          </div>
+                          <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 p-1.5 border border-emerald-200 dark:border-emerald-800">
+                            <span className="block text-[10px] text-emerald-800 dark:text-emerald-300 font-semibold">
+                              Vendidos
+                            </span>
+                            <strong className="font-mono text-emerald-900 dark:text-emerald-200">
+                              {vend} un
+                            </strong>
+                          </div>
+                        </div>
+
+                        {/* Campos de Quantidade com Botões Stepper (- e +) */}
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                          {/* Envio Hoje */}
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-bold text-text/70">
+                              📦 Envio Hoje:
+                            </label>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAtualizarItemGrade(
+                                    idx,
+                                    'qtd_enviada',
+                                    Math.max(0, (item.qtd_enviada || 0) - 1)
+                                  )
+                                }
+                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/5 text-base font-bold text-primary active:scale-95 shrink-0 select-none"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.qtd_enviada || ''}
+                                onChange={(e) =>
+                                  handleAtualizarItemGrade(
+                                    idx,
+                                    'qtd_enviada',
+                                    Number(e.target.value)
+                                  )
+                                }
+                                placeholder="0"
+                                className="h-9 w-full rounded-xl border border-primary/20 bg-background px-2 text-center font-bold outline-none focus:border-primary"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAtualizarItemGrade(
+                                    idx,
+                                    'qtd_enviada',
+                                    (item.qtd_enviada || 0) + 1
+                                  )
+                                }
+                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-base font-bold text-primary active:scale-95 shrink-0 select-none"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Sobras / Retorno */}
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                              ↩️ Sobras (Retorno):
+                            </label>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAtualizarItemGrade(
+                                    idx,
+                                    'qtd_retorno',
+                                    Math.max(0, (item.qtd_retorno || 0) - 1)
+                                  )
+                                }
+                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 text-base font-bold text-amber-800 active:scale-95 shrink-0 select-none"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.qtd_retorno || ''}
+                                onChange={(e) =>
+                                  handleAtualizarItemGrade(
+                                    idx,
+                                    'qtd_retorno',
+                                    Number(e.target.value)
+                                  )
+                                }
+                                placeholder="0"
+                                className="h-9 w-full rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 px-2 text-center font-bold text-amber-900 dark:text-amber-200 outline-none focus:border-amber-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleAtualizarItemGrade(
+                                    idx,
+                                    'qtd_retorno',
+                                    (item.qtd_retorno || 0) + 1
+                                  )
+                                }
+                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-100 text-base font-bold text-amber-800 active:scale-95 shrink-0 select-none"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Subtotal do Produto */}
+                        <div className="flex items-center justify-between border-t border-primary/10 pt-2 text-xs font-bold">
+                          <span className="text-text/60">Subtotal Parcial:</span>
+                          <span className="font-mono text-primary">R$ {subtotal.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Ajustes / Perdas / Cortesias */}

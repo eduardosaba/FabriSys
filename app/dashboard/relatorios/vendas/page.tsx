@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import { BarChart3, Filter } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ModalDetalhesCaixa from '@/components/ModalDetalhesCaixa';
+import { PDVSelectorChips } from '@/components/ui/shared/PDVSelectorCards';
 
 interface Caixa {
   id: string;
@@ -114,18 +115,12 @@ export default function RelatorioVendasPage() {
           <label className="text-xs font-bold text-slate-500 uppercase block mb-1">
             Loja / PDV
           </label>
-          <select
-            className="border p-2 rounded-lg text-sm min-w-[200px]"
-            value={localId}
-            onChange={(e) => setLocalId(e.target.value)}
-          >
-            <option value="">Todas as Lojas</option>
-            {locais.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.nome}
-              </option>
-            ))}
-          </select>
+          <PDVSelectorChips
+            locais={locais}
+            selectedId={localId}
+            onSelect={(id) => setLocalId(id === 'todos' ? '' : id)}
+            todosLabel="Todas as Lojas"
+          />
         </div>
         <button
           onClick={carregarRelatorioConsolidado}

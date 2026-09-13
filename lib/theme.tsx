@@ -25,7 +25,7 @@ interface ThemeContextType {
     userId?: string
   ) => Promise<void>;
   resetToSystemTheme: () => void;
-  loadThemeByOrg: (organizationId: string) => Promise<void>;
+  loadThemeByOrg: (organizationId: string, userId?: string) => Promise<void>;
   setPreviewVars?: (partial: Partial<ThemeSettings>) => void;
 }
 
@@ -82,11 +82,11 @@ const defaultTheme: ThemeSettings = {
       barraSuperiorMenu: '#88544c',
       textoIconeAjuda: '#9ca3af',
       iconeAjuda: '#e9c4c2',
-      sidebar_bg: '#4a2c2b',
+      sidebar_bg: '#e9c4c2',
       sidebar_hover_bg: '#88544c',
-      sidebar_text: '#f2e8e3',
-      sidebar_active_text: '#e9c4c2',
-      header_bg: '#88544c',
+      sidebar_text: '#4a2c2b',
+      sidebar_active_text: '#4a2c2b',
+      header_bg: '#e9c4c2',
     },
     dark: {
       primary: '#e9c4c2',
@@ -174,6 +174,31 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           });
         });
 
+        // Forçar resolução da cor de fundo do Sidebar para SEMPRE utilizar a cor secundária (secondary)
+        const currentModeColors = (themeToApply.colors?.[mode] || {}) as Record<string, any>;
+        const effectiveSidebarBg =
+          currentModeColors.secondary ||
+          currentModeColors.secondary_color ||
+          (themeToApply as any).secondary;
+        if (effectiveSidebarBg) {
+          root.style.setProperty('--sidebar-bg', effectiveSidebarBg);
+          root.style.setProperty('--sidebar_bg', effectiveSidebarBg);
+        }
+
+        const effectiveSidebarHoverBg =
+          currentModeColors.sidebar_hover_bg ||
+          currentModeColors.primary ||
+          themeToApply.sidebar_hover_bg;
+        if (effectiveSidebarHoverBg) {
+          root.style.setProperty('--sidebar-hover-bg', effectiveSidebarHoverBg);
+        }
+
+        const effectiveHeaderBg =
+          currentModeColors.header_bg || currentModeColors.secondary || themeToApply.header_bg;
+        if (effectiveHeaderBg) {
+          root.style.setProperty('--header-bg', effectiveHeaderBg);
+        }
+
         root.style.setProperty('--border-radius', themeToApply.border_radius || '0.5rem');
         root.style.setProperty('--custom-font-family', themeToApply.font_family || 'Inter');
       } catch (e) {
@@ -200,21 +225,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           return {};
         };
 
-        if (options.organizationId) {
-          const { data: orgData } = await supabase
-            .from('user_theme_colors')
-            .select('*')
-            .eq('organization_id', options.organizationId)
-            .eq('theme_mode', options.themeMode || resolvedTheme)
-            .maybeSingle();
-          if (orgData) {
-            const extra = parseExtra(orgData);
-            return { ...orgData, ...extra };
-          }
-        }
+        const modeToQuery = options.themeMode || resolvedTheme;
 
+        // 1. Tentar buscar por Usuário primeiro (prioridade individual)
         if (options.userId) {
-          const modeToQuery = options.themeMode || resolvedTheme;
           const { data } = await supabase
             .from('user_theme_colors')
             .select('*')
@@ -226,6 +240,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             return { ...data, ...extra };
           }
         }
+
+        // 2. Tentar buscar por Organização (fallback da empresa)
+        if (options.organizationId) {
+          const { data: orgData } = await supabase
+            .from('user_theme_colors')
+            .select('*')
+            .eq('organization_id', options.organizationId)
+            .eq('theme_mode', modeToQuery)
+            .maybeSingle();
+          if (orgData) {
+            const extra = parseExtra(orgData);
+            return { ...orgData, ...extra };
+          }
+        }
+
         return null;
       } catch (err) {
         return null;
@@ -262,7 +291,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const saveScopedThemeColors = useCallback(
-    async (options: { userId?: string; organizationId?: string }, colors: Partial<ThemeColors>) => {
+    async (
+      options: { userId?: string; organizationId?: string },
+      mode: 'light' | 'dark',
+      colors: Partial<ThemeColors>
+    ) => {
       try {
         const {
           data: { user },
@@ -270,13 +303,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (!user) throw new Error('Não autenticado');
 
         const payload: any = {
-          theme_mode: resolvedTheme,
+          theme_mode: mode,
           primary_color: colors.primary,
           titulo_paginas_color: colors.tituloPaginas,
-          logo_url: colors.logo_url,
+          logo_url: colors.logo_url || (colors as any).company_logo_url,
           logo_scale: colors.logo_scale,
+          company_logo_url: (colors as any).company_logo_url || colors.logo_url,
+          company_logo_scale: (colors as any).company_logo_scale || colors.logo_scale,
           font_family: colors.font_family,
-          colors_json: JSON.stringify(colors),
+          colors_json: JSON.stringify({
+            ...colors,
+            company_logo_url: (colors as any).company_logo_url,
+            company_logo_scale: (colors as any).company_logo_scale,
+          }),
           updated_at: new Date().toISOString(),
         };
 
@@ -290,7 +329,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         console.error(err);
       }
     },
-    [resolvedTheme]
+    []
   );
 
   const updateTheme = useCallback(
@@ -308,12 +347,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             : theme.colors,
         } as ThemeSettings;
 
-        const currentMode =
-          updatedTheme.theme_mode === 'system' ? resolvedTheme : updatedTheme.theme_mode;
-        const colorsToSave = updatedTheme.colors[currentMode];
-
         if (userId) {
-          await saveScopedThemeColors({ userId }, colorsToSave);
+          if (updatedTheme.colors?.light) {
+            await saveScopedThemeColors({ userId }, 'light', updatedTheme.colors.light);
+          }
+          if (updatedTheme.colors?.dark) {
+            await saveScopedThemeColors({ userId }, 'dark', updatedTheme.colors.dark);
+          }
         }
 
         if (asDefault) {
@@ -338,22 +378,50 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 
   const loadThemeByOrg = useCallback(
-    async (organizationId: string) => {
+    async (organizationId: string, userId?: string) => {
       try {
         setLoading(true);
-        const orgColors = await fetchScopedThemeColors({ organizationId });
+        const scopedColors = await fetchScopedThemeColors({ organizationId, userId });
         const sys = await fetchSystemSettings(organizationId);
-        let activeTheme = systemTheme || defaultTheme;
 
-        if (orgColors) {
+        let activeTheme = defaultTheme;
+
+        // Tentar recuperar do localStorage primeiro para manter preferência viva
+        if (typeof window !== 'undefined') {
+          const stored = window.localStorage.getItem('theme-preference');
+          if (stored) {
+            try {
+              activeTheme = { ...activeTheme, ...JSON.parse(stored) };
+            } catch (e) {
+              void e;
+            }
+          }
+        }
+
+        if (scopedColors) {
           const mode = activeTheme.theme_mode === 'system' ? resolvedTheme : activeTheme.theme_mode;
+          const mergedColorsForMode = {
+            ...((activeTheme.colors as any)[mode] || {}),
+            ...scopedColors,
+          };
+
           activeTheme = {
             ...activeTheme,
             colors: {
               ...activeTheme.colors,
-              [mode]: { ...((activeTheme.colors as any)[mode] || {}), ...orgColors },
+              [mode]: mergedColorsForMode,
             },
           };
+
+          if (scopedColors.sidebar_bg) {
+            activeTheme.sidebar_bg = scopedColors.sidebar_bg;
+          }
+          if (scopedColors.company_logo_url) {
+            activeTheme.company_logo_url = scopedColors.company_logo_url;
+          }
+          if (scopedColors.logo_url) {
+            activeTheme.logo_url = scopedColors.logo_url;
+          }
         }
 
         if (sys) {
@@ -377,7 +445,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
-    [fetchScopedThemeColors, fetchSystemSettings, applyTheme, resolvedTheme, systemTheme]
+    [fetchScopedThemeColors, fetchSystemSettings, applyTheme, resolvedTheme]
   );
 
   const setPreviewVars = useCallback((partial: Partial<ThemeSettings>) => {

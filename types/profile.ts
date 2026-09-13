@@ -1,4 +1,13 @@
-export type UserRole = 'master' | 'admin' | 'gerente' | 'compras' | 'fabrica' | 'pdv' | 'user';
+export type UserRole =
+  | 'master'
+  | 'admin'
+  | 'gerente'
+  | 'compras'
+  | 'fabrica'
+  | 'pdv'
+  | 'user'
+  | 'express'
+  | 'pdv_simples';
 
 export interface Profile {
   id: string;

@@ -236,7 +236,28 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
   const [loading, setLoading] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [isLarissaSubdomain, setIsLarissaSubdomain] = useState(false);
   const { theme } = useTheme();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname.toLowerCase();
+      if (host.includes('larissasaba') || host.includes('larissa')) {
+        setIsLarissaSubdomain(true);
+      }
+    }
+  }, []);
+
+  const logoSrc = isLarissaSubdomain
+    ? '/logolarissa.png'
+    : getImageUrl(theme?.logo_url) || theme?.logo_url || '/logo.png';
+
+  const companyLogoSrc = isLarissaSubdomain
+    ? '/logolarissa.png'
+    : getImageUrl(theme?.company_logo_url || theme?.logo_url) ||
+      theme?.company_logo_url ||
+      theme?.logo_url ||
+      '/logo.png';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -284,12 +305,8 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
       <div className="relative z-10 hidden flex-1 flex-col items-center justify-center p-12 text-white md:flex md:items-start md:pl-20 animate-slide-left">
         <div className="mb-8 drop-shadow-2xl">
           {/* Wrapper simplificado: sem fundo e sem borda */}
-          {theme?.logo_url ? (
-            <img
-              src={getImageUrl(theme.logo_url) || theme.logo_url}
-              alt="Logo"
-              className="h-38 md:h-38 object-contain"
-            />
+          {logoSrc ? (
+            <img src={logoSrc} alt="Logo" className="h-38 md:h-38 object-contain" />
           ) : null}
         </div>
         <h2 className="mb-6 text-5xl font-bold leading-tight drop-shadow-lg">
@@ -327,14 +344,16 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
         <div className="w-full max-w-[400px] rounded-2xl border border-white/20 bg-white/95 p-8 shadow-2xl backdrop-blur-xl animate-fade-up">
           <div className="mb-8 text-center">
             {/* Logo do cliente: responsivo — mobile h-12, md+ ~1.3x (~83.2px) */}
-            {theme?.company_logo_url ? (
+            {companyLogoSrc ? (
               <img
-                src={getImageUrl(theme.company_logo_url) || theme.company_logo_url}
-                alt="Logo Cliente"
-                className="mx-auto h-12 md:h-[83.2px] object-contain mb-4"
+                src={companyLogoSrc}
+                alt="Logo Larissa Saba Gourmet"
+                className="mx-auto h-16 md:h-[90px] object-contain mb-4"
               />
             ) : null}
-            <p className="text-gray-500 font-medium">Bem-vindo de volta 👋</p>
+            <p className="text-gray-500 font-medium">
+              {isLarissaSubdomain ? 'Larissa Saba Gourmet 👋' : 'Bem-vindo de volta 👋'}
+            </p>
           </div>
 
           {/* Acesso Rápido removido a pedido — botões de teste eliminados */}

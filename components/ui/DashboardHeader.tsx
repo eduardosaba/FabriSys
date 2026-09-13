@@ -80,19 +80,17 @@ export default function DashboardHeader({
   const { profile, signOut } = useAuth();
 
   const finalLogoUrl = useMemo(() => {
-    // 1. Prioridade Máxima: Logo do Perfil/Usuário (avatar ou empresa vinculada ao perfil)
-    const profileLogo =
-      (profile as any)?.company_logo_url || (profile as any)?.organizations?.logo_url;
-    if (profileLogo && typeof profileLogo === 'string' && profileLogo.trim() !== '') {
-      return getImageUrl(profileLogo) || profileLogo;
+    // 1. Prioridade Máxima: Logo do Perfil/Usuário ou Tema da Empresa
+    const companyLogo =
+      profile?.company_logo_url || profile?.organizations?.logo_url || theme?.company_logo_url;
+    if (companyLogo && typeof companyLogo === 'string' && companyLogo.trim() !== '') {
+      return getImageUrl(companyLogo) || companyLogo;
     }
 
     // 2. Segunda Prioridade: URL enviada via Props
     if (logoUrl) return logoUrl;
 
     // 3. Terceira Prioridade: Logo do Sistema (Master)
-    // NOTE: intentionally do NOT use theme.company_logo_url here — Sidebar is responsible
-    // for showing the system/company logo. Header should prefer user/profile logos.
     const systemLogo = theme?.logo_url;
     if (systemLogo && typeof systemLogo === 'string' && systemLogo.trim() !== '') {
       return getImageUrl(systemLogo) || systemLogo;
@@ -100,7 +98,13 @@ export default function DashboardHeader({
 
     // Fallback final
     return '/logo.png';
-  }, [logoUrl, theme?.logo_url, theme?.company_logo_url, profile?.company_logo_url]);
+  }, [
+    logoUrl,
+    theme?.logo_url,
+    theme?.company_logo_url,
+    profile?.company_logo_url,
+    profile?.organizations?.logo_url,
+  ]);
 
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [logoError, setLogoError] = useState(false);
@@ -127,7 +131,7 @@ export default function DashboardHeader({
   const handleTrocarLoja = (id: string | null) => {
     try {
       // 1. Só bloqueia se for PDV. Admin/master podem trocar mesmo tendo profile.local_id
-      const userRole = (profile as any)?.role;
+      const userRole = profile?.role;
       if (userRole === 'pdv') {
         toast.error('Acesso restrito: seu local de operação é fixo.');
         setShowUserMenu(false);
@@ -376,7 +380,7 @@ export default function DashboardHeader({
 
       // PDV: ver apenas eventos do próprio local
       if (isPdv) {
-        const localId = activeLocalId ?? (profile as any)?.local_id ?? null;
+        const localId = activeLocalId ?? profile?.local_id ?? null;
         if (!localId) {
           setNotificationsList([]);
           return;
@@ -467,7 +471,7 @@ export default function DashboardHeader({
     (async () => {
       try {
         const ctx = await getOperationalContext(profile);
-        const myLocal = ctx.caixa?.local_id ?? ctx.localId ?? (profile as any)?.local_id ?? null;
+        const myLocal = ctx.caixa?.local_id ?? ctx.localId ?? profile?.local_id ?? null;
         if (!mounted) return;
 
         vendasChannel = supabase.channel('public:vendas');
@@ -634,7 +638,7 @@ export default function DashboardHeader({
     };
   }, [profile?.id, roleVal]);
   // 1. Resolve a URL inicial (simplificado)
-  const _avatarRaw = (profile as any)?.avatar_url || (profile as any)?.foto_url || null;
+  const _avatarRaw = profile?.avatar_url || profile?.foto_url || null;
 
   const avatarSrc = useMemo(() => {
     if (!_avatarRaw) return null;
@@ -702,14 +706,14 @@ export default function DashboardHeader({
     };
   }, [avatarSrc, _avatarRaw]);
 
-  const displayName = profile?.nome || (profile as any)?.full_name || profile?.email || 'Usuário';
+  const displayName = profile?.nome || profile?.full_name || profile?.email || 'Usuário';
 
   useEffect(() => {
     const syncLocal = async () => {
       if (!profile?.id) return;
 
       try {
-        const profileLocalId = (profile as any)?.local_id;
+        const profileLocalId = profile?.local_id;
         const persisted = getActiveLocal();
         const userRole = profile?.role;
 
@@ -741,7 +745,7 @@ export default function DashboardHeader({
     };
 
     void syncLocal();
-  }, [profile?.id, (profile as any)?.local_id, profile?.role]);
+  }, [profile?.id, profile?.local_id, profile?.role]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -807,8 +811,8 @@ export default function DashboardHeader({
           ) : (
             // Fallback elegante: inicial da empresa
             <div className="flex items-center justify-center rounded-xl bg-primary text-white font-black shadow-sm h-9 w-9">
-              {(profile as any)?.organizations?.nome?.substring(0, 1) ||
-                (profile as any)?.organizations?.name?.substring(0, 1) ||
+              {profile?.organizations?.nome?.substring(0, 1) ||
+                profile?.organizations?.name?.substring(0, 1) ||
                 'L'}
             </div>
           )}

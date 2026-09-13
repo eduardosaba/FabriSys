@@ -99,7 +99,12 @@ export default function DashboardPage() {
     };
     void diagnose();
   }, [profile?.id]);
-  // NOTE: não redirecionar automaticamente PDV; mostramos um botão para ir ao caixa
+
+  useEffect(() => {
+    if (profile?.role === 'express' || profile?.role === 'pdv_simples') {
+      router.replace('/dashboard/acerto-diario/auditoria');
+    }
+  }, [profile?.role, router]);
 
   // --- ESTADOS DE FILTRO ---
   const [filtros, setFiltros] = useState({
@@ -397,11 +402,7 @@ export default function DashboardPage() {
     (profile?.email && String(profile.email).split('@')[0]) ||
     '';
   const displayName =
-    profile?.nome ||
-    (profile as any)?.full_name ||
-    (profile as any)?.username ||
-    firstName ||
-    'Usuário';
+    profile?.nome || profile?.full_name || profile?.username || firstName || 'Usuário';
   const [dashboardConfig, setDashboardConfig] = useState<string[] | null>(null);
   const [dashboardMeta, setDashboardMeta] = useState<Record<string, Record<string, number>> | null>(
     null

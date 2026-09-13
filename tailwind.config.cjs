@@ -69,12 +69,12 @@ const config = {
         //'loading-button-hover': 'var(--loading-button-hover, rgb(29 78 216))',
         //'trend-positive': 'var(--trend-positive, rgb(34 197 94))',
         //'trend-negative': 'var(--trend-negative, rgb(239 68 68))',
-        'overlay-mobile': 'rgba(0, 0, 0, 0.7)', // Overlay mais escuro
-        'sidebar-active-bg': '#88544c',         // Caramelo (Fundo do item ativo)
-        'sidebar-active-text': '#f2e8e3',       // Branco Suave (Texto do item ativo)
-        'sidebar-bg': '#e9c4c2',                // Fundo fixo da Sidebar
-        'sidebar-hover-bg': '#88544c',          // Hover fixo da Sidebar
-        'header-bg': '#e9c4c2',                 // Fundo fixo do Header
+        'overlay-mobile': 'var(--overlay-mobile, rgba(0, 0, 0, 0.7))',
+        'sidebar-active-bg': 'var(--sidebar-active-bg)',
+        'sidebar-active-text': 'var(--sidebar-active-text)',
+        'sidebar-bg': 'var(--sidebar-bg)',
+        'sidebar-hover-bg': 'var(--sidebar-hover-bg)',
+        'header-bg': 'var(--header-bg)',
     
     // Status e Alertas (Mantido contraste padrão de sucesso/alerta em fundos escuros)
         'status-success-bg': '#044026',         // Verde Escuro para fundo

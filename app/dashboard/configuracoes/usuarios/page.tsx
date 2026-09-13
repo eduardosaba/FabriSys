@@ -25,7 +25,10 @@ const PERFIS = [
   { value: 'gerente', label: 'Gerente (Sem config avançada)' },
   { value: 'compras', label: 'Compras' },
   { value: 'fabrica', label: 'Fábrica' },
-  { value: 'pdv', label: 'PDV (Caixa)' },
+  { value: 'pdv', label: 'PDV (Caixa Completo)' },
+  { value: 'express', label: 'Express (Acerto Diário)' },
+  { value: 'pdv_simples', label: 'PDV Operador (Simples)' },
+  { value: 'user', label: 'Usuário Padrão' },
 ];
 
 export default function UsuariosPage() {

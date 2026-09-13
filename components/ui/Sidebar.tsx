@@ -60,6 +60,9 @@ const DEFAULT_PERMISSOES: Record<string, string[]> = {
   compras: [],
   fabrica: [],
   pdv: ['pdv', 'relatorios'],
+  express: ['acertos_rapidos', 'lancar_turno', 'fechamento_diario', 'auditoria_geral', 'produtos'],
+  pdv_simples: ['acertos_rapidos', 'lancar_turno', 'fechamento_diario', 'pdv', 'pdv_caixa'],
+  user: [],
 };
 
 const usePageTracking = () => {
@@ -81,6 +84,25 @@ const sidebarItems: SidebarItem[] = [
     name: 'Visão Geral',
     href: '/dashboard',
     icon: <LayoutDashboard className="h-5 w-5" />,
+  },
+  {
+    id: 'acertos_rapidos',
+    name: 'Acertos & PDVs',
+    href: '/dashboard/acerto-diario/auditoria',
+    icon: <Store className="h-5 w-5" />,
+    children: [
+      {
+        id: 'auditoria_geral',
+        name: 'Painel Gerencial & Analitico',
+        href: '/dashboard/acerto-diario/auditoria',
+      },
+      { id: 'lancar_turno', name: 'Lançar Turno (PDV)', href: '/dashboard/acerto-diario' },
+      {
+        id: 'fechamento_diario',
+        name: 'Fechamento Diário & Conciliação',
+        href: '/dashboard/acerto-diario/fechamento',
+      },
+    ],
   },
   {
     id: 'agenda',
@@ -404,10 +426,15 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
 
   const logoSrc = useMemo(() => {
     const companyLogo =
-      profile?.company_logo_url ||
-      (profile as any)?.organizations?.logo_url ||
-      theme?.company_logo_url;
+      profile?.company_logo_url || profile?.organizations?.logo_url || theme?.company_logo_url;
     if (companyLogo && companyLogo.trim() !== '') return getImageUrl(companyLogo);
+
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname.toLowerCase();
+      if (host.includes('larissasaba') || host.includes('larissa')) {
+        return '/logolarissa.png';
+      }
+    }
     if (logoUrl) return getImageUrl(logoUrl);
     if (theme?.logo_url) return getImageUrl(theme.logo_url);
     return null;
@@ -440,6 +467,18 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
     (item: SidebarItem) => {
       // 'admin'/'master' elevated privileges; compare as string to avoid TS literal type issues
       const roleStr = String(profile?.role ?? '');
+      if (roleStr === 'express' || roleStr === 'pdv_simples') {
+        const rolePerms = permissoes[profile?.role ?? ''] ||
+          DEFAULT_PERMISSOES[profile?.role ?? ''] || [
+            'acertos_rapidos',
+            'lancar_turno',
+            'fechamento_diario',
+            'auditoria_geral',
+            'produtos',
+            'ajuda',
+          ];
+        return rolePerms.includes(item.id || '');
+      }
       if (item.adminOnly) return roleStr === 'master';
       if (roleStr === 'admin' || roleStr === 'master') return true;
       if (item.allowedRoles && !item.allowedRoles.includes(profile?.role ?? '')) return false;
@@ -494,7 +533,7 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
     <aside
       className={`fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 ${isCollapsed ? 'w-20' : 'w-64'}`}
       style={{
-        backgroundColor: 'var(--sidebar-bg)',
+        backgroundColor: 'var(--secondary, var(--sidebar-bg))',
         borderRight: '1px solid var(--sidebar-active-text)',
       }}
     >
@@ -511,7 +550,7 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
                 />
               ) : (
                 <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-primary text-white font-black shadow-lg text-lg">
-                  {(profile as any)?.organizations?.nome?.substring(0, 1) || 'L'}
+                  {profile?.organizations?.nome?.substring(0, 1) || 'L'}
                 </div>
               )}
             </div>
@@ -626,7 +665,7 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
                   onMouseLeave={() => setHoveredItem(null)}
                 >
                   <Link
-                    href={item.children ? '#' : item.href}
+                    href={item.href}
                     onClick={handleNavClick}
                     className={`flex flex-1 items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}
                   >

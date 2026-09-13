@@ -36,37 +36,36 @@
 @tailwind utilities;
 
 :root {
-  /* 
-     REATIVIDADE TOTAL: 
-     Priorizamos a variável sem prefixo (injetada pelo JS). 
-     Se não existir, usamos a variante do modo. 
-     Se não existir, usamos o fallback final.
-  */
-  --background: var(--background, var(--light-background, #ffffff));
-  --foreground: var(--text, var(--light-text, #171717));
+  /* Default fallbacks - As variáveis vivas são injetadas no document.documentElement pelo ThemeProvider */
+  --background: #fdfafa;
+  --text: #4a2c2b;
+  --foreground: #4a2c2b;
 
-  --primary: var(--primary, var(--light-primary, #f97316));
-  --secondary: var(--secondary, var(--light-secondary, #2563eb));
-  --accent: var(--accent, var(--light-accent, #f97316));
-
-  --radius: var(--border-radius, 0.5rem);
-
-  /* Botões vinculados dinamicamente ao tema */
-  --botao-salvar: var(--botao-salvar, var(--primary));
-  --botao-salvar-ativo: var(--botao-salvar-ativo, #c2410f);
-  --botao-salvar-desabilitado: var(--botao-salvar-desabilitado, #9ca3af);
-
-  --botao-cancelar: var(--botao-cancelar, #ef4444);
-  --botao-cancelar-ativo: var(--botao-cancelar-ativo, #f87171);
-  --botao-cancelar-desabilitado: var(--botao-cancelar-desabilitado, #9ca3af);
-
-  --botao-pesquisar: var(--botao-pesquisar, var(--secondary));
-  --botao-pesquisar-ativo: var(--botao-pesquisar-ativo, #1e40af);
+  --primary: #88544c;
+  --secondary: #e9c4c2;
+  --accent: #f87171;
+  --border-radius: 0.5rem;
+  --radius: 0.5rem;
 
   /* Sidebar Reativo */
-  --sidebar-bg: var(--sidebar-bg, #e9c4c2);
-  --sidebar-text: var(--sidebar-text, #4a2c2b);
-  --sidebar-active-text: var(--sidebar-active-text, #88544c);
+  --sidebar-bg: #e9c4c2;
+  --sidebar-hover-bg: #88544c;
+  --sidebar-text: #4a2c2b;
+  --sidebar-active-text: #4a2c2b;
+  --sidebar-active-bg: #88544c;
+  --header-bg: #e9c4c2;
+
+  /* Botões vinculados dinamicamente ao tema */
+  --botao-salvar: #88544c;
+  --botao-salvar-ativo: #4a2c2b;
+  --botao-salvar-desabilitado: #9ca3af;
+
+  --botao-cancelar: #ef4444;
+  --botao-cancelar-ativo: #f87171;
+  --botao-cancelar-desabilitado: #9ca3af;
+
+  --botao-pesquisar: #059669;
+  --botao-pesquisar-ativo: #047857;
 
   /* Mantendo cores de suporte */
   --color-1: #b1b3b6;
@@ -76,10 +75,14 @@
   --trend-negative: rgb(239 68 68);
 }
 
-/* 🌙 O modo Dark agora apenas confia nas variáveis injetadas pelo ThemeProvider */
 .dark {
-  --background: var(--background, var(--dark-background, #0b1220));
-  --foreground: var(--text, var(--dark-text, #f9fafb));
+  --background: #4a2c2b;
+  --text: #f2e8e3;
+  --foreground: #f2e8e3;
+  --primary: #e9c4c2;
+  --secondary: #4a2c2b;
+  --sidebar-bg: #4a2c2b;
+  --header-bg: #4a2c2b;
 }
 
 body {

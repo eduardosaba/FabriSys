@@ -77,9 +77,9 @@ export default function CustomizacaoTab() {
           name: theme.name || 'Confectio',
           footer_company_name: theme.footer_company_name || 'Eduardo Saba',
           footer_system_version: theme.footer_system_version || '1.0.0',
-          sidebar_bg: '#e9c4c2',
-          sidebar_hover_bg: '#88544c',
-          header_bg: '#e9c4c2',
+          sidebar_bg: currentColors.sidebar_bg || theme.sidebar_bg || '#4a2c2b',
+          sidebar_hover_bg: currentColors.sidebar_hover_bg || theme.sidebar_hover_bg || '#88544c',
+          header_bg: currentColors.header_bg || theme.header_bg || '#88544c',
         };
 
         // Adicionar todas as cores disponíveis baseado no tipo de usuário
@@ -97,16 +97,29 @@ export default function CustomizacaoTab() {
 
   // Handler para mudanças nos campos
   const handleFieldChange = (key: string, value: string | number) => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    const stringVal = typeof value === 'string' ? value : String(value);
+
+    setSettings((prev) => {
+      const next = {
+        ...prev,
+        [key]: value,
+      };
+      if (key === 'secondary') {
+        next.sidebar_bg = stringVal;
+      }
+      return next;
+    });
 
     // Atualizar variáveis CSS em tempo real para preview
     if (key === 'logo_scale' && typeof value === 'number') {
       document.documentElement.style.setProperty('--logo-scale', value.toString());
     } else if (key === 'company_logo_scale' && typeof value === 'number') {
       document.documentElement.style.setProperty('--company-logo-scale', value.toString());
+    } else if (typeof value === 'string') {
+      document.documentElement.style.setProperty(`--${key}`, value);
+      if (key === 'secondary') {
+        document.documentElement.style.setProperty('--sidebar-bg', value);
+      }
     }
 
     // Se uma predefinição foi aplicada, atualizar a predefinição em memória
@@ -121,6 +134,9 @@ export default function CustomizacaoTab() {
         // atualizar cor específica no modo atual
         if (typeof value === 'string') {
           presetColorsForMode[key] = value;
+          if (key === 'secondary') {
+            presetColorsForMode['sidebar_bg'] = value;
+          }
         } else {
           presetColorsForMode[key] = String(value);
         }
@@ -134,10 +150,14 @@ export default function CustomizacaoTab() {
         };
 
         // também atualizar campos globais (sidebar_bg, sidebar_hover_bg, header_bg)
-        if (key === 'sidebar_bg' || key === 'sidebar_hover_bg' || key === 'header_bg') {
-          // atribui às propriedades opcionais do preset explicitamente
-          const v = typeof value === 'string' ? value : String(value);
-          if (key === 'sidebar_bg') newPreset.sidebar_bg = v;
+        if (
+          key === 'sidebar_bg' ||
+          key === 'secondary' ||
+          key === 'sidebar_hover_bg' ||
+          key === 'header_bg'
+        ) {
+          const v = stringVal;
+          if (key === 'sidebar_bg' || key === 'secondary') newPreset.sidebar_bg = v;
           if (key === 'sidebar_hover_bg') newPreset.sidebar_hover_bg = v;
           if (key === 'header_bg') newPreset.header_bg = v;
         }
@@ -165,11 +185,15 @@ export default function CustomizacaoTab() {
       newSettings[key] = typeof value === 'string' ? value : String(value);
     });
 
-    // Atualizar campos globais no preview
-    newSettings.sidebar_bg = preset.sidebar_bg || newSettings.sidebar_bg || '#e9c4c2';
+    // Garantir que a cor do sidebar corresponda à cor secundária da predefinição
+    const secondaryColor = currentModeColors.secondary || currentModeColors.sidebar_bg || '#e9c4c2';
+    newSettings.sidebar_bg = currentModeColors.sidebar_bg || preset.sidebar_bg || secondaryColor;
     newSettings.sidebar_hover_bg =
-      preset.sidebar_hover_bg || newSettings.sidebar_hover_bg || '#88544c';
-    newSettings.header_bg = preset.header_bg || newSettings.header_bg || '#e9c4c2';
+      currentModeColors.sidebar_hover_bg ||
+      preset.sidebar_hover_bg ||
+      currentModeColors.primary ||
+      '#88544c';
+    newSettings.header_bg = currentModeColors.header_bg || preset.header_bg || secondaryColor;
 
     // ATENÇÃO: Aplicar variáveis CSS IMEDIATAMENTE para o usuário ver a mudança
     try {
@@ -179,12 +203,12 @@ export default function CustomizacaoTab() {
           document.documentElement.style.setProperty(`--${themeMode}-${key}`, value);
         }
       });
-      if (preset.sidebar_bg)
-        document.documentElement.style.setProperty('--sidebar-bg', preset.sidebar_bg);
-      if (preset.sidebar_hover_bg)
-        document.documentElement.style.setProperty('--sidebar-hover-bg', preset.sidebar_hover_bg);
-      if (preset.header_bg)
-        document.documentElement.style.setProperty('--header-bg', preset.header_bg);
+      document.documentElement.style.setProperty('--sidebar-bg', newSettings.sidebar_bg);
+      document.documentElement.style.setProperty(
+        '--sidebar-hover-bg',
+        newSettings.sidebar_hover_bg
+      );
+      document.documentElement.style.setProperty('--header-bg', newSettings.header_bg);
     } catch (e) {
       void e;
     }
@@ -218,7 +242,7 @@ export default function CustomizacaoTab() {
       const themeColors = theme.colors as Record<string, any> | undefined;
       if (!themeColors || typeof themeColors !== 'object') return;
 
-      const updatedSettings = { ...theme };
+      const updatedSettings = { ...theme, ...settings };
 
       // Se uma predefinição foi aplicada, salvar para ambos os modos
       // resolve userId: prefer profile, caso não esteja disponível tentar buscar via supabase.auth
@@ -243,27 +267,30 @@ export default function CustomizacaoTab() {
         const existingLight = (theme.colors && (theme.colors as any).light) || {};
         const existingDark = (theme.colors && (theme.colors as any).dark) || {};
 
+        const lightSec = lightColors.secondary || lightColors.sidebar_bg || '#e9c4c2';
+        const darkSec = darkColors.secondary || darkColors.sidebar_bg || '#4a2c2b';
+
         // Preparar configurações para light (cast seguro via unknown para satisfazer o TS)
         const lightUpdatedColors = {
           ...existingLight,
           ...(lightColors || {}),
+          secondary: lightSec,
+          sidebar_bg: lightColors.sidebar_bg || lightSec,
         } as unknown as import('@/lib/types').ThemeColors;
 
         // Preparar configurações para dark (cast seguro via unknown para satisfazer o TS)
         const darkUpdatedColors = {
           ...existingDark,
           ...(darkColors || {}),
+          secondary: darkSec,
+          sidebar_bg: darkColors.sidebar_bg || darkSec,
         } as unknown as import('@/lib/types').ThemeColors;
 
-        // Aplicar campos globais da predefinição
-        if ('sidebar_bg' in appliedPreset) {
-          updatedSettings.sidebar_bg = appliedPreset.sidebar_bg;
-        }
-        if ('sidebar_hover_bg' in appliedPreset) {
+        const currentActiveMode = themeMode === 'system' ? 'light' : themeMode;
+        updatedSettings.sidebar_bg = currentActiveMode === 'dark' ? darkSec : lightSec;
+        updatedSettings.header_bg = currentActiveMode === 'dark' ? darkSec : lightSec;
+        if ('sidebar_hover_bg' in appliedPreset && appliedPreset.sidebar_hover_bg) {
           updatedSettings.sidebar_hover_bg = appliedPreset.sidebar_hover_bg;
-        }
-        if ('header_bg' in appliedPreset) {
-          updatedSettings.header_bg = appliedPreset.header_bg;
         }
 
         // Preparar payload explícito incluindo logos/escala
@@ -296,12 +323,14 @@ export default function CustomizacaoTab() {
               .eq('user_id', userId)
               .eq('theme_mode', 'light')
               .maybeSingle();
-            if (!verify) {
-              toast('Configuração salva localmente; persistência no servidor não confirmada.', {
-                icon: '⚠️',
-              });
-            } else {
+            if (verify) {
               toast.success('Persistência confirmada no servidor');
+            }
+            if (updatedSettings.company_logo_url) {
+              await supabase
+                .from('profiles')
+                .update({ company_logo_url: updatedSettings.company_logo_url })
+                .eq('id', userId);
             }
           }
         } catch (err) {
@@ -340,12 +369,19 @@ export default function CustomizacaoTab() {
             updatedSettings.footer_system_version = value as string;
           } else if (key === 'sidebar_bg') {
             updatedSettings.sidebar_bg = value as string;
+            updatedColors.sidebar_bg = value;
           } else if (key === 'sidebar_hover_bg') {
             updatedSettings.sidebar_hover_bg = value as string;
+            updatedColors.sidebar_hover_bg = value;
           } else if (key === 'header_bg') {
             updatedSettings.header_bg = value as string;
+            updatedColors.header_bg = value;
           } else if (typeof value === 'string') {
             updatedColors[key] = value;
+            if (key === 'secondary') {
+              updatedColors.sidebar_bg = value;
+              updatedSettings.sidebar_bg = value;
+            }
           }
         });
 
@@ -534,7 +570,7 @@ export default function CustomizacaoTab() {
           jsonObj.presets = jsonObj.presets || [];
           jsonObj.presets.push(presetObj);
 
-          const rowId = Number(String(row.id ?? ''));
+          const rowId = row.id;
           const { error: updateErr } = await supabase
             .from('user_theme_colors')
             .update({ colors_json: JSON.stringify(jsonObj), updated_at: new Date().toISOString() })
@@ -549,6 +585,7 @@ export default function CustomizacaoTab() {
           const jsonObj = { presets: [presetObj] };
           const { error: insertErr } = await supabase.from('user_theme_colors').insert({
             user_id: profile.id,
+            organization_id: profile.organization_id || null,
             theme_mode: mode,
             primary_color: (settings.primary as string) || '#4A2C2B',
             titulo_paginas_color: (settings.tituloPaginas as string) || '#ffffff',

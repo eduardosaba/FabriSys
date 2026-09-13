@@ -12,6 +12,8 @@ import { useAuth } from '@/lib/auth';
 import { useTheme } from '@/lib/theme';
 import SystemAlertPopup from '@/components/SystemAlertPopup';
 
+import MobileQuickActionBar from '@/components/ui/MobileQuickActionBar';
+
 export default function DashboardClientWrapper({
   children,
   logoUrl,
@@ -35,9 +37,7 @@ export default function DashboardClientWrapper({
     if (logo) setEffectiveLogo(logo);
 
     const primary =
-      (profile as any)?.theme_primary_color ||
-      (profile as any)?.primary_color ||
-      (org as any)?.primary_color;
+      profile?.theme_primary_color || profile?.primary_color || (org as any)?.primary_color;
     if (primary && typeof document !== 'undefined') {
       try {
         document.documentElement.style.setProperty('--primary-color', primary);
@@ -47,22 +47,40 @@ export default function DashboardClientWrapper({
     }
   }, [profile, org, logoUrl]);
 
-  // Carrega tema da organização assim que soubermos a organization_id
+  const orgId = profile?.organization_id || '';
+  const userId = profile?.id || '';
+
+  // Carrega tema da organização / usuário assim que soubermos orgId ou userId
   useEffect(() => {
-    if (profile?.organization_id) {
+    if (orgId || userId) {
       try {
-        void loadThemeByOrg(profile.organization_id);
+        void loadThemeByOrg(orgId, userId);
       } catch (e) {
         void e;
       }
     }
-  }, [profile?.organization_id, loadThemeByOrg]);
+  }, [orgId, userId, loadThemeByOrg]);
 
   const isOnboardingPage = pathname === '/dashboard/onboarding';
 
   useEffect(() => {
     if (!loadingOrg && org && profile) {
       if (profile.role === 'master') return;
+
+      // Trava de Rota para Perfil Express / PDV Simples
+      if (profile.role === 'express' || profile.role === 'pdv_simples') {
+        const rotasPermitidas = [
+          '/dashboard/acerto-diario',
+          '/dashboard/acerto-diario/auditoria',
+          '/dashboard/producao/produtos',
+        ];
+        const rotaPermitida = rotasPermitidas.some((r) => pathname.startsWith(r));
+        if (!rotaPermitida) {
+          router.replace('/dashboard/acerto-diario/auditoria');
+          return;
+        }
+      }
+
       if (!org?.setup_concluido && !isOnboardingPage) {
         router.replace('/dashboard/onboarding');
       }
@@ -70,7 +88,7 @@ export default function DashboardClientWrapper({
         router.replace('/dashboard');
       }
     }
-  }, [org, loadingOrg, isOnboardingPage, router, profile]);
+  }, [org, loadingOrg, isOnboardingPage, router, profile, pathname]);
 
   if (loadingOrg) {
     return (
@@ -89,7 +107,18 @@ export default function DashboardClientWrapper({
   }
 
   return (
-    <AuthGuard requiredRoles={['admin', 'fabrica', 'master', 'pdv', 'gerente', 'compras']}>
+    <AuthGuard
+      requiredRoles={[
+        'admin',
+        'fabrica',
+        'master',
+        'pdv',
+        'gerente',
+        'compras',
+        'express',
+        'pdv_simples',
+      ]}
+    >
       <LicenseGuard>
         <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
           {isSidebarOpen && (
@@ -114,12 +143,13 @@ export default function DashboardClientWrapper({
             />
 
             <div className="flex flex-col flex-1 w-full">
-              <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto animate-fade-up">
+              <main className="flex-1 p-4 md:p-6 lg:p-8 pb-20 md:pb-8 w-full max-w-[1600px] mx-auto animate-fade-up">
                 {children}
               </main>
             </div>
           </div>
 
+          <MobileQuickActionBar />
           <SystemAlertPopup />
         </div>
       </LicenseGuard>

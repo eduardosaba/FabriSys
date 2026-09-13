@@ -12,6 +12,15 @@ import ConfigDashboardTab from '@/app/dashboard/configuracoes/ConfigDashboardTab
 // Definição dos Módulos do Sistema (baseado no Sidebar) — inclui IDs de subitens
 const MODULOS = [
   { id: 'dashboard', label: 'Visão Geral (Dashboard)' },
+
+  // Acerto Diário / Módulo Express (Novas Funcionalidades)
+  { id: 'acertos_rapidos', label: 'Acertos & PDVs (Menu Principal)' },
+  { id: 'lancar_turno', label: 'Acerto Diário: Romaneio & Lançamento de Sobras' },
+  { id: 'auditoria_geral', label: 'Acerto Diário: Painel & Diferenças nos Caixas' },
+  { id: 'fechamento_diario', label: 'Acerto Diário: Fechamento do Dia (Trava Reversa)' },
+  { id: 'conciliacao_bancaria', label: 'Acerto Diário: Conciliação Pix/Cartão vs Gaveta' },
+  { id: 'ranking_produtos', label: 'Acerto Diário: Ranking de Doces Mais Vendidos' },
+
   { id: 'agenda', label: 'Agenda & Tarefas' },
   { id: 'planejamento', label: 'Planejamento de Produção' },
 
@@ -89,7 +98,10 @@ const PERFIS = [
   { id: 'gerente', label: 'Gerente' },
   { id: 'compras', label: 'Compras' },
   { id: 'fabrica', label: 'Fábrica' },
-  { id: 'pdv', label: 'PDV' },
+  { id: 'pdv', label: 'PDV (Caixa Completo)' },
+  { id: 'express', label: 'Express (Acerto Diário)' },
+  { id: 'pdv_simples', label: 'PDV Operador (Simples)' },
+  { id: 'user', label: 'Usuário Padrão' },
 ];
 
 const DEFAULT_PERMISSOES: Record<string, string[]> = {
@@ -97,8 +109,34 @@ const DEFAULT_PERMISSOES: Record<string, string[]> = {
   admin: ['all'],
   gerente: [],
   compras: [],
-  fabrica: [],
-  pdv: ['pdv', 'relatorios'],
+  fabrica: [
+    'producao',
+    'fabrica_dashboard',
+    'producao_kanban',
+    'ordens_producao',
+    'produtos',
+    'ficha_tecnica',
+    'estoque_fabrica',
+  ],
+  pdv: [
+    'pdv',
+    'pdv_caixa',
+    'pdv_controle_caixa',
+    'pdv_recebimento',
+    'pdv_inventario',
+    'relatorios',
+  ],
+  express: [
+    'acertos_rapidos',
+    'lancar_turno',
+    'auditoria_geral',
+    'fechamento_diario',
+    'conciliacao_bancaria',
+    'ranking_produtos',
+    'produtos',
+  ],
+  pdv_simples: ['acertos_rapidos', 'lancar_turno', 'pdv', 'pdv_caixa'],
+  user: [],
 };
 
 export default function PermissoesTab() {

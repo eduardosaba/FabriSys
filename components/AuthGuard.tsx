@@ -32,10 +32,14 @@ export default function AuthGuard({
 
     if (requiredRoles.length > 0 && !requiredRoles.includes(profile.role)) {
       // Redirecionar baseado no role atual
-      switch (profile.role) {
+      switch (profile.role as string) {
         case 'admin':
         case 'fabrica':
           router.push('/dashboard');
+          break;
+        case 'express':
+        case 'pdv_simples':
+          router.push('/dashboard/acerto-diario/auditoria');
           break;
         case 'pdv':
           router.push('/dashboard/pedidos-compra');

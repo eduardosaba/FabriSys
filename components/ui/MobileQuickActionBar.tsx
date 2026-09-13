@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { Store, BarChart3, Lock, Package } from 'lucide-react';
+import { Store, Lock, Package, LayoutDashboard } from 'lucide-react';
 
 export default function MobileQuickActionBar() {
   const pathname = usePathname();
@@ -19,10 +19,10 @@ export default function MobileQuickActionBar() {
 
   const items = [
     {
-      id: 'auditoria',
-      label: 'Auditoria',
+      id: 'visao_geral',
+      label: 'Visão Geral',
       href: '/dashboard/acerto-diario/auditoria',
-      icon: <BarChart3 className="h-5 w-5" />,
+      icon: <LayoutDashboard className="h-5 w-5" />,
     },
     {
       id: 'lancar',

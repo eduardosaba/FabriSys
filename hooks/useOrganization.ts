@@ -14,7 +14,7 @@ interface Organization {
 }
 
 export function useOrganization() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [org, setOrg] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -22,49 +22,98 @@ export function useOrganization() {
     let mounted = true;
 
     async function loadOrg() {
-      // Se não há email no profile, não tenta buscar
+      if (authLoading) return;
+
+      // 1. Usar os dados da organização já embutidos no perfil se disponíveis
+      if (profile?.organizations) {
+        const orgData: any = Array.isArray(profile.organizations)
+          ? profile.organizations[0]
+          : profile.organizations;
+        if (orgData && orgData.id) {
+          if (mounted) {
+            setOrg({
+              id: String(orgData.id),
+              nome: String(orgData.nome ?? ''),
+              plano: String(orgData.plano ?? ''),
+              setup_concluido: (orgData.setup_concluido as boolean) ?? true,
+              logo_url: orgData.logo_url ?? undefined,
+            });
+            setLoading(false);
+          }
+          return;
+        }
+      }
+
       if (!profile?.email) {
         if (mounted) {
-          setOrg(null);
+          setOrg(
+            profile?.organization_id
+              ? {
+                  id: String(profile.organization_id),
+                  nome: 'Sua Organização',
+                  plano: 'Pro',
+                  setup_concluido: true,
+                }
+              : null
+          );
           setLoading(false);
         }
         return;
       }
 
       try {
-        setLoading(true);
+        const fetchWithTimeout = <T>(promise: Promise<T>, ms = 3500): Promise<T | null> =>
+          Promise.race([promise, new Promise<null>((r) => setTimeout(() => r(null), ms))]);
 
-        const { data: colaborador, error } = await supabase
-          .from('colaboradores')
-          .select('organization_id, organizations(id, nome, plano, setup_concluido)')
-          .eq('email', profile.email)
-          .maybeSingle();
-
-        if (error) throw error;
+        const res: any = await fetchWithTimeout(
+          supabase
+            .from('colaboradores')
+            .select('organization_id, organizations(id, nome, plano, setup_concluido)')
+            .eq('email', profile.email)
+            .maybeSingle()
+        );
 
         if (!mounted) return;
+
+        const colaborador = res?.data;
 
         if (colaborador?.organizations) {
           const orgData = Array.isArray(colaborador.organizations)
             ? colaborador.organizations[0]
             : colaborador.organizations;
 
-          // Normaliza o campo setup_concluido: se undefined/null, assume false
           const normalized: Organization = {
             id: String(orgData.id),
             nome: String(orgData.nome ?? ''),
             plano: String(orgData.plano ?? ''),
-            setup_concluido: (orgData.setup_concluido as boolean) ?? false,
+            setup_concluido: (orgData.setup_concluido as boolean) ?? true,
           };
 
           setOrg(normalized);
+        } else if (profile?.organization_id) {
+          setOrg({
+            id: String(profile.organization_id),
+            nome: 'Sua Organização',
+            plano: 'Pro',
+            setup_concluido: true,
+          });
         } else {
           setOrg(null);
         }
       } catch (err) {
-        // manter log para debug; não lançar para não quebrar a UI
         console.error('Erro ao carregar organização:', err);
-        if (mounted) setOrg(null);
+        if (mounted) {
+          if (profile?.organization_id) {
+            setOrg({
+              id: String(profile.organization_id),
+              nome: 'Sua Organização',
+              plano: 'Pro',
+              setup_concluido: true,
+            });
+          } else {
+            setOrg(null);
+          }
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -75,7 +124,7 @@ export function useOrganization() {
     return () => {
       mounted = false;
     };
-  }, [profile?.email]);
+  }, [profile, authLoading]);
 
   return { org, loading };
 }

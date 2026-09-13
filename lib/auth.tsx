@@ -86,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Evitar chamadas duplicadas simultaneas
       if (fetchingProfile.current && lastFetchedUserId.current === userId) {
         console.log(`[AuthProvider] ⏭️ Pulando fetchProfile duplicado para ${userId}`);
+        setLoading(false);
         return;
       }
 
@@ -106,9 +107,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        // Executar buscas em paralelo para reduzir latência percebida.
+        // Executar buscas em paralelo para reduzir latência percebida com timeout de segurança.
         let baseProfile: Profile | null = null;
         try {
+          const fetchWithTimeout = <T,>(promise: Promise<T>, ms = 4000): Promise<T | null> =>
+            Promise.race([promise, new Promise<null>((r) => setTimeout(() => r(null), ms))]);
+
           const colabQ: any = supabase
             .from('colaboradores')
             .select('*')
@@ -121,14 +125,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .maybeSingle();
 
           console.time('[AuthProvider] profile-queries');
-          const [colabRes, profRes] = await Promise.allSettled([colabQ, profQ]);
+          const [colabRes, profRes] = await Promise.allSettled([
+            fetchWithTimeout(colabQ),
+            fetchWithTimeout(profQ),
+          ]);
           console.timeEnd('[AuthProvider] profile-queries');
 
-          const colab: any = colabRes.status === 'fulfilled' ? colabRes.value.data : null;
+          const colab: any = colabRes.status === 'fulfilled' ? (colabRes.value as any)?.data : null;
           const colabErr: any = colabRes.status === 'rejected' ? colabRes.reason : null;
           if (colabErr) console.warn('[AuthProvider] ⚠️ colaboradores query erro:', colabErr);
           if (colab) baseProfile = colab as Profile;
-          const profVal: any = profRes.status === 'fulfilled' ? profRes.value : null;
+          const profVal: any = profRes.status === 'fulfilled' ? (profRes.value as any) : null;
           if (profRes.status === 'rejected')
             console.warn('[AuthProvider] ⚠️ profiles query erro:', profRes.reason);
 

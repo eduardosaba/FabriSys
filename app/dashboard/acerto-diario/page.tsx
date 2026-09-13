@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/useToast';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { useConfirm } from '@/hooks/useConfirm';
 import { PDVSelectorCards } from '@/components/ui/shared/PDVSelectorCards';
+import confetti from 'canvas-confetti';
 import {
   AlertCircle,
   AlertTriangle,
@@ -76,6 +77,25 @@ export default function AcertoDiarioPage() {
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
+  // Modal de Sucesso no Centro da Tela
+  const [successModal, setSuccessModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    detalhes?: {
+      pdv: string;
+      data: string;
+      totalEnviado?: number;
+      totalVendidos?: number;
+      valorDinheiro?: number;
+      pixCartaoEsperado?: number;
+    };
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+  });
+
   // Modo de Operação: 'detalhado' (Romaneio / Substitui Caderno) ou 'rapido' (Volume Global)
   const [modo, setModo] = useState<'detalhado' | 'rapido'>('detalhado');
 
@@ -83,7 +103,9 @@ export default function AcertoDiarioPage() {
   const [etapaAcerto, setEtapaAcerto] = useState<'envio' | 'fechamento' | 'tudo'>('envio');
 
   // Status do Fechamento do PDV Selecionado: 'aberto' (pendente de encerramento), 'encerrado' (já concluído), 'sem_carga' ou 'sobra_acumulada' (com produtos no estoque)
-  const [statusFechamentoPDV, setStatusFechamentoPDV] = useState<'aberto' | 'encerrado' | 'sem_carga' | 'sobra_acumulada'>('sem_carga');
+  const [statusFechamentoPDV, setStatusFechamentoPDV] = useState<
+    'aberto' | 'encerrado' | 'sem_carga' | 'sobra_acumulada'
+  >('sem_carga');
 
   // Tipo de Fechamento: 'diario' (Padrão), 'parcial' (Sobra Acumulada no PDV) ou 'semanal' (Encerramento do Ciclo)
   const [tipoFechamento, setTipoFechamento] = useState<'diario' | 'parcial' | 'semanal'>('parcial');
@@ -119,7 +141,9 @@ export default function AcertoDiarioPage() {
     d.setDate(1);
     return d.toISOString().split('T')[0];
   });
-  const [dataFimTudo, setDataFimTudo] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [dataFimTudo, setDataFimTudo] = useState<string>(
+    () => new Date().toISOString().split('T')[0]
+  );
   const [turnoTudo, setTurnoTudo] = useState<string>('todos');
   const [pdvTudo, setPdvTudo] = useState<string>('todos');
   const [historicoTudo, setHistoricoTudo] = useState<any[]>([]);
@@ -166,18 +190,37 @@ export default function AcertoDiarioPage() {
   }, [etapaAcerto, dataInicioTudo, dataFimTudo, turnoTudo, pdvTudo, profile?.organization_id]);
 
   // Totais Agregados para a Aba 3
-  const totEnviadoTudo = historicoTudo.reduce((acc, r) => acc + (Number(r.qtd_total_enviada) || 0), 0);
-  const totSobraTudo = historicoTudo.reduce((acc, r) => acc + (Number(r.qtd_total_retorno) || 0), 0);
-  const totVendidosTudo = historicoTudo.reduce(
-    (acc, r) => acc + Math.max(0, (Number(r.qtd_total_enviada) || 0) - (Number(r.qtd_total_retorno) || 0)),
+  const totEnviadoTudo = historicoTudo.reduce(
+    (acc, r) => acc + (Number(r.qtd_total_enviada) || 0),
     0
   );
-  const totDinheiroTudo = historicoTudo.reduce((acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0), 0);
-  const totCartaoTudo = historicoTudo.reduce((acc, r) => acc + (Number(r.valor_cartao_declarado) || 0), 0);
-  const totPixTudo = historicoTudo.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
+  const totSobraTudo = historicoTudo.reduce(
+    (acc, r) => acc + (Number(r.qtd_total_retorno) || 0),
+    0
+  );
+  const totVendidosTudo = historicoTudo.reduce(
+    (acc, r) =>
+      acc + Math.max(0, (Number(r.qtd_total_enviada) || 0) - (Number(r.qtd_total_retorno) || 0)),
+    0
+  );
+  const totDinheiroTudo = historicoTudo.reduce(
+    (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+    0
+  );
+  const totCartaoTudo = historicoTudo.reduce(
+    (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
+    0
+  );
+  const totPixTudo = historicoTudo.reduce(
+    (acc, r) => acc + (Number(r.valor_pix_declarado) || 0),
+    0
+  );
   const totFaturamentoTudo = historicoTudo.reduce((acc, r) => {
     const liq = Number(r.faturamento_liquido_esperado) || Number(r.faturamento_bruto_teorico) || 0;
-    const meiopag = (Number(r.valor_dinheiro_gaveta) || 0) + (Number(r.valor_cartao_declarado) || 0) + (Number(r.valor_pix_declarado) || 0);
+    const meiopag =
+      (Number(r.valor_dinheiro_gaveta) || 0) +
+      (Number(r.valor_cartao_declarado) || 0) +
+      (Number(r.valor_pix_declarado) || 0);
     return acc + (liq > 0 ? liq : meiopag);
   }, 0);
 
@@ -305,7 +348,10 @@ export default function AcertoDiarioPage() {
         if (profile?.organization_id) {
           queryLocais = queryLocais.eq('organization_id', profile.organization_id);
         }
-        let { data: dataLocais, error: errorLocais } = await queryLocais.order('ordem', { ascending: true }).order('nome');
+        const { data: dataLocaisRaw, error: errorLocais } = await queryLocais
+          .order('ordem', { ascending: true })
+          .order('nome');
+        let dataLocais = dataLocaisRaw;
 
         if (errorLocais && errorLocais.message?.includes('ordem')) {
           const res = await queryLocais.order('nome');
@@ -314,9 +360,16 @@ export default function AcertoDiarioPage() {
 
         // Se a busca por organization_id não retornar nenhum local, busca sem filtro para garantir exibição
         if (!dataLocais || dataLocais.length === 0) {
-          let { data: fallbackLocais } = await supabase.from('locais').select('id, nome, tipo, logo_url, ordem').order('ordem', { ascending: true }).order('nome');
+          let { data: fallbackLocais } = await supabase
+            .from('locais')
+            .select('id, nome, tipo, logo_url, ordem')
+            .order('ordem', { ascending: true })
+            .order('nome');
           if (!fallbackLocais) {
-            const resFallback = await supabase.from('locais').select('id, nome, tipo, logo_url').order('nome');
+            const resFallback = await supabase
+              .from('locais')
+              .select('id, nome, tipo, logo_url')
+              .order('nome');
             fallbackLocais = resFallback.data;
           }
           dataLocais = fallbackLocais ?? [];
@@ -401,7 +454,9 @@ export default function AcertoDiarioPage() {
         // 1. Tentar buscar romaneio com status 'aberto' especificamente na data selecionada
         const { data: romaneioAbertoNaData } = await supabase
           .from('remessas_cargas_pdv')
-          .select('id, status, itens_grade, modo_lancamento, vendedor_nome, qtd_total_enviada, data, turno')
+          .select(
+            'id, status, itens_grade, modo_lancamento, vendedor_nome, qtd_total_enviada, data, turno'
+          )
           .eq('organization_id', profile.organization_id)
           .eq('local_id', localId)
           .eq('data', dataAcerto)
@@ -411,7 +466,10 @@ export default function AcertoDiarioPage() {
         // Se houver uma carga com status 'aberto' lançada especificamente nesta data
         if (romaneioAbertoNaData && Array.isArray(romaneioAbertoNaData.itens_grade)) {
           setStatusFechamentoPDV('aberto');
-          const itemMap: Record<string, { qtd_sobra_anterior: number; qtd_enviada: number; qtd_retorno: number }> = {};
+          const itemMap: Record<
+            string,
+            { qtd_sobra_anterior: number; qtd_enviada: number; qtd_retorno: number }
+          > = {};
           romaneioAbertoNaData.itens_grade.forEach((it: any) => {
             if (it.produto_id) {
               itemMap[it.produto_id] = {
@@ -433,17 +491,20 @@ export default function AcertoDiarioPage() {
             }))
           );
 
-          if (romaneioAbertoNaData.modo_lancamento) setModo(romaneioAbertoNaData.modo_lancamento as any);
+          if (romaneioAbertoNaData.modo_lancamento) setModo(romaneioAbertoNaData.modo_lancamento);
           setVendedorNome(romaneioAbertoNaData.vendedor_nome || '');
-          if (romaneioAbertoNaData.qtd_total_enviada) setQtdEnviadaRapida(romaneioAbertoNaData.qtd_total_enviada);
-          if (romaneioAbertoNaData.turno) setTurno(romaneioAbertoNaData.turno as any);
+          if (romaneioAbertoNaData.qtd_total_enviada)
+            setQtdEnviadaRapida(romaneioAbertoNaData.qtd_total_enviada);
+          if (romaneioAbertoNaData.turno) setTurno(romaneioAbertoNaData.turno);
           return;
         }
 
         // 2. Verificar se existe algum romaneio já encerrado ou auditado na data selecionada
         const { data: romaneioEncerradoNaData } = await supabase
           .from('remessas_cargas_pdv')
-          .select('id, status, itens_grade, modo_lancamento, vendedor_nome, qtd_total_enviada, data, turno')
+          .select(
+            'id, status, itens_grade, modo_lancamento, vendedor_nome, qtd_total_enviada, data, turno'
+          )
           .eq('organization_id', profile.organization_id)
           .eq('local_id', localId)
           .eq('data', dataAcerto)
@@ -452,10 +513,11 @@ export default function AcertoDiarioPage() {
           .maybeSingle();
 
         if (romaneioEncerradoNaData) {
-          setStatusFechamentoPDV(romaneioEncerradoNaData.status as any);
+          setStatusFechamentoPDV(romaneioEncerradoNaData.status);
           setVendedorNome(romaneioEncerradoNaData.vendedor_nome || '');
-          if (romaneioEncerradoNaData.turno) setTurno(romaneioEncerradoNaData.turno as any);
-          if (romaneioEncerradoNaData.modo_lancamento) setModo(romaneioEncerradoNaData.modo_lancamento as any);
+          if (romaneioEncerradoNaData.turno) setTurno(romaneioEncerradoNaData.turno);
+          if (romaneioEncerradoNaData.modo_lancamento)
+            setModo(romaneioEncerradoNaData.modo_lancamento);
           return;
         }
 
@@ -502,7 +564,7 @@ export default function AcertoDiarioPage() {
     const nomeEmpresa =
       profile?.organizations?.nome ||
       profile?.organization_name ||
-      (profile as any)?.empresa_nome ||
+      profile?.empresa_nome ||
       'Larissa Saba - Doces Gourmet';
     const dataAtual = new Date(dataAcerto + 'T12:00:00').toLocaleDateString('pt-BR');
     const tipoLabel =
@@ -555,10 +617,10 @@ export default function AcertoDiarioPage() {
               </thead>
               <tbody>
                 ${gradeItens
-        .map((it) => {
-          const disp = (it.qtd_sobra_anterior || 0) + (it.qtd_enviada || 0);
-          const vend = Math.max(0, disp - (it.qtd_retorno || 0));
-          return `
+                  .map((it) => {
+                    const disp = (it.qtd_sobra_anterior || 0) + (it.qtd_enviada || 0);
+                    const vend = Math.max(0, disp - (it.qtd_retorno || 0));
+                    return `
                     <tr>
                       <td>${it.nome}</td>
                       <td class="text-center">${disp}</td>
@@ -566,8 +628,8 @@ export default function AcertoDiarioPage() {
                       <td class="text-right"><strong>${vend}</strong></td>
                     </tr>
                   `;
-        })
-        .join('')}
+                  })
+                  .join('')}
               </tbody>
             </table>
             <div class="divider"></div>
@@ -578,12 +640,16 @@ export default function AcertoDiarioPage() {
             <div class="bold text-center">RECEBIMENTOS</div>
             <div class="flex-between"><span>Vendas Dinheiro:</span><strong>R$ ${valorDinheiro.toFixed(2)}</strong></div>
             <div class="flex-between"><span>Pix/Cartão Esperado:</span><strong>R$ ${pixCartaoEsperado.toFixed(2)}</strong></div>
-            ${declaraDigital ? `
+            ${
+              declaraDigital
+                ? `
               <div class="flex-between"><span>Pix Declarado:</span><strong>R$ ${(Number(valorPix) || 0).toFixed(2)}</strong></div>
               <div class="flex-between"><span>Cartão Declarado:</span><strong>R$ ${(Number(valorCartao) || 0).toFixed(2)}</strong></div>
               <div class="flex-between"><span>Diferença Digital:</span><strong>R$ ${diferencaDigital.toFixed(2)}</strong></div>
               <div class="flex-between"><span>Diferença Geral Caixa:</span><strong>R$ ${diferencaCaixa.toFixed(2)}</strong></div>
-            ` : ''}
+            `
+                : ''
+            }
             <div class="divider"></div>
             <p class="text-center" style="font-size:10px; margin: 12px 0 0 0;">Assinatura Operador: ___________________</p>
           </div>
@@ -720,7 +786,8 @@ export default function AcertoDiarioPage() {
       if (totalEnviado <= 0) {
         toast({
           title: 'Nenhum Dado Preenchido',
-          description: 'Informe a quantidade enviada de pelo menos um produto antes de registrar o envio.',
+          description:
+            'Informe a quantidade enviada de pelo menos um produto antes de registrar o envio.',
           variant: 'warning',
         });
         return;
@@ -735,7 +802,8 @@ export default function AcertoDiarioPage() {
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 rounded-lg text-xs border border-slate-200">
               <div>
-                <span className="font-semibold text-slate-700">Data / Turno:</span> {dataAcerto} ({turno.toUpperCase()})
+                <span className="font-semibold text-slate-700">Data / Turno:</span> {dataAcerto} (
+                {turno.toUpperCase()})
               </div>
               {vendedorNome.trim() ? (
                 <div>
@@ -766,7 +834,10 @@ export default function AcertoDiarioPage() {
               {modo === 'detalhado' ? (
                 itensEnviados.length > 0 ? (
                   itensEnviados.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-50">
+                    <div
+                      key={idx}
+                      className="flex justify-between items-center p-2 hover:bg-slate-50"
+                    >
                       <span className="font-medium text-slate-800 truncate pr-2">{item.nome}</span>
                       <span className="font-bold text-primary shrink-0 bg-primary/10 px-2 py-0.5 rounded">
                         {item.qtd_enviada} un
@@ -774,12 +845,18 @@ export default function AcertoDiarioPage() {
                     </div>
                   ))
                 ) : (
-                  <div className="p-3 text-center text-slate-400">Nenhum produto com quantidade enviada.</div>
+                  <div className="p-3 text-center text-slate-400">
+                    Nenhum produto com quantidade enviada.
+                  </div>
                 )
               ) : (
                 <div className="p-3 flex justify-between items-center">
-                  <span className="font-medium text-slate-800">Produtos Enviados (Modo Rápido)</span>
-                  <span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">{totalEnviado} un</span>
+                  <span className="font-medium text-slate-800">
+                    Produtos Enviados (Modo Rápido)
+                  </span>
+                  <span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                    {totalEnviado} un
+                  </span>
                 </div>
               )}
             </div>
@@ -808,7 +885,8 @@ export default function AcertoDiarioPage() {
           <div className="space-y-3 text-left">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 bg-slate-50 rounded-lg text-xs border border-slate-200">
               <div>
-                <span className="font-semibold text-slate-700">Data / Turno:</span> {dataAcerto} ({turno.toUpperCase()})
+                <span className="font-semibold text-slate-700">Data / Turno:</span> {dataAcerto} (
+                {turno.toUpperCase()})
               </div>
               {vendedorNome.trim() ? (
                 <div>
@@ -834,15 +912,21 @@ export default function AcertoDiarioPage() {
 
             <div className="grid grid-cols-3 gap-2 p-2.5 bg-primary/5 rounded-lg border border-primary/10 text-xs text-center">
               <div>
-                <span className="text-[10px] text-slate-500 uppercase font-semibold block">Total Disponível</span>
+                <span className="text-[10px] text-slate-500 uppercase font-semibold block">
+                  Total Disponível
+                </span>
                 <span className="font-bold text-slate-800">{totalDisponivelDetalhado} un</span>
               </div>
               <div>
-                <span className="text-[10px] text-amber-700 uppercase font-semibold block">Sobra em Loja</span>
+                <span className="text-[10px] text-amber-700 uppercase font-semibold block">
+                  Sobra em Loja
+                </span>
                 <span className="font-bold text-amber-700">{totalRetorno} un</span>
               </div>
               <div>
-                <span className="text-[10px] text-primary uppercase font-semibold block">Vendidos</span>
+                <span className="text-[10px] text-primary uppercase font-semibold block">
+                  Vendidos
+                </span>
                 <span className="font-bold text-primary">{totalVendidos} un</span>
               </div>
             </div>
@@ -854,12 +938,18 @@ export default function AcertoDiarioPage() {
                 </p>
                 <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 text-xs bg-white">
                   {itensComMovimentacao.map((item, idx) => {
-                    const disp = (Number(item.qtd_sobra_anterior) || 0) + (Number(item.qtd_enviada) || 0);
+                    const disp =
+                      (Number(item.qtd_sobra_anterior) || 0) + (Number(item.qtd_enviada) || 0);
                     const sob = Number(item.qtd_retorno) || 0;
                     const vend = Math.max(0, disp - sob);
                     return (
-                      <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-50">
-                        <span className="font-medium text-slate-800 truncate pr-2">{item.nome}</span>
+                      <div
+                        key={idx}
+                        className="flex justify-between items-center p-2 hover:bg-slate-50"
+                      >
+                        <span className="font-medium text-slate-800 truncate pr-2">
+                          {item.nome}
+                        </span>
                         <div className="flex items-center gap-3 text-[11px] shrink-0">
                           <span className="text-slate-500">Disp: {disp}</span>
                           <span className="text-amber-700 font-semibold">Sobra: {sob}</span>
@@ -875,15 +965,21 @@ export default function AcertoDiarioPage() {
             <div className="p-3 bg-slate-900 text-white rounded-xl text-xs space-y-1.5 shadow-sm">
               <div className="flex justify-between text-slate-300">
                 <span>Receita Exigida Teórica:</span>
-                <span className="font-mono font-bold text-white">R$ {faturamentoTeorico.toFixed(2)}</span>
+                <span className="font-mono font-bold text-white">
+                  R$ {faturamentoTeorico.toFixed(2)}
+                </span>
               </div>
               <div className="flex justify-between text-slate-300">
                 <span>Dinheiro Físico na Gaveta:</span>
-                <span className="font-mono font-bold text-emerald-400">R$ {(Number(valorDinheiro) || 0).toFixed(2)}</span>
+                <span className="font-mono font-bold text-emerald-400">
+                  R$ {(Number(valorDinheiro) || 0).toFixed(2)}
+                </span>
               </div>
               <div className="flex justify-between text-slate-300 border-t border-slate-700 pt-1">
                 <span>Vendas Pix / Cartão Esperadas:</span>
-                <span className="font-mono font-bold text-cyan-300">R$ {pixCartaoEsperado.toFixed(2)}</span>
+                <span className="font-mono font-bold text-cyan-300">
+                  R$ {pixCartaoEsperado.toFixed(2)}
+                </span>
               </div>
               {declaraDigital && (
                 <>
@@ -894,29 +990,45 @@ export default function AcertoDiarioPage() {
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-400 pl-2">
-                    • Pix: R$ {(Number(valorPix) || 0).toFixed(2)} | Cartão: R$ {(Number(valorCartao) || 0).toFixed(2)}
+                    • Pix: R$ {(Number(valorPix) || 0).toFixed(2)} | Cartão: R${' '}
+                    {(Number(valorCartao) || 0).toFixed(2)}
                   </div>
-                  <div className={`flex justify-between font-bold pt-1 border-t border-slate-700 ${diferencaDigital < -0.05 ? 'text-rose-400' : diferencaDigital > 0.05 ? 'text-emerald-400' : 'text-cyan-300'
-                    }`}>
+                  <div
+                    className={`flex justify-between font-bold pt-1 border-t border-slate-700 ${
+                      diferencaDigital < -0.05
+                        ? 'text-rose-400'
+                        : diferencaDigital > 0.05
+                          ? 'text-emerald-400'
+                          : 'text-cyan-300'
+                    }`}
+                  >
                     <span>Diferença Digital (Pix/Cartão):</span>
-                    <span className="font-mono">{diferencaDigital > 0 ? '+' : ''}R$ {diferencaDigital.toFixed(2)}</span>
+                    <span className="font-mono">
+                      {diferencaDigital > 0 ? '+' : ''}R$ {diferencaDigital.toFixed(2)}
+                    </span>
                   </div>
                 </>
               )}
               {declaraDigital && diferencaCaixa !== 0 && (
-                <div className={`flex justify-between font-bold pt-1 border-t border-slate-700 ${diferencaCaixa < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                  <span>{diferencaCaixa < 0 ? 'Furo de Caixa Total:' : 'Sobra no Caixa Total:'}</span>
+                <div
+                  className={`flex justify-between font-bold pt-1 border-t border-slate-700 ${diferencaCaixa < 0 ? 'text-rose-400' : 'text-emerald-400'}`}
+                >
+                  <span>
+                    {diferencaCaixa < 0 ? 'Furo de Caixa Total:' : 'Sobra no Caixa Total:'}
+                  </span>
                   <span className="font-mono">R$ {diferencaCaixa.toFixed(2)}</span>
                 </div>
               )}
             </div>
 
-            {(Number(valorDinheiro) || 0) === 0 && (Number(valorPix) || 0) === 0 && (Number(valorCartao) || 0) === 0 && (
-              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2 font-medium">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-                <span>Atenção: Nenhum valor em dinheiro, Pix ou cartão foi informado.</span>
-              </div>
-            )}
+            {(Number(valorDinheiro) || 0) === 0 &&
+              (Number(valorPix) || 0) === 0 &&
+              (Number(valorCartao) || 0) === 0 && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2 font-medium">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                  <span>Atenção: Nenhum valor em dinheiro, Pix ou cartão foi informado.</span>
+                </div>
+              )}
           </div>
         ),
         confirmText: 'Confirmar e Encerrar',
@@ -966,7 +1078,10 @@ export default function AcertoDiarioPage() {
       let { error } = await supabase.from('remessas_cargas_pdv').insert([payload]);
 
       // Fallback gracioso se a coluna tipo_fechamento ainda não tiver sido criada no Supabase
-      if (error && (error.message?.includes('tipo_fechamento') || error.details?.includes('tipo_fechamento'))) {
+      if (
+        error &&
+        (error.message?.includes('tipo_fechamento') || error.details?.includes('tipo_fechamento'))
+      ) {
         const fallbackPayload = { ...payload };
         delete (fallbackPayload as any).tipo_fechamento;
         const res = await supabase.from('remessas_cargas_pdv').insert([fallbackPayload]);
@@ -977,6 +1092,16 @@ export default function AcertoDiarioPage() {
 
       const pdvNome = locais.find((l) => l.id === localId)?.nome || 'PDV';
 
+      try {
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      } catch (e) {
+        console.warn('Confetti exception:', e);
+      }
+
       if (etapaAcerto === 'envio') {
         setStatusFechamentoPDV('aberto');
         toast({
@@ -984,12 +1109,34 @@ export default function AcertoDiarioPage() {
           description: `Envio de ${totalEnviado} produtos registrado com sucesso para o PDV "${pdvNome}".`,
           variant: 'success',
         });
+        setSuccessModal({
+          isOpen: true,
+          title: '🎉 Carga / Envio Salvo com Sucesso!',
+          description: `O envio de ${totalEnviado} produtos para o PDV "${pdvNome}" foi registrado com sucesso no sistema.`,
+          detalhes: {
+            pdv: pdvNome,
+            data: dataAcerto,
+            totalEnviado: totalEnviado,
+          },
+        });
       } else {
         setStatusFechamentoPDV('encerrado');
         toast({
           title: 'Remessa e Fechamento Salvos!',
           description: `Fechamento (${tipoFechamento.toUpperCase()}) do PDV "${pdvNome}" gravado com sucesso. Pix/Cartão Esperado: R$ ${pixCartaoEsperado.toFixed(2)}`,
           variant: 'success',
+        });
+        setSuccessModal({
+          isOpen: true,
+          title: '🎉 Fechamento Salvo com Sucesso!',
+          description: `O fechamento (${tipoFechamento.toUpperCase()}) do PDV "${pdvNome}" foi gravado com sucesso no sistema.`,
+          detalhes: {
+            pdv: pdvNome,
+            data: dataAcerto,
+            totalVendidos: totalVendidos,
+            valorDinheiro: Number(valorDinheiro) || 0,
+            pixCartaoEsperado: pixCartaoEsperado,
+          },
         });
       }
 
@@ -1035,10 +1182,11 @@ export default function AcertoDiarioPage() {
         <button
           type="button"
           onClick={() => setEtapaAcerto('envio')}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${etapaAcerto === 'envio'
-            ? 'bg-primary text-white shadow ring-2 ring-primary/30'
-            : 'text-text/70 hover:bg-primary/10'
-            }`}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
+            etapaAcerto === 'envio'
+              ? 'bg-primary text-white shadow ring-2 ring-primary/30'
+              : 'text-text/70 hover:bg-primary/10'
+          }`}
         >
           <Package className="h-4 w-4" /> 1. Envio de Produtos para o PDV
         </button>
@@ -1046,10 +1194,11 @@ export default function AcertoDiarioPage() {
         <button
           type="button"
           onClick={() => setEtapaAcerto('fechamento')}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${etapaAcerto === 'fechamento'
-            ? 'bg-primary text-white shadow ring-2 ring-primary/30'
-            : 'text-text/70 hover:bg-primary/10'
-            }`}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
+            etapaAcerto === 'fechamento'
+              ? 'bg-primary text-white shadow ring-2 ring-primary/30'
+              : 'text-text/70 hover:bg-primary/10'
+          }`}
         >
           <CheckCircle2 className="h-4 w-4" /> 2. Sobras & Fechamento Financeiro
         </button>
@@ -1057,10 +1206,11 @@ export default function AcertoDiarioPage() {
         <button
           type="button"
           onClick={() => setEtapaAcerto('tudo')}
-          className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${etapaAcerto === 'tudo'
-            ? 'bg-primary text-white shadow ring-2 ring-primary/30'
-            : 'text-text/70 hover:bg-primary/10'
-            }`}
+          className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
+            etapaAcerto === 'tudo'
+              ? 'bg-primary text-white shadow ring-2 ring-primary/30'
+              : 'text-text/70 hover:bg-primary/10'
+          }`}
         >
           <Layers className="h-4 w-4" /> Ver Tudo (Unificado)
         </button>
@@ -1077,7 +1227,8 @@ export default function AcertoDiarioPage() {
                   <Filter className="h-4 w-4 text-primary" /> Filtros Gerais do Relatório
                 </h2>
                 <p className="text-xs text-text/60">
-                  Filtre as remessas e fechamentos por período (data inicial/final), turno e ponto de venda.
+                  Filtre as remessas e fechamentos por período (data inicial/final), turno e ponto
+                  de venda.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -1170,7 +1321,9 @@ export default function AcertoDiarioPage() {
 
               {/* PDV / Loja */}
               <div>
-                <label className="text-xs font-bold text-text/70 block mb-1">Ponto de Venda (PDV)</label>
+                <label className="text-xs font-bold text-text/70 block mb-1">
+                  Ponto de Venda (PDV)
+                </label>
                 <div className="relative">
                   <Store className="absolute left-3 top-2.5 h-4 w-4 text-text/40 pointer-events-none" />
                   <select
@@ -1194,50 +1347,80 @@ export default function AcertoDiarioPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             {/* 1. Enviado */}
             <div className="rounded-xl border border-primary/15 bg-background p-3 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-text/50 block truncate">Total Enviado</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text/50 block truncate">
+                Total Enviado
+              </span>
               <p className="mt-1 font-mono text-lg font-black text-primary">{totEnviadoTudo} un</p>
               <span className="text-[10px] text-text/40 block truncate">Remessas no Período</span>
             </div>
 
             {/* 2. Sobras */}
             <div className="rounded-xl border border-amber-300/40 bg-amber-50/40 dark:bg-amber-950/20 p-3 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block truncate">Sobras em Loja</span>
-              <p className="mt-1 font-mono text-lg font-black text-amber-700 dark:text-amber-300">{totSobraTudo} un</p>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block truncate">
+                Sobras em Loja
+              </span>
+              <p className="mt-1 font-mono text-lg font-black text-amber-700 dark:text-amber-300">
+                {totSobraTudo} un
+              </p>
               <span className="text-[10px] text-amber-600/70 block truncate">Retorno Físico</span>
             </div>
 
             {/* 3. Vendas */}
             <div className="rounded-xl border border-emerald-300/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-3 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block truncate">Vendas Totais</span>
-              <p className="mt-1 font-mono text-lg font-black text-emerald-700 dark:text-emerald-300">{totVendidosTudo} un</p>
-              <span className="text-[10px] text-emerald-600/70 block truncate">Unidades Vendidas</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block truncate">
+                Vendas Totais
+              </span>
+              <p className="mt-1 font-mono text-lg font-black text-emerald-700 dark:text-emerald-300">
+                {totVendidosTudo} un
+              </p>
+              <span className="text-[10px] text-emerald-600/70 block truncate">
+                Unidades Vendidas
+              </span>
             </div>
 
             {/* 4. Dinheiro */}
             <div className="rounded-xl border border-emerald-300/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-3 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block truncate">💵 Dinheiro</span>
-              <p className="mt-1 font-mono text-lg font-black text-emerald-700 dark:text-emerald-300">R$ {totDinheiroTudo.toFixed(2)}</p>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block truncate">
+                💵 Dinheiro
+              </span>
+              <p className="mt-1 font-mono text-lg font-black text-emerald-700 dark:text-emerald-300">
+                R$ {totDinheiroTudo.toFixed(2)}
+              </p>
               <span className="text-[10px] text-emerald-600/70 block truncate">Total Gaveta</span>
             </div>
 
             {/* 5. Cartão */}
             <div className="rounded-xl border border-cyan-300/40 bg-cyan-50/40 dark:bg-cyan-950/20 p-3 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-800 dark:text-cyan-300 block truncate">💳 Cartão</span>
-              <p className="mt-1 font-mono text-lg font-black text-cyan-700 dark:text-cyan-300">R$ {totCartaoTudo.toFixed(2)}</p>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-800 dark:text-cyan-300 block truncate">
+                💳 Cartão
+              </span>
+              <p className="mt-1 font-mono text-lg font-black text-cyan-700 dark:text-cyan-300">
+                R$ {totCartaoTudo.toFixed(2)}
+              </p>
               <span className="text-[10px] text-cyan-600/70 block truncate">Débito / Crédito</span>
             </div>
 
             {/* 6. Pix */}
             <div className="rounded-xl border border-purple-300/40 bg-purple-50/40 dark:bg-purple-950/20 p-3 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-800 dark:text-purple-300 block truncate">📱 Pix</span>
-              <p className="mt-1 font-mono text-lg font-black text-purple-700 dark:text-purple-300">R$ {totPixTudo.toFixed(2)}</p>
-              <span className="text-[10px] text-purple-600/70 block truncate">Transferências Pix</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-800 dark:text-purple-300 block truncate">
+                📱 Pix
+              </span>
+              <p className="mt-1 font-mono text-lg font-black text-purple-700 dark:text-purple-300">
+                R$ {totPixTudo.toFixed(2)}
+              </p>
+              <span className="text-[10px] text-purple-600/70 block truncate">
+                Transferências Pix
+              </span>
             </div>
 
             {/* 7. Total Faturamento */}
             <div className="rounded-xl border border-primary/30 bg-primary/10 p-3 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-primary block truncate">Faturamento Total</span>
-              <p className="mt-1 font-mono text-lg font-black text-primary">R$ {totFaturamentoTudo.toFixed(2)}</p>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-primary block truncate">
+                Faturamento Total
+              </span>
+              <p className="mt-1 font-mono text-lg font-black text-primary">
+                R$ {totFaturamentoTudo.toFixed(2)}
+              </p>
               <span className="text-[10px] text-primary/70 block truncate">Líquido Acumulado</span>
             </div>
           </div>
@@ -1246,7 +1429,8 @@ export default function AcertoDiarioPage() {
           <div className="rounded-2xl border border-primary/20 bg-background overflow-hidden shadow-sm">
             <div className="flex items-center justify-between p-4 border-b border-primary/10 bg-primary/5">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-2">
-                <Layers className="h-4 w-4" /> Tabela Completa de Romaneios e Fechamentos ({historicoTudo.length} registros)
+                <Layers className="h-4 w-4" /> Tabela Completa de Romaneios e Fechamentos (
+                {historicoTudo.length} registros)
               </h3>
               {loadingTudo && (
                 <span className="flex items-center gap-1 text-xs text-primary animate-pulse font-bold">
@@ -1275,7 +1459,10 @@ export default function AcertoDiarioPage() {
                 <tbody>
                   {loadingTudo ? (
                     <tr>
-                      <td colSpan={11} className="p-8 text-center text-text/50 text-xs font-semibold">
+                      <td
+                        colSpan={11}
+                        className="p-8 text-center text-text/50 text-xs font-semibold"
+                      >
                         <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
                         Carregando lançamentos unificados...
                       </td>
@@ -1294,10 +1481,18 @@ export default function AcertoDiarioPage() {
                       const din = Number(item.valor_dinheiro_gaveta) || 0;
                       const car = Number(item.valor_cartao_declarado) || 0;
                       const pix = Number(item.valor_pix_declarado) || 0;
-                      const liq = Number(item.faturamento_liquido_esperado) || Number(item.faturamento_bruto_teorico) || 0;
-                      const totRow = liq > 0 ? liq : (din + car + pix);
-                      const pdvNome = item.locais?.nome || locais.find((l) => l.id === item.local_id)?.nome || 'PDV';
-                      const dataFormatada = item.data ? item.data.split('-').reverse().join('/') : '-';
+                      const liq =
+                        Number(item.faturamento_liquido_esperado) ||
+                        Number(item.faturamento_bruto_teorico) ||
+                        0;
+                      const totRow = liq > 0 ? liq : din + car + pix;
+                      const pdvNome =
+                        item.locais?.nome ||
+                        locais.find((l) => l.id === item.local_id)?.nome ||
+                        'PDV';
+                      const dataFormatada = item.data
+                        ? item.data.split('-').reverse().join('/')
+                        : '-';
                       const turnoFormatado =
                         item.turno === 'integral'
                           ? 'Integral'
@@ -1310,26 +1505,53 @@ export default function AcertoDiarioPage() {
                                 : item.turno || '-';
 
                       return (
-                        <tr key={item.id} className="border-b border-primary/5 hover:bg-primary/5 text-xs transition-colors">
+                        <tr
+                          key={item.id}
+                          className="border-b border-primary/5 hover:bg-primary/5 text-xs transition-colors"
+                        >
                           <td className="p-2.5 font-semibold text-text/80 whitespace-nowrap">
-                            {dataFormatada} <span className="text-text/40 text-[10px] font-normal">({turnoFormatado})</span>
+                            {dataFormatada}{' '}
+                            <span className="text-text/40 text-[10px] font-normal">
+                              ({turnoFormatado})
+                            </span>
                           </td>
-                          <td className="p-2.5 font-bold text-primary whitespace-nowrap">{pdvNome}</td>
-                          <td className="p-2.5 font-mono font-bold text-center text-slate-800 dark:text-slate-200">{enviada}</td>
-                          <td className="p-2.5 font-mono font-bold text-center text-amber-600 dark:text-amber-400">{sobra}</td>
-                          <td className="p-2.5 font-mono font-bold text-center text-emerald-600 dark:text-emerald-400">{vendas}</td>
-                          <td className="p-2.5 font-mono text-right text-emerald-700 dark:text-emerald-300">R$ {din.toFixed(2)}</td>
-                          <td className="p-2.5 font-mono text-right text-cyan-700 dark:text-cyan-300">R$ {car.toFixed(2)}</td>
-                          <td className="p-2.5 font-mono text-right text-purple-700 dark:text-purple-300">R$ {pix.toFixed(2)}</td>
-                          <td className="p-2.5 font-mono font-black text-right text-primary">R$ {totRow.toFixed(2)}</td>
+                          <td className="p-2.5 font-bold text-primary whitespace-nowrap">
+                            {pdvNome}
+                          </td>
+                          <td className="p-2.5 font-mono font-bold text-center text-slate-800 dark:text-slate-200">
+                            {enviada}
+                          </td>
+                          <td className="p-2.5 font-mono font-bold text-center text-amber-600 dark:text-amber-400">
+                            {sobra}
+                          </td>
+                          <td className="p-2.5 font-mono font-bold text-center text-emerald-600 dark:text-emerald-400">
+                            {vendas}
+                          </td>
+                          <td className="p-2.5 font-mono text-right text-emerald-700 dark:text-emerald-300">
+                            R$ {din.toFixed(2)}
+                          </td>
+                          <td className="p-2.5 font-mono text-right text-cyan-700 dark:text-cyan-300">
+                            R$ {car.toFixed(2)}
+                          </td>
+                          <td className="p-2.5 font-mono text-right text-purple-700 dark:text-purple-300">
+                            R$ {pix.toFixed(2)}
+                          </td>
+                          <td className="p-2.5 font-mono font-black text-right text-primary">
+                            R$ {totRow.toFixed(2)}
+                          </td>
                           <td className="p-2.5 text-center">
                             <span
-                              className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${item.status === 'encerrado' || item.status === 'auditado'
+                              className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                item.status === 'encerrado' || item.status === 'auditado'
                                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300'
                                   : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-300'
-                                }`}
+                              }`}
                             >
-                              {item.status === 'encerrado' ? 'Encerrado' : item.status === 'auditado' ? 'Auditado' : 'Aberto'}
+                              {item.status === 'encerrado'
+                                ? 'Encerrado'
+                                : item.status === 'auditado'
+                                  ? 'Auditado'
+                                  : 'Aberto'}
                             </span>
                           </td>
                           <td className="p-2.5 text-center">
@@ -1360,12 +1582,21 @@ export default function AcertoDiarioPage() {
 
                 <tfoot className="bg-primary/10 border-t-2 border-primary/20 text-xs font-bold">
                   <tr>
-                    <td colSpan={2} className="p-2.5 text-right uppercase tracking-wider text-primary">
+                    <td
+                      colSpan={2}
+                      className="p-2.5 text-right uppercase tracking-wider text-primary"
+                    >
                       Totais do Período:
                     </td>
-                    <td className="p-3 font-mono text-center font-black text-slate-800 dark:text-slate-100">{totEnviadoTudo}</td>
-                    <td className="p-3 font-mono text-center font-black text-amber-700 dark:text-amber-300">{totSobraTudo}</td>
-                    <td className="p-3 font-mono text-center font-black text-emerald-700 dark:text-emerald-300">{totVendidosTudo}</td>
+                    <td className="p-3 font-mono text-center font-black text-slate-800 dark:text-slate-100">
+                      {totEnviadoTudo}
+                    </td>
+                    <td className="p-3 font-mono text-center font-black text-amber-700 dark:text-amber-300">
+                      {totSobraTudo}
+                    </td>
+                    <td className="p-3 font-mono text-center font-black text-emerald-700 dark:text-emerald-300">
+                      {totVendidosTudo}
+                    </td>
                     <td className="p-3 font-mono text-right font-black text-emerald-700 dark:text-emerald-300">
                       R$ {totDinheiroTudo.toFixed(2)}
                     </td>
@@ -1395,13 +1626,17 @@ export default function AcertoDiarioPage() {
                   <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-300">
                     Aberto
                   </span>
-                  <span className="text-text/60 text-[11px]">Carga enviada ao PDV (pendente de encerramento)</span>
+                  <span className="text-text/60 text-[11px]">
+                    Carga enviada ao PDV (pendente de encerramento)
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300">
                     Encerrado
                   </span>
-                  <span className="text-text/60 text-[11px]">Fechamento de turno e financeiro concluído</span>
+                  <span className="text-text/60 text-[11px]">
+                    Fechamento de turno e financeiro concluído
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-cyan-100 text-cyan-800 dark:bg-cyan-950/50 dark:text-cyan-300 border border-cyan-300">
@@ -1419,7 +1654,8 @@ export default function AcertoDiarioPage() {
               <div className="w-full max-w-lg rounded-2xl border border-primary/20 bg-background p-6 shadow-xl space-y-4 animate-scale-up">
                 <div className="flex items-center justify-between border-b border-primary/10 pb-3">
                   <h3 className="text-sm font-extrabold uppercase tracking-wider text-primary flex items-center gap-2">
-                    <Edit3 className="h-4 w-4" /> Editar Lançamento ({editandoItem.locais?.nome || 'PDV'})
+                    <Edit3 className="h-4 w-4" /> Editar Lançamento (
+                    {editandoItem.locais?.nome || 'PDV'})
                   </h3>
                   <button
                     type="button"
@@ -1456,7 +1692,9 @@ export default function AcertoDiarioPage() {
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="font-bold text-text/70 block mb-1">Nome do Vendedor / Atendente</label>
+                    <label className="font-bold text-text/70 block mb-1">
+                      Nome do Vendedor / Atendente
+                    </label>
                     <input
                       type="text"
                       value={editVendedor}
@@ -1489,7 +1727,9 @@ export default function AcertoDiarioPage() {
                   </div>
 
                   <div>
-                    <label className="font-bold text-emerald-700 dark:text-emerald-400 block mb-1">💵 Dinheiro Gaveta (R$)</label>
+                    <label className="font-bold text-emerald-700 dark:text-emerald-400 block mb-1">
+                      💵 Dinheiro Gaveta (R$)
+                    </label>
                     <BRLCurrencyInput
                       value={editValorDinheiro}
                       onChange={(val) => setEditValorDinheiro(val)}
@@ -1498,7 +1738,9 @@ export default function AcertoDiarioPage() {
                   </div>
 
                   <div>
-                    <label className="font-bold text-cyan-700 dark:text-cyan-400 block mb-1">💳 Cartão Declarado (R$)</label>
+                    <label className="font-bold text-cyan-700 dark:text-cyan-400 block mb-1">
+                      💳 Cartão Declarado (R$)
+                    </label>
                     <BRLCurrencyInput
                       value={editValorCartao}
                       onChange={(val) => setEditValorCartao(val)}
@@ -1507,7 +1749,9 @@ export default function AcertoDiarioPage() {
                   </div>
 
                   <div>
-                    <label className="font-bold text-purple-700 dark:text-purple-400 block mb-1">📱 Pix Declarado (R$)</label>
+                    <label className="font-bold text-purple-700 dark:text-purple-400 block mb-1">
+                      📱 Pix Declarado (R$)
+                    </label>
                     <BRLCurrencyInput
                       value={editValorPix}
                       onChange={(val) => setEditValorPix(val)}
@@ -1591,7 +1835,9 @@ export default function AcertoDiarioPage() {
                         🔵 Fechamento com Sobras Acumuladas ({totalSobraAnteriorDetalhado} un)
                       </h3>
                       <p className="text-xs text-cyan-800 dark:text-cyan-300 leading-snug">
-                        Existe um saldo de <strong>{totalSobraAnteriorDetalhado} unidades</strong> de sobra em loja do fechamento anterior. Você pode contabilizar e fechar estas sobras abaixo ou registrar nova carga na Aba 1.
+                        Existe um saldo de <strong>{totalSobraAnteriorDetalhado} unidades</strong>{' '}
+                        de sobra em loja do fechamento anterior. Você pode contabilizar e fechar
+                        estas sobras abaixo ou registrar nova carga na Aba 1.
                       </p>
                     </div>
                     <button
@@ -1616,7 +1862,9 @@ export default function AcertoDiarioPage() {
                         Fechamento Concluído e Encerrado
                       </h3>
                       <p className="text-xs text-emerald-700 leading-snug">
-                        O fechamento deste PDV ({locais.find((l) => l.id === localId)?.nome || 'PDV'}) já foi realizado e encerrado. Não há cargas pendentes no momento.
+                        O fechamento deste PDV (
+                        {locais.find((l) => l.id === localId)?.nome || 'PDV'}) já foi realizado e
+                        encerrado. Não há cargas pendentes no momento.
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -1647,10 +1895,13 @@ export default function AcertoDiarioPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-xs font-bold text-amber-900 dark:text-amber-200 truncate uppercase tracking-wider">
-                        Nenhum Envio Pendente nesta Data ({dataAcerto.split('-').reverse().join('/')})
+                        Nenhum Envio Pendente nesta Data (
+                        {dataAcerto.split('-').reverse().join('/')})
                       </h3>
                       <p className="text-xs text-amber-800 dark:text-amber-300 leading-snug">
-                        Não existem envios de produtos ou pendências de fechamento registrados para este dia no PDV ({locais.find((l) => l.id === localId)?.nome || 'PDV'}). Selecione outra data no campo acima ou registre um novo envio na Aba 1.
+                        Não existem envios de produtos ou pendências de fechamento registrados para
+                        este dia no PDV ({locais.find((l) => l.id === localId)?.nome || 'PDV'}).
+                        Selecione outra data no campo acima ou registre um novo envio na Aba 1.
                       </p>
                     </div>
                     <button
@@ -1674,20 +1925,22 @@ export default function AcertoDiarioPage() {
                     <button
                       type="button"
                       onClick={() => setModo('detalhado')}
-                      className={`flex items-center justify-center gap-2 rounded-xl p-3 text-xs font-bold transition-all border ${modo === 'detalhado'
-                        ? 'border-primary bg-primary text-white shadow-sm ring-2 ring-primary/30'
-                        : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                        }`}
+                      className={`flex items-center justify-center gap-2 rounded-xl p-3 text-xs font-bold transition-all border ${
+                        modo === 'detalhado'
+                          ? 'border-primary bg-primary text-white shadow-sm ring-2 ring-primary/30'
+                          : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                      }`}
                     >
                       <ListOrdered className="h-4 w-4" /> Modo Romaneio (Por Doce)
                     </button>
                     <button
                       type="button"
                       onClick={() => setModo('rapido')}
-                      className={`flex items-center justify-center gap-2 rounded-xl p-3 text-xs font-bold transition-all border ${modo === 'rapido'
-                        ? 'border-primary bg-primary text-white shadow-sm ring-2 ring-primary/30'
-                        : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                        }`}
+                      className={`flex items-center justify-center gap-2 rounded-xl p-3 text-xs font-bold transition-all border ${
+                        modo === 'rapido'
+                          ? 'border-primary bg-primary text-white shadow-sm ring-2 ring-primary/30'
+                          : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                      }`}
                     >
                       <Layers className="h-4 w-4" /> Modo Rápido (Volume Global)
                     </button>
@@ -1705,10 +1958,11 @@ export default function AcertoDiarioPage() {
                     <button
                       type="button"
                       onClick={() => setTipoFechamento('parcial')}
-                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${tipoFechamento === 'parcial'
-                        ? 'border-cyan-500 bg-cyan-500/10 text-cyan-900 dark:text-cyan-200 ring-2 ring-cyan-500/30 font-bold'
-                        : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                        }`}
+                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
+                        tipoFechamento === 'parcial'
+                          ? 'border-cyan-500 bg-cyan-500/10 text-cyan-900 dark:text-cyan-200 ring-2 ring-cyan-500/30 font-bold'
+                          : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                      }`}
                     >
                       <span className="font-bold text-xs">🔵 Fechamento Parcial</span>
                       <span className="text-[10px] text-text/50 mt-1 leading-snug">
@@ -1719,10 +1973,11 @@ export default function AcertoDiarioPage() {
                     <button
                       type="button"
                       onClick={() => setTipoFechamento('semanal')}
-                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${tipoFechamento === 'semanal'
-                        ? 'border-purple-500 bg-purple-500/10 text-purple-900 dark:text-purple-200 ring-2 ring-purple-500/30 font-bold'
-                        : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                        }`}
+                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
+                        tipoFechamento === 'semanal'
+                          ? 'border-purple-500 bg-purple-500/10 text-purple-900 dark:text-purple-200 ring-2 ring-purple-500/30 font-bold'
+                          : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                      }`}
                     >
                       <span className="font-bold text-xs">🟣 Encerramento Semanal</span>
                       <span className="text-[10px] text-text/50 mt-1 leading-snug">
@@ -1733,10 +1988,11 @@ export default function AcertoDiarioPage() {
                     <button
                       type="button"
                       onClick={() => setTipoFechamento('diario')}
-                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${tipoFechamento === 'diario'
-                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30 font-bold'
-                        : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                        }`}
+                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
+                        tipoFechamento === 'diario'
+                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30 font-bold'
+                          : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                      }`}
                     >
                       <span className="font-bold text-xs">🟢 Fechamento Padrão</span>
                       <span className="text-[10px] text-text/50 mt-1 leading-snug">
@@ -1792,11 +2048,14 @@ export default function AcertoDiarioPage() {
                     value={vendedorNome}
                     onChange={(e) => setVendedorNome(e.target.value)}
                     disabled={etapaAcerto === 'fechamento'}
-                    placeholder={etapaAcerto === 'fechamento' ? 'Carregado do Envio (Aba 1)' : 'Ex: Maria'}
-                    className={`h-10 w-full rounded-xl border border-primary/20 bg-background px-3 text-sm outline-none focus:border-primary ${etapaAcerto === 'fechamento'
+                    placeholder={
+                      etapaAcerto === 'fechamento' ? 'Carregado do Envio (Aba 1)' : 'Ex: Maria'
+                    }
+                    className={`h-10 w-full rounded-xl border border-primary/20 bg-background px-3 text-sm outline-none focus:border-primary ${
+                      etapaAcerto === 'fechamento'
                         ? 'bg-primary/5 text-text/80 cursor-not-allowed font-semibold opacity-90'
                         : ''
-                      }`}
+                    }`}
                   />
                 </div>
               </div>
@@ -1840,8 +2099,11 @@ export default function AcertoDiarioPage() {
                     const itensExibidos =
                       etapaAcerto !== 'envio'
                         ? gradeItens.filter(
-                          (item) => (Number(item.qtd_enviada) || 0) + (Number(item.qtd_sobra_anterior) || 0) > 0
-                        )
+                            (item) =>
+                              (Number(item.qtd_enviada) || 0) +
+                                (Number(item.qtd_sobra_anterior) || 0) >
+                              0
+                          )
                         : gradeItens;
 
                     if (etapaAcerto !== 'envio' && itensExibidos.length === 0) {
@@ -1852,7 +2114,8 @@ export default function AcertoDiarioPage() {
                             Nenhum produto com quantidade enviado para este PDV
                           </h3>
                           <p className="text-xs text-text/60 max-w-md mx-auto">
-                            Acesse a aba <strong>"1. Envio de Produtos para o PDV"</strong> para cadastrar a quantidade enviada antes de realizar o fechamento.
+                            Acesse a aba <strong>"1. Envio de Produtos para o PDV"</strong> para
+                            cadastrar a quantidade enviada antes de realizar o fechamento.
                           </p>
                         </div>
                       );
@@ -1867,7 +2130,9 @@ export default function AcertoDiarioPage() {
                               <tr>
                                 <th className="p-2.5">Doce / Produto</th>
                                 <th className="p-2.5 text-center">Preço Unit</th>
-                                <th className="p-2.5 text-center bg-primary/10 text-primary">Quantidade Enviada</th>
+                                <th className="p-2.5 text-center bg-primary/10 text-primary">
+                                  Quantidade Enviada
+                                </th>
                               </tr>
                             ) : (
                               <tr>
@@ -1876,7 +2141,9 @@ export default function AcertoDiarioPage() {
                                 <th className="p-2.5 text-center">Sobra Anterior</th>
                                 <th className="p-2.5 text-center">Envio Hoje</th>
                                 <th className="p-2.5 text-center">Total Disp.</th>
-                                <th className="p-2.5 text-center bg-amber-100/50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300">Sobras (Retorno)</th>
+                                <th className="p-2.5 text-center bg-amber-100/50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300">
+                                  Sobras (Retorno)
+                                </th>
                                 <th className="p-2.5 text-right">Vendidos</th>
                                 <th className="p-2.5 text-right">Subtotal</th>
                               </tr>
@@ -1890,7 +2157,10 @@ export default function AcertoDiarioPage() {
 
                               if (etapaAcerto === 'envio') {
                                 return (
-                                  <tr key={item.produto_id} className="hover:bg-primary/5 transition-colors">
+                                  <tr
+                                    key={item.produto_id}
+                                    className="hover:bg-primary/5 transition-colors"
+                                  >
                                     <td className="p-2.5 font-bold text-text/80">{item.nome}</td>
                                     <td className="p-2.5 text-center font-mono text-text/60">
                                       R$ {item.preco_unitario.toFixed(2)}
@@ -1901,7 +2171,11 @@ export default function AcertoDiarioPage() {
                                         min="0"
                                         value={item.qtd_enviada || ''}
                                         onChange={(e) =>
-                                          handleAtualizarItemGrade(item.produto_id, 'qtd_enviada', Number(e.target.value))
+                                          handleAtualizarItemGrade(
+                                            item.produto_id,
+                                            'qtd_enviada',
+                                            Number(e.target.value)
+                                          )
                                         }
                                         placeholder="0"
                                         className="w-20 rounded-xl border border-primary/40 bg-background px-3 py-1.5 text-center font-bold text-primary outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -1912,7 +2186,10 @@ export default function AcertoDiarioPage() {
                               }
 
                               return (
-                                <tr key={item.produto_id} className="hover:bg-primary/5 transition-colors">
+                                <tr
+                                  key={item.produto_id}
+                                  className="hover:bg-primary/5 transition-colors"
+                                >
                                   <td className="p-2.5 font-bold text-text/80">{item.nome}</td>
                                   <td className="p-2.5 text-center font-mono text-text/60">
                                     R$ {item.preco_unitario.toFixed(2)}
@@ -1932,7 +2209,11 @@ export default function AcertoDiarioPage() {
                                       min="0"
                                       value={item.qtd_retorno || ''}
                                       onChange={(e) =>
-                                        handleAtualizarItemGrade(item.produto_id, 'qtd_retorno', Number(e.target.value))
+                                        handleAtualizarItemGrade(
+                                          item.produto_id,
+                                          'qtd_retorno',
+                                          Number(e.target.value)
+                                        )
                                       }
                                       placeholder="0"
                                       className="w-16 rounded-lg border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 px-2 py-1 text-center font-semibold text-amber-700 outline-none focus:border-amber-500"
@@ -1964,7 +2245,9 @@ export default function AcertoDiarioPage() {
                                   className="rounded-2xl border border-primary/20 bg-background p-4 shadow-2xs space-y-3"
                                 >
                                   <div className="flex items-center justify-between border-b border-primary/10 pb-2">
-                                    <span className="font-bold text-sm text-text/90">{item.nome}</span>
+                                    <span className="font-bold text-sm text-text/90">
+                                      {item.nome}
+                                    </span>
                                     <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary">
                                       R$ {item.preco_unitario.toFixed(2)}/un
                                     </span>
@@ -2028,7 +2311,9 @@ export default function AcertoDiarioPage() {
                               >
                                 {/* Header: Nome do Produto e Preço */}
                                 <div className="flex items-center justify-between border-b border-primary/10 pb-2">
-                                  <span className="font-bold text-sm text-text/90">{item.nome}</span>
+                                  <span className="font-bold text-sm text-text/90">
+                                    {item.nome}
+                                  </span>
                                   <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary">
                                     R$ {item.preco_unitario.toFixed(2)}/un
                                   </span>
@@ -2164,7 +2449,9 @@ export default function AcertoDiarioPage() {
                                 {/* Subtotal do Produto */}
                                 <div className="flex items-center justify-between border-t border-primary/10 pt-2 text-xs font-bold">
                                   <span className="text-text/60">Subtotal Parcial:</span>
-                                  <span className="font-mono text-primary">R$ {subtotal.toFixed(2)}</span>
+                                  <span className="font-mono text-primary">
+                                    R$ {subtotal.toFixed(2)}
+                                  </span>
                                 </div>
                               </div>
                             );
@@ -2230,7 +2517,8 @@ export default function AcertoDiarioPage() {
               /* Modo Rápido (Volume Global) */
               <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm">
                 <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
-                  <Layers className="h-4 w-4 text-primary" /> Lançamento por Volume Global (Sem discriminar produtos)
+                  <Layers className="h-4 w-4 text-primary" /> Lançamento por Volume Global (Sem
+                  discriminar produtos)
                 </h2>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -2249,7 +2537,9 @@ export default function AcertoDiarioPage() {
                   {etapaAcerto !== 'envio' && (
                     <>
                       <div>
-                        <label className="text-xs font-semibold text-text/70">Qtd Retorno (Sobras)</label>
+                        <label className="text-xs font-semibold text-text/70">
+                          Qtd Retorno (Sobras)
+                        </label>
                         <input
                           type="number"
                           min="0"
@@ -2261,7 +2551,9 @@ export default function AcertoDiarioPage() {
                       </div>
 
                       <div>
-                        <label className="text-xs font-semibold text-text/70">Preço Médio Estimado</label>
+                        <label className="text-xs font-semibold text-text/70">
+                          Preço Médio Estimado
+                        </label>
                         <BRLCurrencyInput
                           value={precoMedioRapido}
                           onChange={(val) => setPrecoMedioRapido(val)}
@@ -2275,7 +2567,9 @@ export default function AcertoDiarioPage() {
 
                 {etapaAcerto === 'envio' && (
                   <div className="rounded-xl border border-amber-300/40 bg-amber-50/50 dark:bg-amber-950/20 p-3 text-xs text-amber-800 dark:text-amber-300">
-                    ⚠️ <strong>Lançamento por Volume Global:</strong> Ao enviar o total acumulado sem discriminar produtos, a apuração detalhada por item fica desabilitada e a conferência financeira precisará ser realizada por volume global no fechamento.
+                    ⚠️ <strong>Lançamento por Volume Global:</strong> Ao enviar o total acumulado
+                    sem discriminar produtos, a apuração detalhada por item fica desabilitada e a
+                    conferência financeira precisará ser realizada por volume global no fechamento.
                   </div>
                 )}
               </div>
@@ -2291,12 +2585,17 @@ export default function AcertoDiarioPage() {
 
               <div className="rounded-xl border border-primary/10 bg-primary/5 p-4 space-y-3">
                 <p className="text-xs text-text/70 leading-relaxed">
-                  Nesta etapa você registra a <strong>quantidade de produtos enviada</strong> ao ponto de venda selecionado.
+                  Nesta etapa você registra a <strong>quantidade de produtos enviada</strong> ao
+                  ponto de venda selecionado.
                 </p>
 
                 <div className="flex items-center justify-between rounded-xl bg-background p-3 border border-primary/10">
-                  <span className="text-xs font-semibold text-text/60">Total Unidades Enviadas:</span>
-                  <span className="font-mono text-base font-bold text-primary">{totalEnviado} un</span>
+                  <span className="text-xs font-semibold text-text/60">
+                    Total Unidades Enviadas:
+                  </span>
+                  <span className="font-mono text-base font-bold text-primary">
+                    {totalEnviado} un
+                  </span>
                 </div>
               </div>
 
@@ -2345,7 +2644,9 @@ export default function AcertoDiarioPage() {
                 </div>
 
                 <div className="border-t border-primary/10 pt-3">
-                  <label className="text-xs font-semibold text-text/70">Valor em Pix no PDV R$ (Opcional)</label>
+                  <label className="text-xs font-semibold text-text/70">
+                    Valor em Pix no PDV R$ (Opcional)
+                  </label>
                   <BRLCurrencyInput
                     value={valorPix}
                     onChange={(val) => setValorPix(val)}
@@ -2429,14 +2730,20 @@ export default function AcertoDiarioPage() {
                         </span>
                       </div>
                       <div className="text-[10px] text-cyan-700 dark:text-cyan-400 flex justify-between">
-                        <span>(Pix: R$ {(Number(valorPix) || 0).toFixed(2)} | Cartão: R$ {(Number(valorCartao) || 0).toFixed(2)})</span>
+                        <span>
+                          (Pix: R$ {(Number(valorPix) || 0).toFixed(2)} | Cartão: R${' '}
+                          {(Number(valorCartao) || 0).toFixed(2)})
+                        </span>
                       </div>
-                      <div className={`flex justify-between items-center text-xs font-bold pt-1 border-t border-cyan-200/60 dark:border-cyan-800/60 ${diferencaDigital < -0.05
-                          ? 'text-rose-600 dark:text-rose-400'
-                          : diferencaDigital > 0.05
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-cyan-700 dark:text-cyan-300'
-                        }`}>
+                      <div
+                        className={`flex justify-between items-center text-xs font-bold pt-1 border-t border-cyan-200/60 dark:border-cyan-800/60 ${
+                          diferencaDigital < -0.05
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : diferencaDigital > 0.05
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-cyan-700 dark:text-cyan-300'
+                        }`}
+                      >
                         <span>Diferença Digital (Pix/Cartão):</span>
                         <span className="font-mono">
                           {diferencaDigital > 0 ? '+' : ''}R$ {diferencaDigital.toFixed(2)}
@@ -2448,14 +2755,21 @@ export default function AcertoDiarioPage() {
 
                 {declaraDigital && (
                   <div
-                    className={`mt-2 flex items-center justify-between rounded-xl p-3 font-bold ${diferencaCaixa < -1
+                    className={`mt-2 flex items-center justify-between rounded-xl p-3 font-bold ${
+                      diferencaCaixa < -1
                         ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 border border-rose-200'
                         : diferencaCaixa > 1
                           ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 border border-emerald-200'
                           : 'bg-cyan-50 text-cyan-800 dark:bg-cyan-950/30 border border-cyan-200'
-                      }`}
+                    }`}
                   >
-                    <span>{diferencaCaixa < -1 ? 'Furo no Caixa:' : diferencaCaixa > 1 ? 'Sobra no Caixa:' : 'Diferença Global:'}</span>
+                    <span>
+                      {diferencaCaixa < -1
+                        ? 'Furo no Caixa:'
+                        : diferencaCaixa > 1
+                          ? 'Sobra no Caixa:'
+                          : 'Diferença Global:'}
+                    </span>
                     <span className="font-mono">R$ {diferencaCaixa.toFixed(2)}</span>
                   </div>
                 )}
@@ -2464,7 +2778,7 @@ export default function AcertoDiarioPage() {
               <div className="flex flex-col gap-2">
                 <button
                   type="submit"
-                  disabled={salvando || (totalEnviado + totalSobraAnteriorDetalhado) <= 0}
+                  disabled={salvando || !localId}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-sm transition-all hover:opacity-95 active:scale-95 disabled:opacity-50"
                 >
                   <CheckCircle2 className="h-4 w-4" />
@@ -2494,6 +2808,101 @@ export default function AcertoDiarioPage() {
         cancelText={confirmDialog.options.cancelText}
         variant={confirmDialog.options.variant}
       />
+
+      {/* Modal de Sucesso no Centro da Tela com Animação e Confete */}
+      {successModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md rounded-3xl bg-background border border-primary/20 p-6 shadow-2xl space-y-5 transform transition-all animate-scale-up">
+            <button
+              type="button"
+              onClick={() => setSuccessModal({ ...successModal, isOpen: false })}
+              className="absolute right-4 top-4 rounded-full p-2 text-text/40 hover:bg-primary/10 hover:text-text transition-all"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex flex-col items-center text-center space-y-2">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-8 ring-emerald-500/10">
+                <CheckCircle2 className="h-10 w-10 animate-bounce" />
+              </div>
+
+              <h2 className="text-xl font-black text-text/90 tracking-tight">
+                {successModal.title}
+              </h2>
+              <p className="text-xs text-text/60 leading-relaxed">{successModal.description}</p>
+            </div>
+
+            {successModal.detalhes && (
+              <div className="rounded-2xl bg-primary/5 border border-primary/10 p-4 space-y-3">
+                <div className="flex justify-between items-center text-xs pb-2 border-b border-primary/10">
+                  <span className="font-semibold text-text/60">Ponto de Venda (PDV):</span>
+                  <span className="font-bold text-primary">{successModal.detalhes.pdv}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs pb-2 border-b border-primary/10">
+                  <span className="font-semibold text-text/60">Data do Lançamento:</span>
+                  <span className="font-mono font-bold text-text/80">
+                    {successModal.detalhes.data}
+                  </span>
+                </div>
+
+                {successModal.detalhes.totalEnviado !== undefined && (
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-text/60">Total de Produtos Enviados:</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {successModal.detalhes.totalEnviado} un
+                    </span>
+                  </div>
+                )}
+
+                {successModal.detalhes.totalVendidos !== undefined && (
+                  <div className="flex justify-between items-center text-xs pb-2 border-b border-primary/10">
+                    <span className="font-semibold text-text/60">Unidades Vendidas:</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {successModal.detalhes.totalVendidos} un
+                    </span>
+                  </div>
+                )}
+
+                {successModal.detalhes.valorDinheiro !== undefined && (
+                  <div className="flex justify-between items-center text-xs pb-2 border-b border-primary/10">
+                    <span className="font-semibold text-text/60">Dinheiro Físico:</span>
+                    <span className="font-mono font-bold text-text/90">
+                      R$ {successModal.detalhes.valorDinheiro.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {successModal.detalhes.pixCartaoEsperado !== undefined && (
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-text/60">Pix / Cartão Esperado:</span>
+                    <span className="font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                      R$ {successModal.detalhes.pixCartaoEsperado.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <button
+                type="button"
+                onClick={handleGerarComprovantePDF}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 py-3 text-xs font-bold text-primary hover:bg-primary/10 transition-all active:scale-95"
+              >
+                <Printer className="h-4 w-4" /> Imprimir Comprovante
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSuccessModal({ ...successModal, isOpen: false })}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-bold text-white shadow-md hover:opacity-95 transition-all active:scale-95"
+              >
+                <CheckCircle2 className="h-4 w-4" /> OK / Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

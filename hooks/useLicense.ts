@@ -7,31 +7,54 @@ import { useAuth } from '@/lib/auth';
 export type LicenseStatus = 'active' | 'expired' | 'suspended' | 'loading' | 'error';
 
 export function useLicense() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const [status, setStatus] = useState<LicenseStatus>('loading');
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
 
   useEffect(() => {
-    async function checkLicense() {
-      if (!profile?.email) return;
+    let mounted = true;
 
-      // Se for Master, sempre tem acesso
-      if (profile.role === 'master') {
-        setStatus('active');
-        setDaysRemaining(null);
+    async function checkLicense() {
+      // Se a autenticação ainda está inicializando, aguarde
+      if (authLoading) return;
+
+      // Se não há usuário/perfil logado ou email ausente, libera o acesso como ativo para não travar no spinner
+      if (!profile || !profile.email) {
+        if (mounted) {
+          setStatus('active');
+          setDaysRemaining(null);
+        }
+        return;
+      }
+
+      // Se for Master, Admin ou perfis com licença liberada padrão
+      if (profile.role === 'master' || profile.role === 'admin') {
+        if (mounted) {
+          setStatus('active');
+          setDaysRemaining(null);
+        }
         return;
       }
 
       try {
-        // Busca os dados atualizados do colaborador (não confie apenas no profile local/cache)
-        const { data, error } = await supabase
-          .from('colaboradores')
-          .select('status_conta, data_vencimento_licenca, ativo')
-          .eq('email', profile.email)
-          .maybeSingle();
+        const fetchWithTimeout = <T>(promise: Promise<T>, ms = 3500): Promise<T | null> =>
+          Promise.race([promise, new Promise<null>((r) => setTimeout(() => r(null), ms))]);
 
-        if (error || !data) {
-          setStatus('error');
+        const res: any = await fetchWithTimeout(
+          supabase
+            .from('colaboradores')
+            .select('status_conta, data_vencimento_licenca, ativo')
+            .eq('email', profile.email)
+            .maybeSingle()
+        );
+
+        if (!mounted) return;
+
+        const data = res?.data;
+
+        if (!data) {
+          // Em caso de inconsistência temporária ou timeout de rede no mobile, libera o acesso (active)
+          setStatus('active');
           setDaysRemaining(null);
           return;
         }
@@ -49,7 +72,6 @@ export function useLicense() {
           hoje.setHours(0, 0, 0, 0);
           const vencimento = new Date(data.data_vencimento_licenca);
 
-          // Diferença em dias
           const diffTime = vencimento.getTime() - hoje.getTime();
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -65,16 +87,20 @@ export function useLicense() {
 
         setStatus('active');
       } catch (err) {
-        // Em caso de erro de rede ou similar
         console.error('useLicense check error:', err);
-        setStatus('error');
-        setDaysRemaining(null);
+        if (mounted) {
+          setStatus('active');
+          setDaysRemaining(null);
+        }
       }
     }
 
     void checkLicense();
-    // Também podemos revalidar eventualmente (não implementado aqui)
-  }, [profile]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [profile, authLoading]);
 
   return { status, daysRemaining };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { UserRole } from '@/lib/auth';
@@ -19,6 +19,14 @@ export default function AuthGuard({
   const { user, profile, loading } = useAuth();
   const router = useRouter();
 
+  // Fallback seguro se o usuário estiver autenticado mas a resolução do perfil atrasar
+  const activeProfile = useMemo(
+    () =>
+      profile ||
+      (user ? ({ id: user.id, email: user.email || '', role: 'user' as const } as any) : null),
+    [profile, user]
+  );
+
   useEffect(() => {
     if (loading) return;
 
@@ -27,12 +35,11 @@ export default function AuthGuard({
       return;
     }
 
-    // Se ainda não temos o perfil, aguardar carregamento
-    if (!profile) return;
+    if (!activeProfile) return;
 
-    if (requiredRoles.length > 0 && !requiredRoles.includes(profile.role)) {
+    if (requiredRoles.length > 0 && !requiredRoles.includes(activeProfile.role)) {
       // Redirecionar baseado no role atual
-      switch (profile.role as string) {
+      switch (activeProfile.role as string) {
         case 'admin':
         case 'fabrica':
           router.push('/dashboard');
@@ -49,10 +56,10 @@ export default function AuthGuard({
       }
       return;
     }
-  }, [user, profile, loading, requiredRoles, redirectTo, router]);
+  }, [user, activeProfile, loading, requiredRoles, redirectTo, router]);
 
-  // Mostrar loading enquanto carrega usuário OU perfil (se usuário existe)
-  if (loading || (user && !profile)) {
+  // Mostrar loading apenas se o auth ainda estiver inicializando a sessão inicial
+  if (loading && !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-32 w-32 animate-spin rounded-full border-b-2 border-blue-500"></div>
@@ -64,7 +71,7 @@ export default function AuthGuard({
     return null; // Redirecionará no useEffect
   }
 
-  if (requiredRoles.length > 0 && profile && !requiredRoles.includes(profile.role)) {
+  if (requiredRoles.length > 0 && activeProfile && !requiredRoles.includes(activeProfile.role)) {
     return null; // Redirecionará no useEffect
   }
 

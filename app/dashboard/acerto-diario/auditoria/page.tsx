@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import BRLCurrencyInput from '@/components/ui/shared/BRLCurrencyInput';
-import { PDVSelectorChips } from '@/components/ui/shared/PDVSelectorCards';
+import { PDVSelectorCards } from '@/components/ui/shared/PDVSelectorCards';
 
 import { useTheme } from '@/lib/theme';
 import { supabase } from '@/lib/supabase-client';
@@ -914,14 +914,6 @@ export default function AuditoriaPDVPage() {
               </select>
             </div>
 
-            {/* Seletor de PDV por Chips Deslizáveis */}
-            <PDVSelectorChips
-              locais={locais}
-              selectedId={filtroPDV}
-              onSelect={(id) => setFiltroPDV(id)}
-              todosLabel="Todos os PDVs (Visão Geral)"
-            />
-
             {/* Campos Dinâmicos conforme Período Selecionado */}
             {tipoPeriodo === 'dia' && (
               <div className="flex items-center gap-1">
@@ -1017,6 +1009,20 @@ export default function AuditoriaPDVPage() {
           >
             <RefreshCw className="h-3.5 w-3.5" /> Atualizar
           </button>
+        </div>
+
+        {/* Seletor de PDV por Cards Clicáveis (Responsivo Grid no Mobile) */}
+        <div className="border-t border-primary/10 pt-3">
+          <label className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
+            <Store className="h-4 w-4 text-primary" /> Filtrar por Ponto de Venda (PDV)
+          </label>
+          <PDVSelectorCards
+            locais={locais}
+            selectedId={filtroPDV}
+            onSelect={(id) => setFiltroPDV(id)}
+            incluirTodos={true}
+            todosLabel="Todos os PDVs (Visão Geral)"
+          />
         </div>
 
         {/* Linha Dedicada para Botões de Exportação */}

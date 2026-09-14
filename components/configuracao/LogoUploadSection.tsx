@@ -197,7 +197,31 @@ export function LogoUploadSection({
         </div>
       </div>
 
-      {/* Escala removida: usar tamanho fixo nos componentes (h-20) */}
+      {/* Controle de Escala / Tamanho da Logo */}
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border bg-slate-50 p-3">
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+            Escala / Tamanho da Logo
+          </label>
+          <p className="text-[11px] text-slate-500">
+            Ajuste para aumentar ou diminuir a exibição no cabeçalho e menu (0.5x a 2.5x)
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min="0.5"
+            max="2.5"
+            step="0.05"
+            value={logoScale || 1}
+            onChange={(e) => onLogoScaleChange(parseFloat(e.target.value))}
+            className="h-2 w-32 cursor-pointer accent-primary"
+          />
+          <span className="min-w-[48px] rounded bg-white px-2 py-1 text-center text-xs font-bold text-slate-700 border shadow-xs">
+            {(logoScale || 1).toFixed(2)}x
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

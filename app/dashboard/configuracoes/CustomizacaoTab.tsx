@@ -28,7 +28,8 @@ export default function CustomizacaoTab() {
   // Aplica as variáveis CSS do tema customizado (dark ou light)
   useEffect(() => {
     if (!theme) return;
-    const activeMode = theme.theme_mode === 'system' ? (resolvedTheme || 'light') : (theme.theme_mode || 'light');
+    const activeMode =
+      theme.theme_mode === 'system' ? resolvedTheme || 'light' : theme.theme_mode || 'light';
     const themeColors = theme.colors?.[activeMode];
     if (themeColors && typeof themeColors === 'object') {
       Object.entries(themeColors).forEach(([key, value]) => {
@@ -60,7 +61,8 @@ export default function CustomizacaoTab() {
     if (authLoading) return;
     if (!profile?.id) return;
 
-    const activeMode = theme.theme_mode === 'system' ? (resolvedTheme || 'light') : (theme.theme_mode || 'light');
+    const activeMode =
+      theme.theme_mode === 'system' ? resolvedTheme || 'light' : theme.theme_mode || 'light';
     const themeColors = theme.colors as Record<string, any> | undefined;
     if (themeColors && typeof themeColors === 'object' && activeMode in themeColors) {
       const currentColors = themeColors[activeMode as keyof typeof themeColors];
@@ -74,7 +76,10 @@ export default function CustomizacaoTab() {
           name: theme.name || 'Confectio',
           footer_company_name: theme.footer_company_name || 'Eduardo Saba',
           footer_system_version: theme.footer_system_version || '1.0.0',
-          sidebar_bg: currentColors.sidebar_bg || theme.sidebar_bg || (activeMode === 'dark' ? '#4a2c2b' : '#e9c4c2'),
+          sidebar_bg:
+            currentColors.sidebar_bg ||
+            theme.sidebar_bg ||
+            (activeMode === 'dark' ? '#4a2c2b' : '#e9c4c2'),
           sidebar_hover_bg: currentColors.sidebar_hover_bg || theme.sidebar_hover_bg || '#88544c',
           header_bg: currentColors.header_bg || theme.header_bg || '#88544c',
         };
@@ -101,6 +106,10 @@ export default function CustomizacaoTab() {
         ...prev,
         [key]: value,
       };
+      if (key === 'logo_scale' || key === 'company_logo_scale') {
+        next.logo_scale = value;
+        next.company_logo_scale = value;
+      }
       if (key === 'secondary') {
         next.sidebar_bg = stringVal;
       }
@@ -108,9 +117,8 @@ export default function CustomizacaoTab() {
     });
 
     // Atualizar variáveis CSS em tempo real para preview
-    if (key === 'logo_scale' && typeof value === 'number') {
+    if ((key === 'logo_scale' || key === 'company_logo_scale') && typeof value === 'number') {
       document.documentElement.style.setProperty('--logo-scale', value.toString());
-    } else if (key === 'company_logo_scale' && typeof value === 'number') {
       document.documentElement.style.setProperty('--company-logo-scale', value.toString());
     } else if (typeof value === 'string') {
       document.documentElement.style.setProperty(`--${key}`, value);
@@ -174,7 +182,8 @@ export default function CustomizacaoTab() {
     const darkColors = preset.colors.dark || {};
 
     // Determinar quais cores aplicar ao preview baseado no modo atual
-    const currentActiveMode = theme.theme_mode === 'system' ? (resolvedTheme || 'light') : (theme.theme_mode || 'light');
+    const currentActiveMode =
+      theme.theme_mode === 'system' ? resolvedTheme || 'light' : theme.theme_mode || 'light';
     const currentModeColors = preset.colors[currentActiveMode] || {};
 
     // Atualizar o estado 'settings' (o que aparece nos inputs)
@@ -183,7 +192,10 @@ export default function CustomizacaoTab() {
     });
 
     // Garantir que a cor do sidebar corresponda à cor secundária da predefinição
-    const secondaryColor = currentModeColors.secondary || currentModeColors.sidebar_bg || (currentActiveMode === 'dark' ? '#4a2c2b' : '#e9c4c2');
+    const secondaryColor =
+      currentModeColors.secondary ||
+      currentModeColors.sidebar_bg ||
+      (currentActiveMode === 'dark' ? '#4a2c2b' : '#e9c4c2');
     newSettings.sidebar_bg = currentModeColors.sidebar_bg || preset.sidebar_bg || secondaryColor;
     newSettings.sidebar_hover_bg =
       currentModeColors.sidebar_hover_bg ||
@@ -202,13 +214,13 @@ export default function CustomizacaoTab() {
           document.documentElement.style.setProperty(`--${currentActiveMode}-${normalized}`, value);
         }
       });
-      document.documentElement.style.setProperty('--sidebar-bg', newSettings.sidebar_bg as string);
-      document.documentElement.style.setProperty('--sidebar_bg', newSettings.sidebar_bg as string);
+      document.documentElement.style.setProperty('--sidebar-bg', newSettings.sidebar_bg);
+      document.documentElement.style.setProperty('--sidebar_bg', newSettings.sidebar_bg);
       document.documentElement.style.setProperty(
         '--sidebar-hover-bg',
-        newSettings.sidebar_hover_bg as string
+        newSettings.sidebar_hover_bg
       );
-      document.documentElement.style.setProperty('--header-bg', newSettings.header_bg as string);
+      document.documentElement.style.setProperty('--header-bg', newSettings.header_bg);
     } catch (e) {
       void e;
     }
@@ -286,7 +298,7 @@ export default function CustomizacaoTab() {
           sidebar_bg: darkColors.sidebar_bg || darkSec,
         } as unknown as import('@/lib/types').ThemeColors;
 
-        const currentActiveMode = themeMode === 'system' ? (resolvedTheme || 'light') : themeMode;
+        const currentActiveMode = themeMode === 'system' ? resolvedTheme || 'light' : themeMode;
         updatedSettings.sidebar_bg = currentActiveMode === 'dark' ? darkSec : lightSec;
         updatedSettings.header_bg = currentActiveMode === 'dark' ? darkSec : lightSec;
         if ('sidebar_hover_bg' in appliedPreset && appliedPreset.sidebar_hover_bg) {
@@ -353,12 +365,12 @@ export default function CustomizacaoTab() {
         Object.entries(settings).forEach(([key, value]) => {
           if (key === 'logo_url') {
             updatedSettings.logo_url = value as string;
-          } else if (key === 'logo_scale') {
-            updatedSettings.logo_scale = value as number;
-          } else if (key === 'company_logo_url') {
-            updatedSettings.company_logo_url = value as string;
-          } else if (key === 'company_logo_scale') {
-            updatedSettings.company_logo_scale = value as number;
+          } else if (key === 'logo_scale' || key === 'company_logo_scale') {
+            const numVal = typeof value === 'number' ? value : parseFloat(String(value)) || 1.0;
+            updatedSettings.logo_scale = numVal;
+            updatedSettings.company_logo_scale = numVal;
+            updatedColors.logo_scale = numVal;
+            updatedColors.company_logo_scale = numVal;
           } else if (key === 'font_family') {
             updatedSettings.font_family = value as string;
           } else if (key === 'name') {

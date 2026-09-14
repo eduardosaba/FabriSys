@@ -71,7 +71,15 @@ const DEFAULT_PERMISSOES: Record<string, string[]> = {
     'agenda',
     'ajuda',
   ],
-  pdv_simples: ['acertos_rapidos', 'lancar_turno', 'fechamento_diario', 'pdv', 'pdv_caixa', 'agenda', 'ajuda'],
+  pdv_simples: [
+    'acertos_rapidos',
+    'lancar_turno',
+    'fechamento_diario',
+    'pdv',
+    'pdv_caixa',
+    'agenda',
+    'ajuda',
+  ],
   user: [],
 };
 
@@ -469,20 +477,23 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
     };
   }, [profile?.organization_id]);
 
-  const logoSrc = useMemo(() => {
+  const { logoSrc, isCompanyLogo } = useMemo(() => {
     const companyLogo =
       profile?.company_logo_url || profile?.organizations?.logo_url || theme?.company_logo_url;
-    if (companyLogo && companyLogo.trim() !== '') return getImageUrl(companyLogo);
+    let url: string | null = null;
 
-    if (typeof window !== 'undefined') {
-      const host = window.location.hostname.toLowerCase();
-      if (host.includes('larissasaba') || host.includes('larissa')) {
-        return '/logolarissa.png';
-      }
+    if (companyLogo && companyLogo.trim() !== '') {
+      url = getImageUrl(companyLogo);
+    } else if (logoUrl) {
+      url = getImageUrl(logoUrl);
+    } else if (theme?.logo_url) {
+      url = getImageUrl(theme.logo_url);
+    } else {
+      url = '/logolarissa.png';
     }
-    if (logoUrl) return getImageUrl(logoUrl);
-    if (theme?.logo_url) return getImageUrl(theme.logo_url);
-    return null;
+
+    const isCompany = url ? !url.toLowerCase().endsWith('/logo.png') && url !== '/logo.png' : false;
+    return { logoSrc: url, isCompanyLogo: isCompany };
   }, [profile, theme, logoUrl]);
 
   const getIconColor = (id: string) => {
@@ -513,8 +524,7 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
       // 'admin'/'master' elevated privileges; compare as string to avoid TS literal type issues
       const roleStr = String(profile?.role ?? '');
       if (roleStr === 'express' || roleStr === 'pdv_simples') {
-        const rolePerms =
-          permissoes[profile?.role ?? ''] ||
+        const rolePerms = permissoes[profile?.role ?? ''] ||
           DEFAULT_PERMISSOES[profile?.role ?? ''] || [
             'acertos_rapidos',
             'lancar_turno',
@@ -611,7 +621,13 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
                 <img
                   src={logoSrc}
                   alt="Logo"
-                  className="h-20 w-auto object-contain"
+                  className={`h-20 max-h-20 w-auto max-w-[180px] object-contain transition-all origin-left ${
+                    isCompanyLogo ? 'dark:brightness-0 dark:invert' : ''
+                  }`}
+                  style={{
+                    transform: 'scale(var(--company-logo-scale, var(--logo-scale, 1.25)))',
+                    transformOrigin: 'left center',
+                  }}
                   onError={() => setLogoError(true)}
                 />
               ) : (

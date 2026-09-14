@@ -79,25 +79,27 @@ export default function DashboardHeader({
   const { theme, resolvedTheme, updateTheme } = useTheme();
   const { profile, signOut } = useAuth();
 
-  const finalLogoUrl = useMemo(() => {
-    // 1. Prioridade Máxima: Logo do Perfil/Usuário ou Tema da Empresa
+  const { finalLogoUrl, isCompanyLogo } = useMemo(() => {
     const companyLogo =
       profile?.company_logo_url || profile?.organizations?.logo_url || theme?.company_logo_url;
+    let url: string | null = null;
+
     if (companyLogo && typeof companyLogo === 'string' && companyLogo.trim() !== '') {
-      return getImageUrl(companyLogo) || companyLogo;
+      url = getImageUrl(companyLogo) || companyLogo;
+    } else if (logoUrl) {
+      url = logoUrl;
+    } else if (
+      theme?.logo_url &&
+      typeof theme.logo_url === 'string' &&
+      theme.logo_url.trim() !== ''
+    ) {
+      url = getImageUrl(theme.logo_url) || theme.logo_url;
+    } else {
+      url = '/logolarissa.png';
     }
 
-    // 2. Segunda Prioridade: URL enviada via Props
-    if (logoUrl) return logoUrl;
-
-    // 3. Terceira Prioridade: Logo do Sistema (Master)
-    const systemLogo = theme?.logo_url;
-    if (systemLogo && typeof systemLogo === 'string' && systemLogo.trim() !== '') {
-      return getImageUrl(systemLogo) || systemLogo;
-    }
-
-    // Fallback final
-    return '/logo.png';
+    const isCompany = url ? !url.toLowerCase().endsWith('/logo.png') && url !== '/logo.png' : false;
+    return { finalLogoUrl: url, isCompanyLogo: isCompany };
   }, [
     logoUrl,
     theme?.logo_url,
@@ -802,9 +804,11 @@ export default function DashboardHeader({
                 alt={theme.name || 'Sistema'}
                 onLoad={() => setLogoLoaded(true)}
                 onError={() => setLogoError(true)}
-                className={`rounded-md object-contain transition-opacity duration-300 ${
+                className={`rounded-md object-contain transition-all duration-300 ${
+                  isCompanyLogo ? 'dark:brightness-0 dark:invert' : ''
+                } ${
                   logoLoaded ? 'opacity-100' : 'opacity-0 absolute'
-                } h-20 w-auto`}
+                } h-10 max-h-10 w-auto max-w-[180px] shrink-0`}
                 loading="eager"
               />
             </>

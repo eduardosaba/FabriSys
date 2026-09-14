@@ -18,6 +18,8 @@ import {
   Banknote,
   Calendar,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock,
   DollarSign,
   Download,
@@ -32,6 +34,7 @@ import {
   PlusCircle,
   Printer,
   RefreshCw,
+  SlidersHorizontal,
   Store,
   Trash2,
   User,
@@ -109,6 +112,7 @@ export default function AcertoDiarioPage() {
 
   // Tipo de Fechamento: 'diario' (Padrão), 'parcial' (Sobra Acumulada no PDV) ou 'semanal' (Encerramento do Ciclo)
   const [tipoFechamento, setTipoFechamento] = useState<'diario' | 'parcial' | 'semanal'>('parcial');
+  const [mostrarOpcoesFechamento, setMostrarOpcoesFechamento] = useState<boolean>(false);
 
   // Identificação da Carga/Turno
   const [localId, setLocalId] = useState<string>('');
@@ -178,7 +182,21 @@ export default function AcertoDiarioPage() {
 
         const { data, error } = await query;
         if (error) throw error;
-        setHistoricoTudo(data || []);
+
+        // Deduplicar histórico por (local_id + data) priorizando o registro encerrado/auditado
+        const mapaAgrupado: Record<string, any> = {};
+        (data || []).forEach((r) => {
+          const key = `${r.local_id}_${r.data}`;
+          if (!mapaAgrupado[key]) {
+            mapaAgrupado[key] = r;
+          } else {
+            const statusAtual = mapaAgrupado[key].status;
+            if (statusAtual === 'aberto' && r.status !== 'aberto') {
+              mapaAgrupado[key] = r;
+            }
+          }
+        });
+        setHistoricoTudo(Object.values(mapaAgrupado));
       } catch (err: any) {
         console.error('Erro ao carregar histórico unificado:', err);
       } finally {
@@ -445,97 +463,112 @@ export default function AcertoDiarioPage() {
     carregarDadosIniciais();
   }, [profile?.organization_id]);
 
-  // Carregar Sobra Anterior ou Remessa Aberta do PDV Selecionado
+  // Carregar Sobra Anterior e Remessas Acumuladas do PDV Selecionado
   useEffect(() => {
     async function carregarSobraAnteriorOuRemessaAberta() {
       if (!profile?.organization_id || !localId || produtosBase.length === 0) return;
 
       try {
-        // 1. Tentar buscar romaneio com status 'aberto' especificamente na data selecionada
-        const { data: romaneioAbertoNaData } = await supabase
+        // 1. Buscar a sobra do último fechamento ENCERRADO estritamente anterior à data selecionada
+        const { data: fechamentoAnteriorList } = await supabase
           .from('remessas_cargas_pdv')
-          .select(
-            'id, status, itens_grade, modo_lancamento, vendedor_nome, qtd_total_enviada, data, turno'
-          )
+          .select('itens_grade, data, status')
+          .eq('organization_id', profile.organization_id)
+          .eq('local_id', localId)
+          .lt('data', dataAcerto)
+          .in('status', ['encerrado', 'auditado', 'conferido'])
+          .order('data', { ascending: false })
+          .limit(1);
+
+        const ultimoFechamentoAnterior =
+          fechamentoAnteriorList && fechamentoAnteriorList.length > 0
+            ? fechamentoAnteriorList[0]
+            : null;
+
+        const sobrasAnterioresMap: Record<string, number> = {};
+        if (ultimoFechamentoAnterior && Array.isArray(ultimoFechamentoAnterior.itens_grade)) {
+          ultimoFechamentoAnterior.itens_grade.forEach((it: any) => {
+            if (it.produto_id) {
+              sobrasAnterioresMap[it.produto_id] = Number(it.qtd_retorno) || 0;
+            }
+          });
+        }
+
+        // 2. Buscar TODOS os lançamentos da data selecionada para o PDV (sem .maybeSingle() para evitar erro PGRST116)
+        const { data: remessasNaData } = await supabase
+          .from('remessas_cargas_pdv')
+          .select('*')
           .eq('organization_id', profile.organization_id)
           .eq('local_id', localId)
           .eq('data', dataAcerto)
-          .eq('status', 'aberto')
-          .maybeSingle();
+          .order('created_at', { ascending: true });
 
-        // Se houver uma carga com status 'aberto' lançada especificamente nesta data
-        if (romaneioAbertoNaData && Array.isArray(romaneioAbertoNaData.itens_grade)) {
-          setStatusFechamentoPDV('aberto');
-          const itemMap: Record<
-            string,
-            { qtd_sobra_anterior: number; qtd_enviada: number; qtd_retorno: number }
-          > = {};
-          romaneioAbertoNaData.itens_grade.forEach((it: any) => {
-            if (it.produto_id) {
-              itemMap[it.produto_id] = {
-                qtd_sobra_anterior: Number(it.qtd_sobra_anterior) || 0,
-                qtd_enviada: Number(it.qtd_enviada) || 0,
-                qtd_retorno: Number(it.qtd_retorno) || 0,
-              };
+        if (remessasNaData && remessasNaData.length > 0) {
+          const ultimaRemessa = remessasNaData[remessasNaData.length - 1];
+          const temRemessaAberta = remessasNaData.some((r) => r.status === 'aberto');
+
+          setStatusFechamentoPDV(temRemessaAberta ? 'aberto' : ultimaRemessa.status);
+          if (ultimaRemessa.vendedor_nome) setVendedorNome(ultimaRemessa.vendedor_nome);
+          if (ultimaRemessa.turno) setTurno(ultimaRemessa.turno);
+          if (ultimaRemessa.modo_lancamento) setModo(ultimaRemessa.modo_lancamento);
+          if (ultimaRemessa.tipo_fechamento) setTipoFechamento(ultimaRemessa.tipo_fechamento);
+
+          // Consolidar envios por produto das remessas da data e manter sobras de retorno registradas
+          const enviosNoDiaMap: Record<string, number> = {};
+          const sobrasRetornoNaDataMap: Record<string, number> = {};
+
+          remessasNaData.forEach((remessa) => {
+            if (Array.isArray(remessa.itens_grade)) {
+              remessa.itens_grade.forEach((it: any) => {
+                if (it.produto_id) {
+                  enviosNoDiaMap[it.produto_id] =
+                    (enviosNoDiaMap[it.produto_id] || 0) + (Number(it.qtd_enviada) || 0);
+                  if (it.qtd_retorno !== undefined && it.qtd_retorno !== null) {
+                    sobrasRetornoNaDataMap[it.produto_id] = Number(it.qtd_retorno) || 0;
+                  }
+                }
+              });
             }
           });
 
+          setGradeItens(
+            produtosBase.map((p) => {
+              const sobraAnterior = sobrasAnterioresMap[p.id] || 0;
+              const enviadaHoje = enviosNoDiaMap[p.id] || 0;
+              const retornoHoje = sobrasRetornoNaDataMap[p.id] || 0;
+              return {
+                produto_id: p.id,
+                nome: p.nome,
+                preco_unitario: p.preco,
+                qtd_sobra_anterior: sobraAnterior,
+                qtd_enviada: enviadaHoje,
+                qtd_retorno: retornoHoje,
+              };
+            })
+          );
+
+          const totalEnviadoDiaRapido = remessasNaData.reduce(
+            (acc, r) => acc + (Number(r.qtd_total_enviada) || 0),
+            0
+          );
+          if (totalEnviadoDiaRapido > 0) setQtdEnviadaRapida(totalEnviadoDiaRapido);
+        } else {
+          // Nenhuma carga lançada para o dia selecionado: carregar produtos com a sobra anterior do último fechamento
+          setStatusFechamentoPDV('sem_carga');
+          setVendedorNome('');
           setGradeItens(
             produtosBase.map((p) => ({
               produto_id: p.id,
               nome: p.nome,
               preco_unitario: p.preco,
-              qtd_sobra_anterior: itemMap[p.id]?.qtd_sobra_anterior || 0,
-              qtd_enviada: itemMap[p.id]?.qtd_enviada || 0,
-              qtd_retorno: itemMap[p.id]?.qtd_retorno || 0,
+              qtd_sobra_anterior: sobrasAnterioresMap[p.id] || 0,
+              qtd_enviada: 0,
+              qtd_retorno: 0,
             }))
           );
-
-          if (romaneioAbertoNaData.modo_lancamento) setModo(romaneioAbertoNaData.modo_lancamento);
-          setVendedorNome(romaneioAbertoNaData.vendedor_nome || '');
-          if (romaneioAbertoNaData.qtd_total_enviada)
-            setQtdEnviadaRapida(romaneioAbertoNaData.qtd_total_enviada);
-          if (romaneioAbertoNaData.turno) setTurno(romaneioAbertoNaData.turno);
-          return;
+          setQtdEnviadaRapida(0);
+          setQtdRetornoRapida(0);
         }
-
-        // 2. Verificar se existe algum romaneio já encerrado ou auditado na data selecionada
-        const { data: romaneioEncerradoNaData } = await supabase
-          .from('remessas_cargas_pdv')
-          .select(
-            'id, status, itens_grade, modo_lancamento, vendedor_nome, qtd_total_enviada, data, turno'
-          )
-          .eq('organization_id', profile.organization_id)
-          .eq('local_id', localId)
-          .eq('data', dataAcerto)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (romaneioEncerradoNaData) {
-          setStatusFechamentoPDV(romaneioEncerradoNaData.status);
-          setVendedorNome(romaneioEncerradoNaData.vendedor_nome || '');
-          if (romaneioEncerradoNaData.turno) setTurno(romaneioEncerradoNaData.turno);
-          if (romaneioEncerradoNaData.modo_lancamento)
-            setModo(romaneioEncerradoNaData.modo_lancamento);
-          return;
-        }
-
-        // 3. Se não houver nenhum lançamento registrado para a data selecionada:
-        setStatusFechamentoPDV('sem_carga');
-        setVendedorNome('');
-        setGradeItens(
-          produtosBase.map((p) => ({
-            produto_id: p.id,
-            nome: p.nome,
-            preco_unitario: p.preco,
-            qtd_sobra_anterior: 0,
-            qtd_enviada: 0,
-            qtd_retorno: 0,
-          }))
-        );
-        setQtdEnviadaRapida(0);
-        setQtdRetornoRapida(0);
       } catch (err) {
         console.error('Erro ao carregar dados do romaneio:', err);
         setStatusFechamentoPDV('sem_carga');
@@ -1075,17 +1108,71 @@ export default function AcertoDiarioPage() {
         observacoes: observacoes.trim() || null,
       };
 
-      let { error } = await supabase.from('remessas_cargas_pdv').insert([payload]);
+      // Verificar se já existe um lançamento registrado para o mesmo PDV e Data
+      const { data: registrosExistentes } = await supabase
+        .from('remessas_cargas_pdv')
+        .select('id, status')
+        .eq('organization_id', profile?.organization_id)
+        .eq('local_id', localId)
+        .eq('data', dataAcerto)
+        .order('created_at', { ascending: true });
 
-      // Fallback gracioso se a coluna tipo_fechamento ainda não tiver sido criada no Supabase
-      if (
-        error &&
-        (error.message?.includes('tipo_fechamento') || error.details?.includes('tipo_fechamento'))
-      ) {
-        const fallbackPayload = { ...payload };
-        delete (fallbackPayload as any).tipo_fechamento;
-        const res = await supabase.from('remessas_cargas_pdv').insert([fallbackPayload]);
+      const registroExistente =
+        registrosExistentes && registrosExistentes.length > 0 ? registrosExistentes[0] : null;
+
+      let error;
+      if (registroExistente) {
+        // Atualiza o registro existente acumulando/atualizando envios e fechamento
+        const res = await supabase
+          .from('remessas_cargas_pdv')
+          .update({
+            ...payload,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', registroExistente.id);
         error = res.error;
+
+        if (
+          error &&
+          (error.message?.includes('tipo_fechamento') || error.details?.includes('tipo_fechamento'))
+        ) {
+          const fallbackPayload = { ...payload };
+          delete (fallbackPayload as any).tipo_fechamento;
+          const resFallback = await supabase
+            .from('remessas_cargas_pdv')
+            .update({
+              ...fallbackPayload,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', registroExistente.id);
+          error = resFallback.error;
+        }
+
+        // Se houver mais de um registro na mesma data/PDV, fechar todos com o mesmo status para evitar duplicatas em aberto
+        if (registrosExistentes && registrosExistentes.length > 1) {
+          const outrosIds = registrosExistentes.slice(1).map((r) => r.id);
+          await supabase
+            .from('remessas_cargas_pdv')
+            .update({
+              status: payload.status,
+              updated_at: new Date().toISOString(),
+            })
+            .in('id', outrosIds);
+        }
+      } else {
+        // Cria um novo registro para a data/PDV
+        const res = await supabase.from('remessas_cargas_pdv').insert([payload]);
+        error = res.error;
+
+        if (
+          error &&
+          (error.message?.includes('tipo_fechamento') || error.details?.includes('tipo_fechamento'))
+        ) {
+          const fallbackPayload = { ...payload };
+          delete (fallbackPayload as any).tipo_fechamento;
+          const resFallback = await supabase.from('remessas_cargas_pdv').insert([fallbackPayload]);
+          error = resFallback.error;
+        }
       }
 
       if (error) throw error;
@@ -1951,55 +2038,120 @@ export default function AcertoDiarioPage() {
               {/* Seletor de Tipo de Registro de Fechamento (Apenas no Fechamento/Unificado) */}
               {etapaAcerto !== 'envio' && (
                 <div className="border-t border-primary/10 pt-4">
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-text/60">
-                    Selecione o Tipo de Fechamento do Turno/Dia:
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-text/60 flex items-center gap-1.5">
+                      <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+                      Tipo de Fechamento do Turno/Dia:
+                    </label>
                     <button
                       type="button"
-                      onClick={() => setTipoFechamento('parcial')}
-                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
-                        tipoFechamento === 'parcial'
-                          ? 'border-cyan-500 bg-cyan-500/10 text-cyan-900 dark:text-cyan-200 ring-2 ring-cyan-500/30 font-bold'
-                          : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                      }`}
+                      onClick={() => setMostrarOpcoesFechamento(!mostrarOpcoesFechamento)}
+                      className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 transition-colors"
                     >
-                      <span className="font-bold text-xs">🔵 Fechamento Parcial</span>
-                      <span className="text-[10px] text-text/50 mt-1 leading-snug">
-                        Sobra fica no PDV para o próximo turno ou dia seguinte
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setTipoFechamento('semanal')}
-                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
-                        tipoFechamento === 'semanal'
-                          ? 'border-purple-500 bg-purple-500/10 text-purple-900 dark:text-purple-200 ring-2 ring-purple-500/30 font-bold'
-                          : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                      }`}
-                    >
-                      <span className="font-bold text-xs">🟣 Encerramento Semanal</span>
-                      <span className="text-[10px] text-text/50 mt-1 leading-snug">
-                        Contabilidade e baixa final das sobras acumuladas no ciclo
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setTipoFechamento('diario')}
-                      className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
-                        tipoFechamento === 'diario'
-                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30 font-bold'
-                          : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
-                      }`}
-                    >
-                      <span className="font-bold text-xs">🟢 Fechamento Padrão</span>
-                      <span className="text-[10px] text-text/50 mt-1 leading-snug">
-                        Recolhimento e acerto diário obrigatório
-                      </span>
+                      {mostrarOpcoesFechamento ? (
+                        <>
+                          Recolher opções <ChevronUp className="h-3.5 w-3.5" />
+                        </>
+                      ) : (
+                        <>
+                          Alterar modalidade <ChevronDown className="h-3.5 w-3.5" />
+                        </>
+                      )}
                     </button>
                   </div>
+
+                  {!mostrarOpcoesFechamento ? (
+                    <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 p-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        {tipoFechamento === 'parcial' && (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-lg border border-cyan-500/20 shrink-0">
+                            🔵 Fechamento Parcial (Sobra em Loja)
+                          </span>
+                        )}
+                        {tipoFechamento === 'semanal' && (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2.5 py-1 rounded-lg border border-purple-500/20 shrink-0">
+                            🟣 Encerramento Semanal
+                          </span>
+                        )}
+                        {tipoFechamento === 'diario' && (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 shrink-0">
+                            🟢 Fechamento Padrão
+                          </span>
+                        )}
+                        <span className="text-[11px] text-text/60">
+                          {tipoFechamento === 'parcial' &&
+                            'Sobra fica no PDV para o próximo turno/dia.'}
+                          {tipoFechamento === 'semanal' &&
+                            'Contabilidade e baixa final das sobras acumuladas no ciclo.'}
+                          {tipoFechamento === 'diario' &&
+                            'Recolhimento e acerto diário obrigatório.'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMostrarOpcoesFechamento(true)}
+                        className="text-xs font-medium text-text/50 hover:text-primary hover:underline shrink-0 ml-2"
+                      >
+                        Trocar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTipoFechamento('parcial');
+                          setMostrarOpcoesFechamento(false);
+                        }}
+                        className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
+                          tipoFechamento === 'parcial'
+                            ? 'border-cyan-500 bg-cyan-500/10 text-cyan-900 dark:text-cyan-200 ring-2 ring-cyan-500/30 font-bold'
+                            : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                        }`}
+                      >
+                        <span className="font-bold text-xs">🔵 Fechamento Parcial</span>
+                        <span className="text-[10px] text-text/50 mt-1 leading-snug">
+                          Sobra fica no PDV para o próximo turno ou dia seguinte
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTipoFechamento('semanal');
+                          setMostrarOpcoesFechamento(false);
+                        }}
+                        className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
+                          tipoFechamento === 'semanal'
+                            ? 'border-purple-500 bg-purple-500/10 text-purple-900 dark:text-purple-200 ring-2 ring-purple-500/30 font-bold'
+                            : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                        }`}
+                      >
+                        <span className="font-bold text-xs">🟣 Encerramento Semanal</span>
+                        <span className="text-[10px] text-text/50 mt-1 leading-snug">
+                          Contabilidade e baixa final das sobras acumuladas no ciclo
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTipoFechamento('diario');
+                          setMostrarOpcoesFechamento(false);
+                        }}
+                        className={`flex flex-col items-start justify-between rounded-xl p-3 text-left border transition-all ${
+                          tipoFechamento === 'diario'
+                            ? 'border-emerald-500 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30 font-bold'
+                            : 'border-primary/10 bg-background hover:bg-primary/5 text-text/70'
+                        }`}
+                      >
+                        <span className="font-bold text-xs">🟢 Fechamento Padrão</span>
+                        <span className="text-[10px] text-text/50 mt-1 leading-snug">
+                          Recolhimento e acerto diário obrigatório
+                        </span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -311,7 +311,11 @@ function OnboardingLogin({ onLoginSuccess }: { onLoginSuccess: (role: string) =>
         <div className="mb-8 drop-shadow-2xl">
           {/* Wrapper simplificado: sem fundo e sem borda */}
           {logoSrc ? (
-            <img src={logoSrc} alt="Logo" className="h-38 md:h-38 object-contain" />
+            <img
+              src={logoSrc}
+              alt="Logo"
+              className="h-38 md:h-38 object-contain brightness-0 invert"
+            />
           ) : null}
         </div>
         <h2 className="mb-6 text-5xl font-bold leading-tight drop-shadow-lg">

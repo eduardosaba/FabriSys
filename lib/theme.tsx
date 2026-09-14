@@ -145,7 +145,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const applyTheme = useCallback(
     (themeToApply: ThemeSettings) => {
       if (typeof window === 'undefined') return;
-      
+
       const host = window.location.hostname.toLowerCase();
       if (host.includes('larissasaba') || host.includes('repvendas')) {
         document.title = 'Larissa Saba - Doces Gourmet';
@@ -205,6 +205,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (effectiveHeaderBg) {
           root.style.setProperty('--header-bg', effectiveHeaderBg);
         }
+
+        const scaleVal =
+          (currentModeColors as any)?.company_logo_scale ||
+          (currentModeColors as any)?.logo_scale ||
+          (themeToApply as any).company_logo_scale ||
+          (themeToApply as any).logo_scale ||
+          1.0;
+        root.style.setProperty('--logo-scale', String(scaleVal));
+        root.style.setProperty('--company-logo-scale', String(scaleVal));
 
         root.style.setProperty('--border-radius', themeToApply.border_radius || '0.5rem');
         root.style.setProperty('--custom-font-family', themeToApply.font_family || 'Inter');
@@ -309,19 +318,26 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         } = await supabase.auth.getUser();
         if (!user) throw new Error('Não autenticado');
 
+        const scaleVal =
+          (colors as any).company_logo_scale ||
+          colors.logo_scale ||
+          (colors as any).logo_scale ||
+          1.0;
+
         const payload: any = {
           theme_mode: mode,
           primary_color: colors.primary,
           titulo_paginas_color: colors.tituloPaginas,
           logo_url: colors.logo_url || (colors as any).company_logo_url,
-          logo_scale: colors.logo_scale,
+          logo_scale: scaleVal,
           company_logo_url: (colors as any).company_logo_url || colors.logo_url,
-          company_logo_scale: (colors as any).company_logo_scale || colors.logo_scale,
+          company_logo_scale: scaleVal,
           font_family: colors.font_family,
           colors_json: JSON.stringify({
             ...colors,
-            company_logo_url: (colors as any).company_logo_url,
-            company_logo_scale: (colors as any).company_logo_scale,
+            company_logo_url: (colors as any).company_logo_url || colors.logo_url,
+            company_logo_scale: scaleVal,
+            logo_scale: scaleVal,
           }),
           updated_at: new Date().toISOString(),
         };
@@ -343,15 +359,45 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     async (newTheme: Partial<ThemeSettings>, asDefault = false, userId?: string) => {
       try {
         setLoading(true);
+        const scaleVal =
+          newTheme.company_logo_scale ||
+          newTheme.logo_scale ||
+          theme.company_logo_scale ||
+          theme.logo_scale ||
+          1.0;
+
         const updatedTheme = {
           ...theme,
           ...newTheme,
+          logo_scale: scaleVal,
+          company_logo_scale: scaleVal,
           colors: newTheme.colors
             ? {
-                light: { ...(theme.colors.light || {}), ...(newTheme.colors.light || {}) },
-                dark: { ...(theme.colors.dark || {}), ...(newTheme.colors.dark || {}) },
+                light: {
+                  logo_scale: scaleVal,
+                  company_logo_scale: scaleVal,
+                  ...(theme.colors.light || {}),
+                  ...(newTheme.colors.light || {}),
+                },
+                dark: {
+                  logo_scale: scaleVal,
+                  company_logo_scale: scaleVal,
+                  ...(theme.colors.dark || {}),
+                  ...(newTheme.colors.dark || {}),
+                },
               }
-            : theme.colors,
+            : {
+                light: {
+                  logo_scale: scaleVal,
+                  company_logo_scale: scaleVal,
+                  ...(theme.colors.light || {}),
+                },
+                dark: {
+                  logo_scale: scaleVal,
+                  company_logo_scale: scaleVal,
+                  ...(theme.colors.dark || {}),
+                },
+              },
         } as ThemeSettings;
 
         if (userId) {

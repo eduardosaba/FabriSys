@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getLocalDateISOString } from '@/lib/utils';
 import { Card } from '@/components/dashboard/Card';
 import { Trophy, Target, TrendingUp, ShoppingBag } from 'lucide-react';
 
@@ -35,7 +36,7 @@ export default function MetaDoDiaWidget({
 
       const inicioDia = new Date(hoje.setHours(0, 0, 0, 0)).toISOString();
       const fimDia = new Date(hoje.setHours(23, 59, 59, 999)).toISOString();
-      const dataHojeStr = new Date().toISOString().split('T')[0];
+      const dataHojeStr = getLocalDateISOString();
 
       try {
         const { data: vendas, error: errVendas } = await supabase

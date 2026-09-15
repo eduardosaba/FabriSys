@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import BRLCurrencyInput from '@/components/ui/shared/BRLCurrencyInput';
+import { getLocalDateISOString } from '@/lib/utils';
 import { PDVSelectorCards } from '@/components/ui/shared/PDVSelectorCards';
 import { supabase } from '@/lib/supabase-client';
 import { useAuth } from '@/lib/auth';
@@ -32,6 +33,8 @@ import {
   Sparkles,
   Download,
   Printer,
+  Search,
+  Filter,
 } from 'lucide-react';
 
 interface LocalPDV {
@@ -69,10 +72,7 @@ export default function FechamentoDiarioPage() {
   const { theme } = useTheme();
 
   const [abaAtiva, setAbaAtiva] = useState<'conciliacao' | 'historico'>('conciliacao');
-  const [filtroData, setFiltroData] = useState<string>(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const [filtroData, setFiltroData] = useState<string>(() => getLocalDateISOString());
   const [filtroPDV, setFiltroPDV] = useState<string>('todos');
   const [locais, setLocais] = useState<LocalPDV[]>([]);
   const [registros, setRegistros] = useState<RomaneioRegistro[]>([]);
@@ -92,8 +92,11 @@ export default function FechamentoDiarioPage() {
 
   // Dias pendentes e Histórico
   const [diasPendentes, setDiasPendentes] = useState<string[]>([]);
+  const [pendenciasList, setPendenciasList] = useState<any[]>([]);
   const [historicoFechamentos, setHistoricoFechamentos] = useState<any[]>([]);
   const [loadingHistorico, setLoadingHistorico] = useState(false);
+  const [filtroStatusHistorico, setFiltroStatusHistorico] = useState<string>('todos');
+  const [buscaHistorico, setBuscaHistorico] = useState<string>('');
 
   // Disparar efeito de festa com confetes ao bater zero divergência
   const dispararFestaZeroDivergencia = useCallback(() => {
@@ -133,8 +136,10 @@ export default function FechamentoDiarioPage() {
         if (profile?.organization_id) {
           query = query.eq('organization_id', profile.organization_id);
         }
-        let { data, error } = await query.order('ordem', { ascending: true }).order('nome');
-        if (error && error.message?.includes('ordem')) {
+        let data;
+        const resOrd = await query.order('ordem', { ascending: true }).order('nome');
+        data = resOrd.data;
+        if (resOrd.error && resOrd.error.message?.includes('ordem')) {
           const res = await query.order('nome');
           data = res.data;
         }
@@ -166,17 +171,19 @@ export default function FechamentoDiarioPage() {
     try {
       const { data } = await supabase
         .from('remessas_cargas_pdv')
-        .select('data')
+        .select('*, locais:local_id(nome)')
         .eq('organization_id', profile.organization_id)
         .not('status', 'in', '("auditado","conferido")')
-        .order('data', { ascending: true });
+        .order('data', { ascending: false })
+        .order('created_at', { ascending: false });
 
       if (data) {
+        setPendenciasList(data);
         const datasUnicas: string[] = Array.from(new Set(data.map((r: any) => String(r.data))));
         setDiasPendentes(datasUnicas);
       }
     } catch (err) {
-      console.error('Erro ao buscar datas pendentes:', err);
+      console.error('Erro ao buscar pendências:', err);
     }
   }, [profile?.organization_id]);
 
@@ -208,7 +215,9 @@ export default function FechamentoDiarioPage() {
         query = query.eq('organization_id', profile.organization_id);
       }
 
-      let { data, error } = await query;
+      const resQuery = await query;
+      let data = resQuery.data;
+      const error = resQuery.error;
 
       if (!data || data.length === 0) {
         const fallback = await supabase
@@ -241,6 +250,7 @@ export default function FechamentoDiarioPage() {
       const formatados = (data || []).map((r: any) => ({
         id: r.id,
         data: r.data,
+        local_id: r.local_id,
         turno: r.turno || 'integral',
         vendedor_nome: r.vendedor_nome || 'Atendente',
         pdv_nome: r.locais?.nome || 'PDV',
@@ -295,7 +305,8 @@ export default function FechamentoDiarioPage() {
         valor_cartao_declarado: Number(r.valor_cartao_declarado || 0),
         faturamento_liquido_esperado: Number(r.faturamento_liquido_esperado || 0),
         pix_cartao_esperado: Number(r.pix_cartao_esperado || 0),
-        diferenca_auditoria: (r.status || 'aberto') === 'aberto' ? 0 : Number(r.diferenca_auditoria || 0),
+        diferenca_auditoria:
+          (r.status || 'aberto') === 'aberto' ? 0 : Number(r.diferenca_auditoria || 0),
         observacoes: r.observacoes || '',
         qtd_total_enviada: Number(r.qtd_total_enviada || 0),
         qtd_total_retorno: Number(r.qtd_total_retorno || 0),
@@ -429,6 +440,15 @@ export default function FechamentoDiarioPage() {
         (editingRecord.valor_cartao_declarado || 0);
       const diferenca = totalDeclarado > 0 ? totalDeclarado - faturamentoLiquido : 0;
 
+      const novoStatus =
+        (editingRecord.status === 'dinheiro_informado' ||
+          editingRecord.status === 'sobras_informadas' ||
+          editingRecord.status === 'aberto') &&
+        ((editingRecord.valor_pix_declarado || 0) > 0 ||
+          (editingRecord.valor_cartao_declarado || 0) > 0)
+          ? 'encerrado'
+          : editingRecord.status;
+
       const { error } = await supabase
         .from('remessas_cargas_pdv')
         .update({
@@ -442,6 +462,7 @@ export default function FechamentoDiarioPage() {
           faturamento_liquido_esperado: faturamentoLiquido,
           pix_cartao_esperado: pixCartaoEsperado,
           diferenca_auditoria: diferenca,
+          status: novoStatus,
           observacoes: editingRecord.observacoes,
         })
         .eq('id', editingRecord.id);
@@ -450,7 +471,10 @@ export default function FechamentoDiarioPage() {
 
       toast({
         title: 'Relatório Atualizado',
-        description: 'Alterações salvas com sucesso.',
+        description:
+          novoStatus === 'encerrado' && editingRecord.status === 'dinheiro_informado'
+            ? 'Valores Pix/Cartão lançados com sucesso! O turno foi alterado para Encerrado.'
+            : 'Alterações salvas com sucesso.',
         variant: 'success',
       });
       setEditingRecord(null);
@@ -481,7 +505,9 @@ export default function FechamentoDiarioPage() {
     0
   );
   const totalFurosDeCaixa = registros.reduce(
-    (acc, r) => acc + (r.status === 'aberto' ? 0 : Math.abs(r.diferenca_auditoria < 0 ? r.diferenca_auditoria : 0)),
+    (acc, r) =>
+      acc +
+      (r.status === 'aberto' ? 0 : Math.abs(r.diferenca_auditoria < 0 ? r.diferenca_auditoria : 0)),
     0
   );
 
@@ -563,8 +589,8 @@ export default function FechamentoDiarioPage() {
     const nomeEmpresa =
       profile?.organizations?.nome ||
       profile?.organization_name ||
-      (profile as any)?.empresa_nome ||
-      (profile as any)?.nome_empresa ||
+      profile?.empresa_nome ||
+      profile?.nome_empresa ||
       'Larissa Saba - Doces Gourmet';
     const dataAtual = new Date().toLocaleDateString('pt-BR');
 
@@ -920,51 +946,74 @@ export default function FechamentoDiarioPage() {
       {/* ABA 1: CONCILIAÇÃO DO DIA */}
       {abaAtiva === 'conciliacao' && (
         <div className="space-y-6">
-          {/* Alerta de Dias Pendentes */}
-          {diasPendentes.length > 0 && (
-            <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 dark:border-amber-800 dark:bg-amber-950/40 shadow-sm">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200">
-                      Atenção: {diasPendentes.length}{' '}
-                      {diasPendentes.length === 1
-                        ? 'dia possui relatórios financeiros pendentes'
-                        : 'dias possuem relatórios financeiros pendentes'}
-                    </h4>
-                    <p className="mt-0.5 text-xs text-amber-800/80 dark:text-amber-300/80">
-                      Clique na data abaixo para conciliar os extratos:
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {diasPendentes.map((dt) => {
-                        const formatada = dt.split('-').reverse().join('/');
-                        const isSelected = dt === filtroData;
-                        return (
-                          <button
-                            key={dt}
-                            type="button"
-                            onClick={() => {
-                              setFiltroData(dt);
-                              setModoEdicaoDia(false);
-                            }}
-                            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-bold transition-all shadow-2xs ${
-                              isSelected
-                                ? 'bg-amber-600 text-white ring-2 ring-amber-400'
-                                : 'bg-amber-200/70 text-amber-950 hover:bg-amber-300 dark:bg-amber-900/60 dark:text-amber-100'
-                            }`}
-                          >
-                            <Calendar className="h-3.5 w-3.5" />
-                            {formatada}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+          {/* Alerta de Dias & PDVs Pendentes */}
+          {pendenciasList.length > 0 && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50/90 dark:border-amber-800 dark:bg-amber-950/40 p-4 shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200 dark:border-amber-800/60 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                    Atenção: {pendenciasList.length} relatório(s) pendente(s) de conciliação /
+                    fechamento
+                  </h4>
                 </div>
-                <span className="text-[10px] text-amber-800/60 dark:text-amber-400/60 italic shrink-0">
-                  * Dias sem vendas não geram pendências.
+                <span className="text-[11px] text-amber-800/80 dark:text-amber-300/80 font-medium">
+                  Clique no card para filtrar a data e PDV automaticamente
                 </span>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {pendenciasList.map((item) => {
+                  const formatada = item.data ? item.data.split('-').reverse().join('/') : '-';
+                  const pdvNome = item.locais?.nome || 'PDV';
+                  const isSelected =
+                    item.data === filtroData &&
+                    (filtroPDV === 'todos' || filtroPDV === item.local_id);
+                  const statusItem = item.status || 'aberto';
+
+                  const badgeText =
+                    statusItem === 'dinheiro_informado'
+                      ? 'Gaveta Ok (Pix/Cartão Pendente)'
+                      : statusItem === 'sobras_informadas'
+                        ? 'Sobras Informadas'
+                        : statusItem === 'aberto'
+                          ? 'Sobras Pendentes'
+                          : 'Conciliação Pendente';
+
+                  const badgeClass =
+                    statusItem === 'dinheiro_informado'
+                      ? 'bg-amber-500/20 text-amber-900 dark:text-amber-200 border border-amber-400 font-black'
+                      : statusItem === 'aberto'
+                        ? 'bg-amber-200 text-amber-900'
+                        : 'bg-cyan-100 text-cyan-900';
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setFiltroData(item.data);
+                        if (item.local_id) setFiltroPDV(item.local_id);
+                        setModoEdicaoDia(false);
+                      }}
+                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-2xs ${
+                        isSelected
+                          ? 'bg-amber-600 text-white ring-2 ring-amber-400'
+                          : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-amber-300/80 hover:border-amber-500'
+                      }`}
+                    >
+                      <Store className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span>
+                        {pdvNome} ({formatada})
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[9px] uppercase font-extrabold ${badgeClass}`}
+                      >
+                        {badgeText}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1296,17 +1345,25 @@ export default function FechamentoDiarioPage() {
                           </td>
                           <td className="p-3 text-center">
                             <span
-                              className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold capitalize ${
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-extrabold capitalize ${
                                 reg.status === 'auditado' || reg.status === 'conferido'
-                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300'
+                                  : reg.status === 'encerrado'
+                                    ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 border border-cyan-300'
+                                    : reg.status === 'dinheiro_informado'
+                                      ? 'bg-amber-500/20 text-amber-900 border border-amber-400 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700 font-extrabold'
+                                      : 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-300'
                               }`}
                             >
                               {reg.status === 'auditado'
                                 ? 'Auditado'
                                 : reg.status === 'conferido'
                                   ? 'Conferido'
-                                  : 'Pendente'}
+                                  : reg.status === 'encerrado'
+                                    ? 'Encerrado'
+                                    : reg.status === 'dinheiro_informado'
+                                      ? 'Gaveta Ok (Pix/Cartão Pendente)'
+                                      : 'Aberto'}
                             </span>
                           </td>
                           <td className="p-3 text-center">
@@ -1319,6 +1376,16 @@ export default function FechamentoDiarioPage() {
                               </span>
                             ) : (
                               <div className="flex items-center justify-center gap-1.5">
+                                {reg.status === 'dinheiro_informado' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAbrirEdicao(reg)}
+                                    title="Lançar Totais Pix/Cartão"
+                                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 bg-amber-600 text-white text-[10px] font-extrabold hover:bg-amber-700 transition-colors shadow-2xs shrink-0"
+                                  >
+                                    <QrCode className="h-3 w-3" /> Pix/Cartão
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => handleAbrirEdicao(reg)}
@@ -1350,119 +1417,194 @@ export default function FechamentoDiarioPage() {
       )}
 
       {/* ABA 2: HISTÓRICO DE FECHAMENTOS */}
-      {abaAtiva === 'historico' && (
-        <div className="overflow-hidden rounded-2xl border border-primary/10 bg-background shadow-sm">
-          <div className="border-b border-primary/10 bg-primary/5 p-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-text/70">
-                Histórico de Fechamentos Realizados
-              </h2>
-              <p className="text-[11px] text-text/50">
-                Lista de todos os fechamentos e romaneios processados com saldos, furos e opção de reabertura.
-              </p>
-            </div>
-            <span className="text-xs text-text/50 font-medium">
-              Total: {historicoFechamentos.length} fechamento(s)
-            </span>
-          </div>
+      {abaAtiva === 'historico' &&
+        (() => {
+          const historicoFiltrado = historicoFechamentos.filter((item) => {
+            if (filtroPDV !== 'todos' && item.local_id !== filtroPDV) return false;
+            if (filtroStatusHistorico !== 'todos' && item.status !== filtroStatusHistorico)
+              return false;
+            if (buscaHistorico.trim() !== '') {
+              const term = buscaHistorico.toLowerCase();
+              const matchPdv = String(item.pdv_nome || '')
+                .toLowerCase()
+                .includes(term);
+              const matchVend = String(item.vendedor_nome || '')
+                .toLowerCase()
+                .includes(term);
+              const matchObs = String(item.observacoes || '')
+                .toLowerCase()
+                .includes(term);
+              const matchData = String(item.data || '').includes(term);
+              if (!matchPdv && !matchVend && !matchObs && !matchData) return false;
+            }
+            return true;
+          });
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-primary/5 text-text/60 uppercase font-bold border-b border-primary/10">
-                <tr>
-                  <th className="p-3">Data / Turno</th>
-                  <th className="p-3">PDV / Loja</th>
-                  <th className="p-3">Atendente</th>
-                  <th className="p-3 text-right">Dinheiro R$</th>
-                  <th className="p-3 text-right">Pix R$</th>
-                  <th className="p-3 text-right">Cartão R$</th>
-                  <th className="p-3 text-right">Diferenças R$</th>
-                  <th className="p-3 text-center">Status</th>
-                  <th className="p-3 text-center">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-primary/5">
-                {loadingHistorico ? (
-                  <tr>
-                    <td colSpan={9} className="p-6 text-center text-text/50">
-                      Carregando histórico de fechamentos...
-                    </td>
-                  </tr>
-                ) : historicoFechamentos.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="p-6 text-center text-text/50">
-                      Nenhum fechamento registrado até o momento.
-                    </td>
-                  </tr>
-                ) : (
-                  historicoFechamentos.map((item) => (
-                    <tr key={item.id} className="hover:bg-primary/5">
-                      <td className="p-3 font-bold text-text/80 whitespace-nowrap">
-                        {item.data ? item.data.split('-').reverse().join('/') : '-'}
-                        <span className="text-text/40 text-[10px] font-normal block">
-                          {item.turno ? item.turno.charAt(0).toUpperCase() + item.turno.slice(1) : ''}
-                        </span>
-                      </td>
-                      <td className="p-3 font-bold text-primary whitespace-nowrap">
-                        {item.pdv_nome}
-                      </td>
-                      <td className="p-3 text-text/70">
-                        {item.vendedor_nome || '-'}
-                      </td>
-                      <td className="p-3 text-right font-mono text-emerald-600 font-bold">
-                        R$ {item.valor_dinheiro_gaveta.toFixed(2)}
-                      </td>
-                      <td className="p-3 text-right font-mono text-cyan-600 font-bold">
-                        R$ {item.valor_pix_declarado.toFixed(2)}
-                      </td>
-                      <td className="p-3 text-right font-mono text-purple-600 font-bold">
-                        R$ {item.valor_cartao_declarado.toFixed(2)}
-                      </td>
-                      <td
-                        className={`p-3 text-right font-mono font-bold ${
-                          item.diferenca_auditoria < 0
-                            ? 'text-rose-600'
-                            : item.diferenca_auditoria > 0
-                              ? 'text-emerald-600'
-                              : 'text-text/60'
-                        }`}
-                      >
-                        R$ {item.diferenca_auditoria.toFixed(2)}
-                      </td>
-                      <td className="p-3 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
-                            item.status === 'auditado'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                              : item.status === 'encerrado'
-                                ? 'bg-cyan-100 text-cyan-800 border border-cyan-300'
-                                : 'bg-amber-100 text-amber-800 border border-amber-300'
-                          }`}
-                        >
-                          {item.status === 'auditado'
-                            ? 'Auditado'
-                            : item.status === 'encerrado'
-                              ? 'Encerrado'
-                              : 'Aberto'}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleReabrirFechamento(item.data)}
-                          className="inline-flex items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-900 hover:bg-amber-100 transition-all"
-                        >
-                          <Unlock className="h-3.5 w-3.5" /> Reabrir / Editar
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+          return (
+            <div className="space-y-4">
+              {/* Filtro por PDV na Aba 2 */}
+              <div>
+                <label className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
+                  <Store className="h-4 w-4 text-primary" /> Filtrar por Ponto de Venda (PDV)
+                </label>
+                <PDVSelectorCards
+                  locais={locais}
+                  selectedId={filtroPDV}
+                  onSelect={(id) => setFiltroPDV(id)}
+                  incluirTodos={true}
+                  todosLabel="Todos os PDVs (Visão Geral)"
+                />
+              </div>
+
+              {/* Barra de Filtros Complementares (Busca & Status) */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 rounded-2xl border border-primary/20 bg-background p-3 shadow-2xs">
+                <div className="relative flex-1 w-full">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-text/40 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={buscaHistorico}
+                    onChange={(e) => setBuscaHistorico(e.target.value)}
+                    placeholder="Buscar por atendente, PDV, data ou observações..."
+                    className="w-full rounded-xl border border-primary/20 bg-background pl-9 pr-3 py-2 text-xs font-semibold outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Filter className="h-4 w-4 text-primary shrink-0" />
+                  <select
+                    value={filtroStatusHistorico}
+                    onChange={(e) => setFiltroStatusHistorico(e.target.value)}
+                    className="w-full sm:w-44 rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs font-bold outline-none focus:border-primary"
+                  >
+                    <option value="todos">Todos os Status</option>
+                    <option value="aberto">Aberto</option>
+                    <option value="dinheiro_informado">Gaveta Ok (Pix/Cartão Pendente)</option>
+                    <option value="encerrado">Encerrado</option>
+                    <option value="auditado">Auditado</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-primary/10 bg-background shadow-sm">
+                <div className="border-b border-primary/10 bg-primary/5 p-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-text/70">
+                      Histórico de Fechamentos Realizados
+                    </h2>
+                    <p className="text-[11px] text-text/50">
+                      Lista de todos os fechamentos e romaneios processados com saldos, furos e
+                      opção de reabertura.
+                    </p>
+                  </div>
+                  <span className="text-xs text-text/50 font-medium">
+                    Exibindo: {historicoFiltrado.length} de {historicoFechamentos.length}{' '}
+                    fechamento(s)
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-primary/5 text-text/60 uppercase font-bold border-b border-primary/10">
+                      <tr>
+                        <th className="p-3">Data / Turno</th>
+                        <th className="p-3">PDV / Loja</th>
+                        <th className="p-3">Atendente</th>
+                        <th className="p-3 text-right">Dinheiro R$</th>
+                        <th className="p-3 text-right">Pix R$</th>
+                        <th className="p-3 text-right">Cartão R$</th>
+                        <th className="p-3 text-right">Diferenças R$</th>
+                        <th className="p-3 text-center">Status</th>
+                        <th className="p-3 text-center">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-primary/5">
+                      {loadingHistorico ? (
+                        <tr>
+                          <td colSpan={9} className="p-6 text-center text-text/50">
+                            Carregando histórico de fechamentos...
+                          </td>
+                        </tr>
+                      ) : historicoFiltrado.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="p-6 text-center text-text/50">
+                            Nenhum fechamento encontrado com os filtros selecionados.
+                          </td>
+                        </tr>
+                      ) : (
+                        historicoFiltrado.map((item) => (
+                          <tr key={item.id} className="hover:bg-primary/5">
+                            <td className="p-3 font-bold text-text/80 whitespace-nowrap">
+                              {item.data ? item.data.split('-').reverse().join('/') : '-'}
+                              <span className="text-text/40 text-[10px] font-normal block">
+                                {item.turno
+                                  ? item.turno.charAt(0).toUpperCase() + item.turno.slice(1)
+                                  : ''}
+                              </span>
+                            </td>
+                            <td className="p-3 font-bold text-primary whitespace-nowrap">
+                              {item.pdv_nome}
+                            </td>
+                            <td className="p-3 text-text/70">{item.vendedor_nome || '-'}</td>
+                            <td className="p-3 text-right font-mono text-emerald-600 font-bold">
+                              R$ {item.valor_dinheiro_gaveta.toFixed(2)}
+                            </td>
+                            <td className="p-3 text-right font-mono text-cyan-600 font-bold">
+                              R$ {item.valor_pix_declarado.toFixed(2)}
+                            </td>
+                            <td className="p-3 text-right font-mono text-purple-600 font-bold">
+                              R$ {item.valor_cartao_declarado.toFixed(2)}
+                            </td>
+                            <td
+                              className={`p-3 text-right font-mono font-bold ${
+                                item.diferenca_auditoria < 0
+                                  ? 'text-rose-600'
+                                  : item.diferenca_auditoria > 0
+                                    ? 'text-emerald-600'
+                                    : 'text-text/60'
+                              }`}
+                            >
+                              R$ {item.diferenca_auditoria.toFixed(2)}
+                            </td>
+                            <td className="p-3 text-center">
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
+                                  item.status === 'auditado'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : item.status === 'encerrado'
+                                      ? 'bg-cyan-100 text-cyan-800 border border-cyan-300'
+                                      : item.status === 'dinheiro_informado'
+                                        ? 'bg-amber-500/20 text-amber-900 border border-amber-400 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700 font-extrabold'
+                                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                                }`}
+                              >
+                                {item.status === 'auditado'
+                                  ? 'Auditado'
+                                  : item.status === 'encerrado'
+                                    ? 'Encerrado'
+                                    : item.status === 'dinheiro_informado'
+                                      ? 'Gaveta Ok (Pix/Cartão Pendente)'
+                                      : 'Aberto'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleReabrirFechamento(item.data)}
+                                className="inline-flex items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-900 hover:bg-amber-100 transition-all"
+                              >
+                                <Unlock className="h-3.5 w-3.5" /> Reabrir / Editar
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       {/* Modal de Edição de Relatório Financeiro Individual */}
       {editingRecord && (
@@ -1482,6 +1624,17 @@ export default function FechamentoDiarioPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {editingRecord.status === 'dinheiro_informado' && (
+                <div className="sm:col-span-2 p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2 font-medium">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                  <span>
+                    Turno com dinheiro recolhido na gaveta. Ao informar os totais de Pix e/ou
+                    Cartão, o status será atualizado automaticamente para <strong>Encerrado</strong>
+                    .
+                  </span>
+                </div>
+              )}
+
               <div className="sm:col-span-2">
                 <label className="text-xs font-semibold text-text/70">Atendente / Vendedor</label>
                 <input

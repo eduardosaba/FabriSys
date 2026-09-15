@@ -1,5 +1,6 @@
 'use client';
 
+import { getLocalDateISOString } from '@/lib/utils';
 import { useState } from 'react';
 import Button from '@/components/Button';
 import { CalendarIcon, Download, Filter } from 'lucide-react';
@@ -82,7 +83,7 @@ export default function FilterBar({ onFilterChange, onExport }: FilterBarProps) 
               </label>
               <input
                 type="date"
-                value={dateRange.start.toISOString().split('T')[0]}
+                value={getLocalDateISOString(dateRange.start)}
                 onChange={(e) =>
                   setDateRange((prev) => ({ ...prev, start: new Date(e.target.value) }))
                 }
@@ -95,7 +96,7 @@ export default function FilterBar({ onFilterChange, onExport }: FilterBarProps) 
               </label>
               <input
                 type="date"
-                value={dateRange.end.toISOString().split('T')[0]}
+                value={getLocalDateISOString(dateRange.end)}
                 onChange={(e) =>
                   setDateRange((prev) => ({ ...prev, end: new Date(e.target.value) }))
                 }

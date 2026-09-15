@@ -76,3 +76,11 @@ export function parseBRLToNumber(value: string | null | undefined): number {
   const decPart = cents.slice(-2);
   return Number(intPart + '.' + decPart);
 }
+
+// Retorna a data no formato YYYY-MM-DD considerando estritamente o fuso horário local
+export function getLocalDateISOString(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}

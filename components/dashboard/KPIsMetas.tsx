@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getLocalDateISOString } from '@/lib/utils';
 import { Card } from '@/components/dashboard/Card';
 import { Target, TrendingUp, AlertCircle, Trophy, Store } from 'lucide-react';
 
@@ -46,7 +47,7 @@ export default function KPIsMetas({
       // Ajuste de fuso horário simples para garantir o dia corrente
       const inicioDia = new Date(hoje.setHours(0, 0, 0, 0)).toISOString();
       const fimDia = new Date(hoje.setHours(23, 59, 59, 999)).toISOString();
-      const dataHojeStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const dataHojeStr = getLocalDateISOString(); // YYYY-MM-DD
 
       // 1. QUERY DE LOJAS (Filtra se for gerente ou quando `localId` está presente)
       let queryLocais = supabase

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import BRLCurrencyInput from '@/components/ui/shared/BRLCurrencyInput';
+import { getLocalDateISOString } from '@/lib/utils';
 import { PDVSelectorCards } from '@/components/ui/shared/PDVSelectorCards';
 
 import { useTheme } from '@/lib/theme';
@@ -150,13 +151,13 @@ export default function AuditoriaPDVPage() {
   const currentYear = now.getFullYear();
   const currentMonthStr = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-  const [filtroData, setFiltroData] = useState<string>(now.toISOString().split('T')[0]);
+  const [filtroData, setFiltroData] = useState<string>(getLocalDateISOString(now));
   const [filtroMes, setFiltroMes] = useState<string>(currentMonthStr);
   const [filtroAno, setFiltroAno] = useState<number>(currentYear);
   const [filtroTrimestre, setFiltroTrimestre] = useState<'q1' | 'q2' | 'q3' | 'q4'>('q3');
   const [filtroSemestre, setFiltroSemestre] = useState<'s1' | 's2'>('s2');
-  const [dataInicio, setDataInicio] = useState<string>(now.toISOString().split('T')[0]);
-  const [dataFim, setDataFim] = useState<string>(now.toISOString().split('T')[0]);
+  const [dataInicio, setDataInicio] = useState<string>(getLocalDateISOString(now));
+  const [dataFim, setDataFim] = useState<string>(getLocalDateISOString(now));
 
   // Estados de Fechamento Noturno da Larissa (Extratos Reais)
   const [pixExtratoBanco, setPixExtratoBanco] = useState<number>(0);
@@ -178,16 +179,25 @@ export default function AuditoriaPDVPage() {
         if (profile?.organization_id) {
           query = query.eq('organization_id', profile.organization_id);
         }
-        let { data, error } = await query.order('ordem', { ascending: true }).order('nome');
-        if (error && error.message?.includes('ordem')) {
+        let data;
+        const resOrd = await query.order('ordem', { ascending: true }).order('nome');
+        data = resOrd.data;
+        if (resOrd.error && resOrd.error.message?.includes('ordem')) {
           const res = await query.order('nome');
           data = res.data;
         }
 
         if (!data || data.length === 0) {
-          let { data: fallbackData } = await supabase.from('locais').select('id, nome, tipo, logo_url, ordem').order('ordem', { ascending: true }).order('nome');
+          let { data: fallbackData } = await supabase
+            .from('locais')
+            .select('id, nome, tipo, logo_url, ordem')
+            .order('ordem', { ascending: true })
+            .order('nome');
           if (!fallbackData) {
-            const resFallback = await supabase.from('locais').select('id, nome, tipo, logo_url').order('nome');
+            const resFallback = await supabase
+              .from('locais')
+              .select('id, nome, tipo, logo_url')
+              .order('nome');
             fallbackData = resFallback.data;
           }
           data = fallbackData;
@@ -473,8 +483,8 @@ export default function AuditoriaPDVPage() {
     const nomeEmpresa =
       profile?.organizations?.nome ||
       profile?.organization_name ||
-      (profile as any)?.empresa_nome ||
-      (profile as any)?.nome_empresa ||
+      profile?.empresa_nome ||
+      profile?.nome_empresa ||
       'Larissa Saba - Doces Gourmet';
     const dataAtual = new Date().toLocaleDateString('pt-BR');
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import BRLCurrencyInput from '@/components/ui/shared/BRLCurrencyInput';
+import { getLocalDateISOString } from '@/lib/utils';
 
 import { useTheme } from '@/lib/theme';
 import { supabase } from '@/lib/supabase-client';
@@ -33,6 +34,7 @@ import {
   Plus,
   PlusCircle,
   Printer,
+  QrCode,
   RefreshCw,
   SlidersHorizontal,
   Store,
@@ -105,9 +107,9 @@ export default function AcertoDiarioPage() {
   // Etapa do Lançamento: 'envio' (1. Envio de Carga), 'fechamento' (2. Sobras & Financeiro) ou 'tudo' (Modo Unificado)
   const [etapaAcerto, setEtapaAcerto] = useState<'envio' | 'fechamento' | 'tudo'>('envio');
 
-  // Status do Fechamento do PDV Selecionado: 'aberto' (pendente de encerramento), 'encerrado' (já concluído), 'sem_carga' ou 'sobra_acumulada' (com produtos no estoque)
+  // Status do Fechamento do PDV Selecionado: 'aberto' (pendente de encerramento), 'encerrado' (já concluído), 'sem_carga', 'sobra_acumulada', 'conferido', 'auditado'
   const [statusFechamentoPDV, setStatusFechamentoPDV] = useState<
-    'aberto' | 'encerrado' | 'sem_carga' | 'sobra_acumulada'
+    'aberto' | 'encerrado' | 'sem_carga' | 'sobra_acumulada' | 'conferido' | 'auditado' | string
   >('sem_carga');
 
   // Tipo de Fechamento: 'diario' (Padrão), 'parcial' (Sobra Acumulada no PDV) ou 'semanal' (Encerramento do Ciclo)
@@ -116,7 +118,7 @@ export default function AcertoDiarioPage() {
 
   // Identificação da Carga/Turno
   const [localId, setLocalId] = useState<string>('');
-  const [dataAcerto, setDataAcerto] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [dataAcerto, setDataAcerto] = useState<string>(() => getLocalDateISOString());
   const [turno, setTurno] = useState<'manha' | 'tarde' | 'noite' | 'integral'>('integral');
   const [vendedorNome, setVendedorNome] = useState<string>('');
 
@@ -138,20 +140,62 @@ export default function AcertoDiarioPage() {
   const [valorPix, setValorPix] = useState<number>(0);
   const [valorCartao, setValorCartao] = useState<number>(0);
   const [observacoes, setObservacoes] = useState<string>('');
+  const [mostrarPixCartao, setMostrarPixCartao] = useState<boolean>(false);
 
   // Estados da Aba 3 - Ver Tudo Unificado
   const [dataInicioTudo, setDataInicioTudo] = useState<string>(() => {
     const d = new Date();
     d.setDate(1);
-    return d.toISOString().split('T')[0];
+    return getLocalDateISOString(d);
   });
-  const [dataFimTudo, setDataFimTudo] = useState<string>(
-    () => new Date().toISOString().split('T')[0]
-  );
+  const [dataFimTudo, setDataFimTudo] = useState<string>(() => getLocalDateISOString());
   const [turnoTudo, setTurnoTudo] = useState<string>('todos');
   const [pdvTudo, setPdvTudo] = useState<string>('todos');
   const [historicoTudo, setHistoricoTudo] = useState<any[]>([]);
   const [loadingTudo, setLoadingTudo] = useState<boolean>(false);
+
+  // Turnos em Aberto ou com Apenas Dinheiro Informado (Aguardando Fechamento de Sobras / Pix e Cartão)
+  const [turnosEmAberto, setTurnosEmAberto] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!profile?.organization_id) return;
+    async function carregarTurnosEmAberto() {
+      try {
+        const { data } = await supabase
+          .from('remessas_cargas_pdv')
+          .select('*, locais:local_id(nome)')
+          .eq('organization_id', profile.organization_id)
+          .in('status', ['aberto', 'dinheiro_informado', 'sobras_informadas'])
+          .order('data', { ascending: false })
+          .order('created_at', { ascending: false });
+
+        if (data) {
+          setTurnosEmAberto(data);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar turnos em aberto:', err);
+      }
+    }
+    carregarTurnosEmAberto();
+  }, [profile?.organization_id, statusFechamentoPDV]);
+
+  const handleSelecionarTurnoEmAberto = (item: any) => {
+    if (item.local_id) setLocalId(item.local_id);
+    if (item.data) setDataAcerto(item.data);
+    if (item.turno) setTurno(item.turno);
+    if (item.vendedor_nome) setVendedorNome(item.vendedor_nome);
+    if (item.valor_dinheiro_gaveta !== undefined)
+      setValorDinheiro(Number(item.valor_dinheiro_gaveta) || 0);
+    if (item.valor_pix_declarado !== undefined) setValorPix(Number(item.valor_pix_declarado) || 0);
+    if (item.valor_cartao_declarado !== undefined)
+      setValorCartao(Number(item.valor_cartao_declarado) || 0);
+    if (item.observacoes) setObservacoes(item.observacoes);
+
+    if (item.status === 'dinheiro_informado') {
+      setMostrarPixCartao(true);
+    }
+    setEtapaAcerto('fechamento');
+  };
 
   // Effect para buscar o histórico unificado na Aba 3
   useEffect(() => {
@@ -163,13 +207,20 @@ export default function AcertoDiarioPage() {
         let query = supabase
           .from('remessas_cargas_pdv')
           .select('*, locais:local_id(nome)')
-          .gte('data', dataInicioTudo)
-          .lte('data', dataFimTudo)
           .order('data', { ascending: false })
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(2000);
 
         if (profile?.organization_id) {
           query = query.eq('organization_id', profile.organization_id);
+        }
+
+        if (dataInicioTudo && dataInicioTudo.trim() !== '') {
+          query = query.gte('data', dataInicioTudo);
+        }
+
+        if (dataFimTudo && dataFimTudo.trim() !== '') {
+          query = query.lte('data', dataFimTudo);
         }
 
         if (turnoTudo && turnoTudo !== 'todos') {
@@ -180,23 +231,45 @@ export default function AcertoDiarioPage() {
           query = query.eq('local_id', pdvTudo);
         }
 
-        const { data, error } = await query;
-        if (error) throw error;
+        const resMain = await query;
+        let data = resMain.data;
+        const error = resMain.error;
 
-        // Deduplicar histórico por (local_id + data) priorizando o registro encerrado/auditado
-        const mapaAgrupado: Record<string, any> = {};
-        (data || []).forEach((r) => {
-          const key = `${r.local_id}_${r.data}`;
-          if (!mapaAgrupado[key]) {
-            mapaAgrupado[key] = r;
-          } else {
-            const statusAtual = mapaAgrupado[key].status;
-            if (statusAtual === 'aberto' && r.status !== 'aberto') {
-              mapaAgrupado[key] = r;
-            }
+        // Fallback: Se filtrar por organização não retornar dados (ex: remessas registradas sem org_id), buscar sem o filtro de organização
+        if ((!data || data.length === 0) && profile?.organization_id) {
+          let fallbackQuery = supabase
+            .from('remessas_cargas_pdv')
+            .select('*, locais:local_id(nome)')
+            .order('data', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(2000);
+
+          if (dataInicioTudo && dataInicioTudo.trim() !== '') {
+            fallbackQuery = fallbackQuery.gte('data', dataInicioTudo);
           }
-        });
-        setHistoricoTudo(Object.values(mapaAgrupado));
+
+          if (dataFimTudo && dataFimTudo.trim() !== '') {
+            fallbackQuery = fallbackQuery.lte('data', dataFimTudo);
+          }
+
+          if (turnoTudo && turnoTudo !== 'todos') {
+            fallbackQuery = fallbackQuery.eq('turno', turnoTudo);
+          }
+
+          if (pdvTudo && pdvTudo !== 'todos') {
+            fallbackQuery = fallbackQuery.eq('local_id', pdvTudo);
+          }
+
+          const fallbackRes = await fallbackQuery;
+          if (fallbackRes.data && fallbackRes.data.length > 0) {
+            data = fallbackRes.data;
+          }
+        }
+
+        if (error && (!data || data.length === 0)) throw error;
+
+        // Exibir histórico unificado preservando todos os lançamentos por turno
+        setHistoricoTudo(data || []);
       } catch (err: any) {
         console.error('Erro ao carregar histórico unificado:', err);
       } finally {
@@ -257,7 +330,7 @@ export default function AcertoDiarioPage() {
 
   function abrirModalEdicao(item: any) {
     setEditandoItem(item);
-    setEditData(item.data || new Date().toISOString().split('T')[0]);
+    setEditData(item.data || getLocalDateISOString());
     setEditTurno(item.turno || 'integral');
     setEditVendedor(item.vendedor_nome || '');
     setEditQtdEnviada(Number(item.qtd_total_enviada) || 0);
@@ -469,33 +542,36 @@ export default function AcertoDiarioPage() {
       if (!profile?.organization_id || !localId || produtosBase.length === 0) return;
 
       try {
-        // 1. Buscar a sobra do último fechamento ENCERRADO estritamente anterior à data selecionada
+        // 1. Buscar a sobra do último fechamento (encerrado ou parcial) anterior ou do mesmo dia em turno passado
         const { data: fechamentoAnteriorList } = await supabase
           .from('remessas_cargas_pdv')
-          .select('itens_grade, data, status')
+          .select('id, itens_grade, data, status, created_at')
           .eq('organization_id', profile.organization_id)
           .eq('local_id', localId)
-          .lt('data', dataAcerto)
-          .in('status', ['encerrado', 'auditado', 'conferido'])
+          .lte('data', dataAcerto)
+          .in('status', ['encerrado', 'auditado', 'conferido', 'parcial'])
           .order('data', { ascending: false })
-          .limit(1);
+          .order('created_at', { ascending: false })
+          .limit(10);
 
-        const ultimoFechamentoAnterior =
-          fechamentoAnteriorList && fechamentoAnteriorList.length > 0
-            ? fechamentoAnteriorList[0]
-            : null;
+        // Identificar o último fechamento concluído que possua contagem de sobras (retorno)
+        const ultimoFechamentoComSobra =
+          (fechamentoAnteriorList || []).find((f) => {
+            if (!Array.isArray(f.itens_grade)) return false;
+            return f.itens_grade.some((it: any) => Number(it.qtd_retorno || 0) > 0);
+          }) || fechamentoAnteriorList?.[0];
 
         const sobrasAnterioresMap: Record<string, number> = {};
-        if (ultimoFechamentoAnterior && Array.isArray(ultimoFechamentoAnterior.itens_grade)) {
-          ultimoFechamentoAnterior.itens_grade.forEach((it: any) => {
+        if (ultimoFechamentoComSobra && Array.isArray(ultimoFechamentoComSobra.itens_grade)) {
+          ultimoFechamentoComSobra.itens_grade.forEach((it: any) => {
             if (it.produto_id) {
               sobrasAnterioresMap[it.produto_id] = Number(it.qtd_retorno) || 0;
             }
           });
         }
 
-        // 2. Buscar TODOS os lançamentos da data selecionada para o PDV (sem .maybeSingle() para evitar erro PGRST116)
-        const { data: remessasNaData } = await supabase
+        // 2. Buscar lançamentos da data selecionada para o PDV
+        const { data: remessasNaDataAll } = await supabase
           .from('remessas_cargas_pdv')
           .select('*')
           .eq('organization_id', profile.organization_id)
@@ -503,17 +579,23 @@ export default function AcertoDiarioPage() {
           .eq('data', dataAcerto)
           .order('created_at', { ascending: true });
 
+        // Se o turno for específico (manhã, tarde, noite), filtrar para o turno; se for 'integral', somar todos os turnos do dia
+        const remessasNaData = (remessasNaDataAll || []).filter((r) => {
+          if (turno === 'integral' || !turno) return true;
+          return (r.turno || 'integral') === turno;
+        });
+
         if (remessasNaData && remessasNaData.length > 0) {
           const ultimaRemessa = remessasNaData[remessasNaData.length - 1];
           const temRemessaAberta = remessasNaData.some((r) => r.status === 'aberto');
 
           setStatusFechamentoPDV(temRemessaAberta ? 'aberto' : ultimaRemessa.status);
-          if (ultimaRemessa.vendedor_nome) setVendedorNome(ultimaRemessa.vendedor_nome);
-          if (ultimaRemessa.turno) setTurno(ultimaRemessa.turno);
+          if (ultimaRemessa.vendedor_nome && !vendedorNome)
+            setVendedorNome(ultimaRemessa.vendedor_nome);
           if (ultimaRemessa.modo_lancamento) setModo(ultimaRemessa.modo_lancamento);
           if (ultimaRemessa.tipo_fechamento) setTipoFechamento(ultimaRemessa.tipo_fechamento);
 
-          // Consolidar envios por produto das remessas da data e manter sobras de retorno registradas
+          // Consolidar envios por produto das remessas filtradas e manter sobras de retorno registradas
           const enviosNoDiaMap: Record<string, number> = {};
           const sobrasRetornoNaDataMap: Record<string, number> = {};
 
@@ -553,9 +635,8 @@ export default function AcertoDiarioPage() {
           );
           if (totalEnviadoDiaRapido > 0) setQtdEnviadaRapida(totalEnviadoDiaRapido);
         } else {
-          // Nenhuma carga lançada para o dia selecionado: carregar produtos com a sobra anterior do último fechamento
+          // Nenhuma carga lançada para o turno selecionado: carregar produtos com a sobra anterior do último fechamento
           setStatusFechamentoPDV('sem_carga');
-          setVendedorNome('');
           setGradeItens(
             produtosBase.map((p) => ({
               produto_id: p.id,
@@ -572,7 +653,6 @@ export default function AcertoDiarioPage() {
       } catch (err) {
         console.error('Erro ao carregar dados do romaneio:', err);
         setStatusFechamentoPDV('sem_carga');
-        setVendedorNome('');
         setGradeItens(
           produtosBase.map((p) => ({
             produto_id: p.id,
@@ -587,7 +667,7 @@ export default function AcertoDiarioPage() {
     }
 
     carregarSobraAnteriorOuRemessaAberta();
-  }, [profile?.organization_id, localId, dataAcerto, produtosBase]);
+  }, [profile?.organization_id, localId, dataAcerto, turno, produtosBase]);
 
   const handleGerarComprovantePDF = () => {
     const localNome = locais.find((l) => l.id === localId)?.nome || 'PDV';
@@ -743,6 +823,13 @@ export default function AcertoDiarioPage() {
   const diferencaDigital = totalDigitalDeclarado - pixCartaoEsperado;
   const diferencaCaixa = declaraDigital ? valorRecebidoInformado - faturamentoTeorico : 0;
 
+  // Status de bloqueio de edição do fechamento
+  const isFechamentoBloqueado =
+    etapaAcerto === 'fechamento' &&
+    (statusFechamentoPDV === 'encerrado' ||
+      statusFechamentoPDV === 'auditado' ||
+      statusFechamentoPDV === 'conferido');
+
   // Manipulação de Grade e Perdas
   const handleAtualizarItemGrade = (
     indexOrId: number | string,
@@ -806,13 +893,18 @@ export default function AcertoDiarioPage() {
     setPerdasList(perdasList.filter((p) => p.id !== id));
   };
 
-  const handleSalvarRemessa = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSalvarRemessa = async (
+    e?: React.FormEvent,
+    targetStatusOverride?: 'dinheiro_informado' | 'encerrado'
+  ) => {
+    if (e) e.preventDefault();
 
     if (!localId) {
       toast({ title: 'Atenção', description: 'Selecione o PDV.', variant: 'warning' });
       return;
     }
+
+    const statusAlvoFechamento = targetStatusOverride || 'encerrado';
 
     // Validação e Modal de Romaneio Detalhado para a Aba 1 (Envio de Carga)
     if (etapaAcerto === 'envio') {
@@ -912,8 +1004,12 @@ export default function AcertoDiarioPage() {
         (i) => (Number(i.qtd_sobra_anterior) || 0) + (Number(i.qtd_enviada) || 0) > 0
       );
 
+      const isParcialDinheiro = statusAlvoFechamento === 'dinheiro_informado';
+
       const confirmou = await confirmDialog.confirm({
-        title: `Confirmar Fechamento Financeiro - ${pdvNome}`,
+        title: isParcialDinheiro
+          ? `Salvar Sobras + Gaveta (Pix/Cartão Depois) - ${pdvNome}`
+          : `Confirmar Encerramento Completo do Turno - ${pdvNome}`,
         message: (
           <div className="space-y-3 text-left">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 bg-slate-50 rounded-lg text-xs border border-slate-200">
@@ -931,10 +1027,22 @@ export default function AcertoDiarioPage() {
                 </div>
               )}
               <div>
-                <span className="font-semibold text-slate-700">Tipo Fechamento:</span>{' '}
-                <span className="font-bold text-primary capitalize">{tipoFechamento}</span>
+                <span className="font-semibold text-slate-700">Status a Gravar:</span>{' '}
+                <span className="font-bold text-amber-700 uppercase">
+                  {isParcialDinheiro ? 'Dinheiro Informado' : 'Encerrado'}
+                </span>
               </div>
             </div>
+
+            {isParcialDinheiro && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2 font-medium">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                <span>
+                  Sobras físicas e dinheiro da gaveta serão gravados. Os valores de Pix e Cartão
+                  poderão ser preenchidos posteriormente no Fechamento Noturno.
+                </span>
+              </div>
+            )}
 
             {!vendedorNome.trim() && (
               <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2 font-medium">
@@ -1053,18 +1161,9 @@ export default function AcertoDiarioPage() {
                 </div>
               )}
             </div>
-
-            {(Number(valorDinheiro) || 0) === 0 &&
-              (Number(valorPix) || 0) === 0 &&
-              (Number(valorCartao) || 0) === 0 && (
-                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2 font-medium">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-                  <span>Atenção: Nenhum valor em dinheiro, Pix ou cartão foi informado.</span>
-                </div>
-              )}
           </div>
         ),
-        confirmText: 'Confirmar e Encerrar',
+        confirmText: isParcialDinheiro ? 'Salvar Sobras e Gaveta' : 'Confirmar e Encerrar Turno',
         cancelText: 'Revisar Fechamento',
         variant: 'info',
       });
@@ -1104,17 +1203,20 @@ export default function AcertoDiarioPage() {
         valor_cartao_declarado: valorCartao,
         diferenca_auditoria: diferencaCaixa,
 
-        status: etapaAcerto === 'envio' ? 'aberto' : 'encerrado',
+        status: etapaAcerto === 'envio' ? 'aberto' : statusAlvoFechamento,
         observacoes: observacoes.trim() || null,
       };
 
-      // Verificar se já existe um lançamento registrado para o mesmo PDV e Data
+      // Verificar se já existe um lançamento registrado para o mesmo PDV, Data E TURNO
       const { data: registrosExistentes } = await supabase
         .from('remessas_cargas_pdv')
-        .select('id, status')
+        .select(
+          'id, status, qtd_total_enviada, valor_dinheiro_gaveta, valor_pix_declarado, valor_cartao_declarado'
+        )
         .eq('organization_id', profile?.organization_id)
         .eq('local_id', localId)
         .eq('data', dataAcerto)
+        .eq('turno', turno)
         .order('created_at', { ascending: true });
 
       const registroExistente =
@@ -1122,45 +1224,72 @@ export default function AcertoDiarioPage() {
 
       let error;
       if (registroExistente) {
-        // Atualiza o registro existente acumulando/atualizando envios e fechamento
-        const res = await supabase
-          .from('remessas_cargas_pdv')
-          .update({
+        if (etapaAcerto === 'envio') {
+          // === ENVIO (Aba 1): Atualizar APENAS dados de envio, preservando financeiro já registrado ===
+          const envioPayload: any = {
+            organization_id: profile?.organization_id,
+            local_id: localId,
+            data: dataAcerto,
+            turno,
+            vendedor_nome: vendedorNome.trim() || null,
+            modo_lancamento: modo,
+
+            // Dados de envio
+            qtd_total_enviada: totalEnviado,
+            itens_grade: modo === 'detalhado' ? gradeItens : [],
+            preco_medio_rapido: modo === 'rapido' ? precoMedioRapido : 0,
+
+            // Manter o status atual se já teve fechamento; só marca 'aberto' se ainda era 'aberto'
+            status: registroExistente.status === 'aberto' ? 'aberto' : registroExistente.status,
+            updated_at: new Date().toISOString(),
+          };
+
+          const res = await supabase
+            .from('remessas_cargas_pdv')
+            .update(envioPayload)
+            .eq('id', registroExistente.id);
+          error = res.error;
+        } else {
+          // === FECHAMENTO (Aba 2): Atualizar tudo (sobras + financeiro + status) ===
+          const fechamentoPayload: any = {
             ...payload,
             updated_at: new Date().toISOString(),
-          })
-          .eq('id', registroExistente.id);
-        error = res.error;
+          };
 
-        if (
-          error &&
-          (error.message?.includes('tipo_fechamento') || error.details?.includes('tipo_fechamento'))
-        ) {
-          const fallbackPayload = { ...payload };
-          delete (fallbackPayload as any).tipo_fechamento;
-          const resFallback = await supabase
+          const res = await supabase
             .from('remessas_cargas_pdv')
-            .update({
-              ...fallbackPayload,
-              updated_at: new Date().toISOString(),
-            })
+            .update(fechamentoPayload)
             .eq('id', registroExistente.id);
-          error = resFallback.error;
+          error = res.error;
+
+          if (
+            error &&
+            (error.message?.includes('tipo_fechamento') ||
+              error.details?.includes('tipo_fechamento'))
+          ) {
+            const fallbackPayload = { ...fechamentoPayload };
+            delete fallbackPayload.tipo_fechamento;
+            const resFallback = await supabase
+              .from('remessas_cargas_pdv')
+              .update(fallbackPayload)
+              .eq('id', registroExistente.id);
+            error = resFallback.error;
+          }
         }
 
-        // Se houver mais de um registro na mesma data/PDV, fechar todos com o mesmo status para evitar duplicatas em aberto
+        // Se houver duplicatas do mesmo turno/data/PDV, sincronizar status nos extras
         if (registrosExistentes && registrosExistentes.length > 1) {
           const outrosIds = registrosExistentes.slice(1).map((r) => r.id);
           await supabase
             .from('remessas_cargas_pdv')
             .update({
-              status: payload.status,
+              status: etapaAcerto === 'envio' ? 'aberto' : 'encerrado',
               updated_at: new Date().toISOString(),
             })
             .in('id', outrosIds);
         }
       } else {
-        // Cria um novo registro para a data/PDV
+        // Cria um novo registro para a data/PDV/turno
         const res = await supabase.from('remessas_cargas_pdv').insert([payload]);
         error = res.error;
 
@@ -1264,6 +1393,136 @@ export default function AcertoDiarioPage() {
         </p>
       </div>
 
+      {/* Card de Resumo Diário Compacto no Topo */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border border-primary/20 bg-background p-3.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text/50">
+              Dinheiro Recolhido
+            </span>
+            <p className="mt-0.5 font-mono text-lg font-black text-emerald-600 dark:text-emerald-400">
+              R${' '}
+              {turnosEmAberto
+                .reduce((acc, r) => acc + Number(r.valor_dinheiro_gaveta || 0), 0)
+                .toFixed(2)}
+            </p>
+          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+            <Banknote className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-amber-300/60 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/20 p-3.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+              Pix / Cartão Pendentes
+            </span>
+            <p className="mt-0.5 font-mono text-lg font-black text-amber-700 dark:text-amber-300">
+              {turnosEmAberto.filter((t) => t.status === 'dinheiro_informado').length} turno(s)
+            </p>
+          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+            <QrCode className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-primary/20 bg-background p-3.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text/50">
+              Turnos sem Sobras
+            </span>
+            <p className="mt-0.5 font-mono text-lg font-black text-rose-600 dark:text-rose-400">
+              {turnosEmAberto.filter((t) => t.status === 'aberto').length} turno(s)
+            </p>
+          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+            <Clock className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-primary/20 bg-background p-3.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text/50">
+              Data / Turno Selecionado
+            </span>
+            <p className="mt-0.5 font-mono text-sm font-black text-primary">
+              {dataAcerto.split('-').reverse().join('/')} ({turno.toUpperCase()})
+            </p>
+          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Calendar className="h-5 w-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Banner / Cards de Turnos em Aberto (Aguardando Fechamento de Sobras) */}
+      {turnosEmAberto.length > 0 && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50/90 dark:border-amber-800 dark:bg-amber-950/40 p-4 shadow-sm space-y-3 animate-fade-down">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200 dark:border-amber-800/60 pb-2.5">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <h3 className="text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                Atenção: {turnosEmAberto.length} Turno(s) / Carga(s) em Aberto Aguardando Fechamento
+              </h3>
+            </div>
+            <span className="text-[11px] text-amber-800/80 dark:text-amber-300/80 font-medium">
+              Clique no card para ir direto para a digitação de sobras (Aba 2)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {turnosEmAberto.map((item) => {
+              const pdvNome = item.locais?.nome || 'PDV';
+              const dataFmt = item.data ? item.data.split('-').reverse().join('/') : '-';
+              const turnoFmt = item.turno ? item.turno.toUpperCase() : 'INTEGRAL';
+              const enviados = Number(item.qtd_total_enviada) || 0;
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleSelecionarTurnoEmAberto(item)}
+                  className="flex flex-col justify-between rounded-xl border border-amber-300/80 bg-white dark:bg-slate-900 p-3 text-left shadow-2xs hover:border-amber-500 hover:shadow-md transition-all group"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-2 w-full">
+                    <span className="font-bold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5 truncate">
+                      <Store className="h-3.5 w-3.5 text-primary shrink-0" /> {pdvNome}
+                    </span>
+                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
+                      Aberto
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-600 dark:text-slate-300 space-y-1 w-full">
+                    <div className="flex justify-between">
+                      <span>Data / Turno:</span>
+                      <strong className="font-mono">
+                        {dataFmt} ({turnoFmt})
+                      </strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Qtd Enviada:</span>
+                      <strong className="font-mono text-primary font-black">{enviados} un</strong>
+                    </div>
+                    {item.vendedor_nome && (
+                      <div className="flex justify-between text-[10px] text-slate-400">
+                        <span>Atendente:</span>
+                        <span className="truncate">{item.vendedor_nome}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-bold text-amber-700 dark:text-amber-400 group-hover:text-primary transition-colors w-full">
+                    <span>Fechar Turno Agora</span>
+                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Seletor de Etapas (Abas: 1. Envio de Carga | 2. Sobras & Financeiro | Ver Tudo) */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 p-1.5 shadow-sm">
         <button
@@ -1322,7 +1581,7 @@ export default function AcertoDiarioPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    const today = new Date().toISOString().split('T')[0];
+                    const today = getLocalDateISOString();
                     setDataInicioTudo(today);
                     setDataFimTudo(today);
                   }}
@@ -1336,8 +1595,8 @@ export default function AcertoDiarioPage() {
                     const today = new Date();
                     const d7 = new Date(today);
                     d7.setDate(today.getDate() - 7);
-                    setDataInicioTudo(d7.toISOString().split('T')[0]);
-                    setDataFimTudo(today.toISOString().split('T')[0]);
+                    setDataInicioTudo(getLocalDateISOString(d7));
+                    setDataFimTudo(getLocalDateISOString(today));
                   }}
                   className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-colors"
                 >
@@ -1348,12 +1607,24 @@ export default function AcertoDiarioPage() {
                   onClick={() => {
                     const today = new Date();
                     const dMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                    setDataInicioTudo(dMonth.toISOString().split('T')[0]);
-                    setDataFimTudo(today.toISOString().split('T')[0]);
+                    setDataInicioTudo(getLocalDateISOString(dMonth));
+                    setDataFimTudo(getLocalDateISOString(today));
                   }}
                   className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-colors"
                 >
                   Este Mês
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDataInicioTudo('');
+                    setDataFimTudo('');
+                    setTurnoTudo('todos');
+                    setPdvTudo('todos');
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-primary/20 bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                >
+                  Ver Todo Histórico
                 </button>
               </div>
             </div>
@@ -2238,8 +2509,9 @@ export default function AcertoDiarioPage() {
                   {etapaAcerto !== 'envio' && (
                     <button
                       type="button"
+                      disabled={isFechamentoBloqueado}
                       onClick={handleVendeuTudoZerarSobras}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       ⚡ Vendeu Tudo (Sobra Zero)
                     </button>
@@ -2359,6 +2631,7 @@ export default function AcertoDiarioPage() {
                                     <input
                                       type="number"
                                       min="0"
+                                      disabled={isFechamentoBloqueado}
                                       value={item.qtd_retorno || ''}
                                       onChange={(e) =>
                                         handleAtualizarItemGrade(
@@ -2368,7 +2641,7 @@ export default function AcertoDiarioPage() {
                                         )
                                       }
                                       placeholder="0"
-                                      className="w-16 rounded-lg border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 px-2 py-1 text-center font-semibold text-amber-700 outline-none focus:border-amber-500"
+                                      className="w-16 rounded-lg border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 px-2 py-1 text-center font-semibold text-amber-700 outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                   </td>
                                   <td className="p-2.5 text-right font-mono font-bold text-primary">
@@ -2504,47 +2777,8 @@ export default function AcertoDiarioPage() {
                                     <label className="block text-[11px] font-bold text-text/70">
                                       📦 Envio Hoje:
                                     </label>
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleAtualizarItemGrade(
-                                            item.produto_id,
-                                            'qtd_enviada',
-                                            Math.max(0, (item.qtd_enviada || 0) - 1)
-                                          )
-                                        }
-                                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/5 text-base font-bold text-primary active:scale-95 shrink-0 select-none"
-                                      >
-                                        -
-                                      </button>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        value={item.qtd_enviada || ''}
-                                        onChange={(e) =>
-                                          handleAtualizarItemGrade(
-                                            item.produto_id,
-                                            'qtd_enviada',
-                                            Number(e.target.value)
-                                          )
-                                        }
-                                        placeholder="0"
-                                        className="h-9 w-full rounded-xl border border-primary/20 bg-background px-2 text-center font-bold outline-none focus:border-primary"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleAtualizarItemGrade(
-                                            item.produto_id,
-                                            'qtd_enviada',
-                                            (item.qtd_enviada || 0) + 1
-                                          )
-                                        }
-                                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-base font-bold text-primary active:scale-95 shrink-0 select-none"
-                                      >
-                                        +
-                                      </button>
+                                    <div className="flex h-9 w-full items-center justify-center rounded-xl border border-primary/10 bg-primary/5 font-mono text-xs font-bold text-primary">
+                                      {item.qtd_enviada || 0} un
                                     </div>
                                   </div>
 
@@ -2556,6 +2790,7 @@ export default function AcertoDiarioPage() {
                                     <div className="flex items-center gap-1">
                                       <button
                                         type="button"
+                                        disabled={isFechamentoBloqueado}
                                         onClick={() =>
                                           handleAtualizarItemGrade(
                                             item.produto_id,
@@ -2563,13 +2798,14 @@ export default function AcertoDiarioPage() {
                                             Math.max(0, (item.qtd_retorno || 0) - 1)
                                           )
                                         }
-                                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 text-base font-bold text-amber-800 active:scale-95 shrink-0 select-none"
+                                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 text-base font-bold text-amber-800 active:scale-95 shrink-0 select-none disabled:opacity-50 disabled:cursor-not-allowed"
                                       >
                                         -
                                       </button>
                                       <input
                                         type="number"
                                         min="0"
+                                        disabled={isFechamentoBloqueado}
                                         value={item.qtd_retorno || ''}
                                         onChange={(e) =>
                                           handleAtualizarItemGrade(
@@ -2579,10 +2815,11 @@ export default function AcertoDiarioPage() {
                                           )
                                         }
                                         placeholder="0"
-                                        className="h-9 w-full rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 px-2 text-center font-bold text-amber-900 dark:text-amber-200 outline-none focus:border-amber-500"
+                                        className="h-9 w-full rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 px-2 text-center font-bold text-amber-900 dark:text-amber-200 outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                       />
                                       <button
                                         type="button"
+                                        disabled={isFechamentoBloqueado}
                                         onClick={() =>
                                           handleAtualizarItemGrade(
                                             item.produto_id,
@@ -2590,7 +2827,7 @@ export default function AcertoDiarioPage() {
                                             (item.qtd_retorno || 0) + 1
                                           )
                                         }
-                                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-100 text-base font-bold text-amber-900 active:scale-95 shrink-0 select-none"
+                                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-100 text-base font-bold text-amber-900 active:scale-95 shrink-0 select-none disabled:opacity-50 disabled:cursor-not-allowed"
                                       >
                                         +
                                       </button>
@@ -2624,21 +2861,24 @@ export default function AcertoDiarioPage() {
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <input
                         type="text"
+                        disabled={isFechamentoBloqueado}
                         value={novaPerdaDesc}
                         onChange={(e) => setNovaPerdaDesc(e.target.value)}
                         placeholder="Motivo (ex: 1 brownie caiu no chão)"
-                        className="flex-1 rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary"
+                        className="flex-1 rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                       />
                       <BRLCurrencyInput
                         value={novaPerdaValor}
+                        disabled={isFechamentoBloqueado}
                         onChange={(val) => setNovaPerdaValor(val)}
                         placeholder="R$ 0,00"
-                        className="w-28 rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary"
+                        className="w-28 rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                       />
                       <button
                         type="button"
+                        disabled={isFechamentoBloqueado}
                         onClick={handleAdicionarPerda}
-                        className="flex items-center justify-center gap-1 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20"
+                        className="flex items-center justify-center gap-1 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Plus className="h-4 w-4" /> Add Ajuste
                       </button>
@@ -2654,7 +2894,12 @@ export default function AcertoDiarioPage() {
                             <span>{p.descricao}</span>
                             <div className="flex items-center gap-2">
                               <span className="font-mono font-bold">-R$ {p.valor.toFixed(2)}</span>
-                              <button type="button" onClick={() => handleRemoverPerda(p.id)}>
+                              <button
+                                type="button"
+                                disabled={isFechamentoBloqueado}
+                                onClick={() => handleRemoverPerda(p.id)}
+                                className="disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
                                 <Trash2 className="h-3.5 w-3.5 text-rose-500 hover:text-rose-700" />
                               </button>
                             </div>
@@ -2695,10 +2940,11 @@ export default function AcertoDiarioPage() {
                         <input
                           type="number"
                           min="0"
+                          disabled={isFechamentoBloqueado}
                           value={qtdRetornoRapida || ''}
                           onChange={(e) => setQtdRetornoRapida(Number(e.target.value))}
                           placeholder="Ex: 15"
-                          className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-base font-semibold outline-none focus:border-primary"
+                          className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-base font-semibold outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                       </div>
 
@@ -2708,9 +2954,10 @@ export default function AcertoDiarioPage() {
                         </label>
                         <BRLCurrencyInput
                           value={precoMedioRapido}
+                          disabled={isFechamentoBloqueado}
                           onChange={(val) => setPrecoMedioRapido(val)}
                           placeholder="R$ 8,00"
-                          className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-base font-semibold outline-none focus:border-primary"
+                          className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-base font-semibold outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                       </div>
                     </>
@@ -2786,9 +3033,10 @@ export default function AcertoDiarioPage() {
                   </label>
                   <BRLCurrencyInput
                     value={valorDinheiro}
+                    disabled={isFechamentoBloqueado}
                     onChange={(val) => setValorDinheiro(val)}
                     placeholder="R$ 0,00"
-                    className="mt-1 w-full rounded-xl border border-emerald-300 bg-emerald-50/30 dark:bg-emerald-950/20 px-3 py-2 text-base font-mono font-bold text-emerald-700 outline-none focus:border-emerald-500"
+                    className="mt-1 w-full rounded-xl border border-emerald-300 bg-emerald-50/30 dark:bg-emerald-950/20 px-3 py-2 text-base font-mono font-bold text-emerald-700 outline-none focus:border-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   <span className="text-[10px] text-text/40">
                     Dinheiro recolhido no envelope/gaveta
@@ -2796,37 +3044,62 @@ export default function AcertoDiarioPage() {
                 </div>
 
                 <div className="border-t border-primary/10 pt-3">
-                  <label className="text-xs font-semibold text-text/70">
-                    Valor em Pix no PDV R$ (Opcional)
-                  </label>
-                  <BRLCurrencyInput
-                    value={valorPix}
-                    onChange={(val) => setValorPix(val)}
-                    placeholder="R$ 0,00"
-                    className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-mono outline-none focus:border-primary"
-                  />
-                </div>
+                  <button
+                    type="button"
+                    onClick={() => setMostrarPixCartao(!mostrarPixCartao)}
+                    className="flex w-full items-center justify-between text-xs font-bold text-cyan-900 dark:text-cyan-200 bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800 p-2.5 rounded-xl hover:bg-cyan-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <QrCode className="h-4 w-4 text-cyan-600" />
+                      <span>Valores Declarados Pix / Cartão (Opcional)</span>
+                    </div>
+                    <span className="text-[10px] text-cyan-700 dark:text-cyan-300 font-semibold bg-cyan-100/80 dark:bg-cyan-900/80 px-2 py-0.5 rounded-full">
+                      {mostrarPixCartao
+                        ? 'Ocultar ▲'
+                        : 'Preencher agora ou no fechamento noturno ▼'}
+                    </span>
+                  </button>
 
-                <div>
-                  <label className="text-xs font-semibold text-text/70">
-                    Valor em Cartão no PDV R$ (Opcional)
-                  </label>
-                  <BRLCurrencyInput
-                    value={valorCartao}
-                    onChange={(val) => setValorCartao(val)}
-                    placeholder="R$ 0,00"
-                    className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-mono outline-none focus:border-primary"
-                  />
+                  {(mostrarPixCartao || Number(valorPix) > 0 || Number(valorCartao) > 0) && (
+                    <div className="mt-3 space-y-3 pt-1 border-t border-cyan-200/50 dark:border-cyan-800/50 animate-fade-in">
+                      <div>
+                        <label className="text-xs font-semibold text-text/70">
+                          Valor em Pix no PDV R$ (Opcional)
+                        </label>
+                        <BRLCurrencyInput
+                          value={valorPix}
+                          disabled={isFechamentoBloqueado}
+                          onChange={(val) => setValorPix(val)}
+                          placeholder="R$ 0,00"
+                          className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-mono outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-text/70">
+                          Valor em Cartão no PDV R$ (Opcional)
+                        </label>
+                        <BRLCurrencyInput
+                          value={valorCartao}
+                          disabled={isFechamentoBloqueado}
+                          onChange={(val) => setValorCartao(val)}
+                          placeholder="R$ 0,00"
+                          className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-mono outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="text-xs font-semibold text-text/70">Observações do Turno</label>
                   <textarea
                     rows={2}
+                    disabled={isFechamentoBloqueado}
                     value={observacoes}
                     onChange={(e) => setObservacoes(e.target.value)}
                     placeholder="Ex: Troca de turno rápida"
-                    className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary"
+                    className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -2928,14 +3201,44 @@ export default function AcertoDiarioPage() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <button
-                  type="submit"
-                  disabled={salvando || !localId}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-sm transition-all hover:opacity-95 active:scale-95 disabled:opacity-50"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  {salvando ? 'Gravando...' : 'Salvar Romaneio & Fechamento'}
-                </button>
+                {isFechamentoBloqueado ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFechamentoPDV('aberto');
+                      toast({
+                        title: 'Edição Liberada!',
+                        description: 'Você pode alterar as sobras e os valores financeiros agora.',
+                        variant: 'info',
+                      });
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-amber-700 active:scale-95"
+                  >
+                    <Edit3 className="h-4 w-4" /> Reabrir / Liberar Edição do Fechamento
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={salvando || !localId}
+                      onClick={(e) => handleSalvarRemessa(e, 'dinheiro_informado')}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-amber-500 bg-amber-500/10 text-amber-900 dark:text-amber-200 py-2.5 text-xs font-black shadow-sm transition-all hover:bg-amber-500/20 active:scale-95 disabled:opacity-50"
+                    >
+                      <Banknote className="h-4 w-4 text-amber-600 shrink-0" />
+                      {salvando ? 'Gravando...' : 'Salvar Sobras + Gaveta (Pix/Cartão Depois)'}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={salvando || !localId}
+                      onClick={(e) => handleSalvarRemessa(e, 'encerrado')}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-sm transition-all hover:opacity-95 active:scale-95 disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      {salvando ? 'Gravando...' : 'Encerrar Turno Completo'}
+                    </button>
+                  </>
+                )}
 
                 <button
                   type="button"

@@ -15,8 +15,8 @@ export function useLicense() {
     let mounted = true;
 
     async function checkLicense() {
-      // Se a autenticação ainda está inicializando, aguarde
-      if (authLoading) return;
+      // Se a autenticação ainda está inicializando e não temos perfil, aguarde
+      if (authLoading && !profile) return;
 
       // Se não há usuário/perfil logado ou email ausente, libera o acesso como ativo para não travar no spinner
       if (!profile || !profile.email) {

@@ -22,7 +22,7 @@ export function useOrganization() {
     let mounted = true;
 
     async function loadOrg() {
-      if (authLoading) return;
+      if (authLoading && !profile) return;
 
       // 1. Usar os dados da organização já embutidos no perfil se disponíveis
       if (profile?.organizations) {

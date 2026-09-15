@@ -45,15 +45,52 @@ if (!supabaseUrl || !supabaseAnonKey) {
 } else {
   const createSafeStorage = () => {
     const memoryStore = new Map<string, string>();
+
+    const getCookie = (name: string): string | null => {
+      try {
+        if (typeof document === 'undefined') return null;
+        const match = document.cookie.match(
+          new RegExp('(?:^|; )' + encodeURIComponent(name).replace(/[-.+*]/g, '\\$&') + '=([^;]*)')
+        );
+        return match ? decodeURIComponent(match[1]) : null;
+      } catch (e) {
+        void e;
+        return null;
+      }
+    };
+
+    const setCookie = (name: string, value: string) => {
+      try {
+        if (typeof document === 'undefined') return;
+        const d = new Date();
+        d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
+        document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; expires=${d.toUTCString()}; path=/; SameSite=Lax`;
+      } catch (e) {
+        void e;
+      }
+    };
+
+    const removeCookie = (name: string) => {
+      try {
+        if (typeof document === 'undefined') return;
+        document.cookie = `${encodeURIComponent(name)}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+      } catch (e) {
+        void e;
+      }
+    };
+
     return {
       getItem: (key: string): string | null => {
         try {
           if (typeof window !== 'undefined' && window.localStorage) {
-            return window.localStorage.getItem(key);
+            const val = window.localStorage.getItem(key);
+            if (val !== null) return val;
           }
         } catch (e) {
           // Fallback para navegadores Android/WebViews com restrições de localStorage
         }
+        const cookieVal = getCookie(key);
+        if (cookieVal !== null) return cookieVal;
         return memoryStore.get(key) ?? null;
       },
       setItem: (key: string, value: string): void => {
@@ -64,6 +101,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
         } catch (e) {
           // Fallback
         }
+        setCookie(key, value);
         memoryStore.set(key, value);
       },
       removeItem: (key: string): void => {
@@ -74,6 +112,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
         } catch (e) {
           // Fallback
         }
+        removeCookie(key);
         memoryStore.delete(key);
       },
     };

@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { toast } = useToast();
   const [authTimeout, setAuthTimeout] = useState(false);
-  const AUTH_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_AUTH_TIMEOUT_MS) || 20000;
+  const AUTH_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_AUTH_TIMEOUT_MS) || 6000;
   const PROFILE_CACHE_KEY = 'syslari_profile_v1';
   const PROFILE_CACHE_MS = Number(process.env.NEXT_PUBLIC_PROFILE_CACHE_MS) || 300000; // 5min
 

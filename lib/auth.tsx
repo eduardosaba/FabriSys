@@ -139,15 +139,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (profRes.status === 'rejected')
             console.warn('[AuthProvider] ⚠️ profiles query erro:', profRes.reason);
 
-          // Se profiles retornou com dados, usamos como fonte primária
-          if (profVal && profVal.data) {
-            const prof: any = profVal.data;
+          let profData = profVal?.data;
+          // Fallback para query simples de profiles caso a query com inner join/relacionamento tenha falhado
+          if (!profData) {
+            try {
+              const simpleProfRes: any = await fetchWithTimeout(
+                supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+              );
+              if (simpleProfRes?.data) {
+                profData = simpleProfRes.data;
+              }
+            } catch (e) {
+              console.warn('[AuthProvider] ⚠️ Falha no fallback de profiles:', e);
+            }
+          }
+
+          // Se profiles retornou com dados (via join ou query simples), usamos como fonte primária
+          if (profData) {
+            const prof: any = profData;
             const orgRaw: any = prof.organizations;
             const org: any = Array.isArray(orgRaw) ? orgRaw[0] : orgRaw;
 
             const profileData: any = {
               id: prof.id,
-              role: (prof.role as UserRole) || baseProfile?.role || 'user',
+              role: (prof.role as UserRole) || baseProfile?.role || 'admin',
               nome:
                 prof.nome ||
                 prof.full_name ||
@@ -326,7 +341,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn(
           '[AuthProvider] ⚠️ Perfil não encontrado em colaboradores/profiles — aplicando fallback'
         );
-        const fallbackProfile = { id: userId, role: 'user', email: userEmail } as Profile;
+        const defaultRole: UserRole = userEmail?.toLowerCase().includes('pdv') ? 'pdv' : 'admin';
+        const fallbackProfile = { id: userId, role: defaultRole, email: userEmail } as Profile;
         setProfile(fallbackProfile);
         try {
           writeProfileCache(fallbackProfile);
@@ -335,7 +351,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error('[AuthProvider] ❌ Erro crítico no fetchProfile:', error);
-        const fallbackProfile2 = { id: userId, role: 'user', email: userEmail } as Profile;
+        const defaultRole: UserRole = userEmail?.toLowerCase().includes('pdv') ? 'pdv' : 'admin';
+        const fallbackProfile2 = { id: userId, role: defaultRole, email: userEmail } as Profile;
         setProfile(fallbackProfile2);
         try {
           writeProfileCache(fallbackProfile2);

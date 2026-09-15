@@ -23,7 +23,7 @@ export default function AuthGuard({
   const activeProfile = useMemo(
     () =>
       profile ||
-      (user ? ({ id: user.id, email: user.email || '', role: 'user' as const } as any) : null),
+      (user ? ({ id: user.id, email: user.email || '', role: 'admin' as const } as any) : null),
     [profile, user]
   );
 
@@ -38,21 +38,32 @@ export default function AuthGuard({
     if (!activeProfile) return;
 
     if (requiredRoles.length > 0 && !requiredRoles.includes(activeProfile.role)) {
-      // Redirecionar baseado no role atual
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+      // Redirecionar baseado no role atual apenas se não estiver já na rota correta
       switch (activeProfile.role as string) {
         case 'admin':
         case 'fabrica':
-          router.push('/dashboard');
+        case 'master':
+        case 'gerente':
+          if (currentPath !== '/dashboard' && !currentPath.startsWith('/dashboard/')) {
+            router.push('/dashboard');
+          }
           break;
         case 'express':
         case 'pdv_simples':
-          router.push('/dashboard/acerto-diario/auditoria');
+          if (!currentPath.startsWith('/dashboard/acerto-diario')) {
+            router.push('/dashboard/acerto-diario/auditoria');
+          }
           break;
         case 'pdv':
-          router.push('/dashboard/pedidos-compra');
+          if (!currentPath.startsWith('/dashboard/pedidos-compra')) {
+            router.push('/dashboard/pedidos-compra');
+          }
           break;
         default:
-          router.push('/dashboard');
+          if (currentPath !== '/login') {
+            router.push('/login');
+          }
       }
       return;
     }

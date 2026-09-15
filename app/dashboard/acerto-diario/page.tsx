@@ -27,6 +27,7 @@ import {
   Edit3,
   FileText,
   Filter,
+  HelpCircle,
   Layers,
   ListOrdered,
   MinusCircle,
@@ -62,6 +63,8 @@ interface ItemGrade {
   preco_unitario: number;
   qtd_sobra_anterior: number;
   qtd_enviada: number;
+  qtd_enviada_anterior?: number;
+  qtd_enviada_nova?: number;
   qtd_retorno: number;
 }
 
@@ -81,6 +84,7 @@ export default function AcertoDiarioPage() {
   const [produtosBase, setProdutosBase] = useState<ProdutoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [modoEdicaoEnvio, setModoEdicaoEnvio] = useState<boolean>(false);
 
   // Modal de Sucesso no Centro da Tela
   const [successModal, setSuccessModal] = useState<{
@@ -141,6 +145,7 @@ export default function AcertoDiarioPage() {
   const [valorCartao, setValorCartao] = useState<number>(0);
   const [observacoes, setObservacoes] = useState<string>('');
   const [mostrarPixCartao, setMostrarPixCartao] = useState<boolean>(false);
+  const [mostrarAjudaFechamento, setMostrarAjudaFechamento] = useState<boolean>(false);
 
   // Estados da Aba 3 - Ver Tudo Unificado
   const [dataInicioTudo, setDataInicioTudo] = useState<string>(() => {
@@ -542,24 +547,63 @@ export default function AcertoDiarioPage() {
       if (!profile?.organization_id || !localId || produtosBase.length === 0) return;
 
       try {
+        // Helper para determinar se um fechamento é estritamente anterior ao turno/data selecionado
+        const isTurnoAnterior = (
+          fData: string,
+          fTurno: string,
+          targetData: string,
+          targetTurno: string
+        ): boolean => {
+          if (fData < targetData) return true;
+          if (fData > targetData) return false;
+
+          const order: Record<string, number> = {
+            manha: 1,
+            tarde: 2,
+            noite: 3,
+            integral: 4,
+          };
+
+          const fOrder = order[fTurno || 'integral'] || 1;
+          const targetOrder = order[targetTurno || 'integral'] || 4;
+
+          if (targetTurno === 'integral' || targetTurno === 'manha') {
+            return false;
+          }
+
+          return fOrder < targetOrder;
+        };
+
         // 1. Buscar a sobra do último fechamento (encerrado ou parcial) anterior ou do mesmo dia em turno passado
         const { data: fechamentoAnteriorList } = await supabase
           .from('remessas_cargas_pdv')
-          .select('id, itens_grade, data, status, created_at')
+          .select('id, itens_grade, data, status, created_at, turno')
           .eq('organization_id', profile.organization_id)
           .eq('local_id', localId)
           .lte('data', dataAcerto)
-          .in('status', ['encerrado', 'auditado', 'conferido', 'parcial'])
+          .in('status', [
+            'encerrado',
+            'auditado',
+            'conferido',
+            'parcial',
+            'sobras_informadas',
+            'dinheiro_informado',
+          ])
           .order('data', { ascending: false })
           .order('created_at', { ascending: false })
-          .limit(10);
+          .limit(20);
+
+        // Filtrar apenas lançamentos que ocorreram antes do turno/data atual
+        const fechamentosValidosAnteriores = (fechamentoAnteriorList || []).filter((f) =>
+          isTurnoAnterior(f.data, f.turno || 'integral', dataAcerto, turno)
+        );
 
         // Identificar o último fechamento concluído que possua contagem de sobras (retorno)
         const ultimoFechamentoComSobra =
-          (fechamentoAnteriorList || []).find((f) => {
+          fechamentosValidosAnteriores.find((f) => {
             if (!Array.isArray(f.itens_grade)) return false;
             return f.itens_grade.some((it: any) => Number(it.qtd_retorno || 0) > 0);
-          }) || fechamentoAnteriorList?.[0];
+          }) || fechamentosValidosAnteriores[0];
 
         const sobrasAnterioresMap: Record<string, number> = {};
         if (ultimoFechamentoComSobra && Array.isArray(ultimoFechamentoComSobra.itens_grade)) {
@@ -587,9 +631,23 @@ export default function AcertoDiarioPage() {
 
         if (remessasNaData && remessasNaData.length > 0) {
           const ultimaRemessa = remessasNaData[remessasNaData.length - 1];
-          const temRemessaAberta = remessasNaData.some((r) => r.status === 'aberto');
+          const remessaFechada = remessasNaData
+            .slice()
+            .reverse()
+            .find((r) =>
+              [
+                'encerrado',
+                'dinheiro_informado',
+                'sobras_informadas',
+                'parcial',
+                'conferido',
+                'auditado',
+              ].includes(r.status)
+            );
 
-          setStatusFechamentoPDV(temRemessaAberta ? 'aberto' : ultimaRemessa.status);
+          setStatusFechamentoPDV(
+            remessaFechada ? remessaFechada.status : ultimaRemessa.status || 'aberto'
+          );
           if (ultimaRemessa.vendedor_nome && !vendedorNome)
             setVendedorNome(ultimaRemessa.vendedor_nome);
           if (ultimaRemessa.modo_lancamento) setModo(ultimaRemessa.modo_lancamento);
@@ -598,6 +656,7 @@ export default function AcertoDiarioPage() {
           // Consolidar envios por produto das remessas filtradas e manter sobras de retorno registradas
           const enviosNoDiaMap: Record<string, number> = {};
           const sobrasRetornoNaDataMap: Record<string, number> = {};
+          const sobrasAnterioresSalvasMap: Record<string, number> = {};
 
           remessasNaData.forEach((remessa) => {
             if (Array.isArray(remessa.itens_grade)) {
@@ -608,6 +667,13 @@ export default function AcertoDiarioPage() {
                   if (it.qtd_retorno !== undefined && it.qtd_retorno !== null) {
                     sobrasRetornoNaDataMap[it.produto_id] = Number(it.qtd_retorno) || 0;
                   }
+                  if (
+                    it.qtd_sobra_anterior !== undefined &&
+                    it.qtd_sobra_anterior !== null &&
+                    Number(it.qtd_sobra_anterior) > 0
+                  ) {
+                    sobrasAnterioresSalvasMap[it.produto_id] = Number(it.qtd_sobra_anterior);
+                  }
                 }
               });
             }
@@ -615,7 +681,10 @@ export default function AcertoDiarioPage() {
 
           setGradeItens(
             produtosBase.map((p) => {
-              const sobraAnterior = sobrasAnterioresMap[p.id] || 0;
+              const sobraAnterior =
+                sobrasAnterioresMap[p.id] !== undefined
+                  ? sobrasAnterioresMap[p.id]
+                  : sobrasAnterioresSalvasMap[p.id] || 0;
               const enviadaHoje = enviosNoDiaMap[p.id] || 0;
               const retornoHoje = sobrasRetornoNaDataMap[p.id] || 0;
               return {
@@ -624,10 +693,13 @@ export default function AcertoDiarioPage() {
                 preco_unitario: p.preco,
                 qtd_sobra_anterior: sobraAnterior,
                 qtd_enviada: enviadaHoje,
+                qtd_enviada_anterior: enviadaHoje,
+                qtd_enviada_nova: 0,
                 qtd_retorno: retornoHoje,
               };
             })
           );
+          setModoEdicaoEnvio(false);
 
           const totalEnviadoDiaRapido = remessasNaData.reduce(
             (acc, r) => acc + (Number(r.qtd_total_enviada) || 0),
@@ -637,6 +709,7 @@ export default function AcertoDiarioPage() {
         } else {
           // Nenhuma carga lançada para o turno selecionado: carregar produtos com a sobra anterior do último fechamento
           setStatusFechamentoPDV('sem_carga');
+          setModoEdicaoEnvio(false);
           setGradeItens(
             produtosBase.map((p) => ({
               produto_id: p.id,
@@ -644,6 +717,8 @@ export default function AcertoDiarioPage() {
               preco_unitario: p.preco,
               qtd_sobra_anterior: sobrasAnterioresMap[p.id] || 0,
               qtd_enviada: 0,
+              qtd_enviada_anterior: 0,
+              qtd_enviada_nova: 0,
               qtd_retorno: 0,
             }))
           );
@@ -778,14 +853,25 @@ export default function AcertoDiarioPage() {
   // --- CÁLCULOS EM TEMPO REAL ---
 
   // Modo Detalhado
+  // Modo Detalhado
   const totalSobraAnteriorDetalhado = gradeItens.reduce(
     (acc, item) => acc + (Number(item.qtd_sobra_anterior) || 0),
     0
   );
-  const totalEnviadoDetalhado = gradeItens.reduce(
-    (acc, item) => acc + (Number(item.qtd_enviada) || 0),
+  const totalEnviadoAnteriorDetalhado = gradeItens.reduce(
+    (acc, item) => acc + (Number(item.qtd_enviada_anterior) || 0),
     0
   );
+  const totalEnviadoNovoDetalhado = gradeItens.reduce(
+    (acc, item) => acc + (Number(item.qtd_enviada_nova) || 0),
+    0
+  );
+
+  const totalEnviadoDetalhado =
+    totalEnviadoAnteriorDetalhado > 0 && !modoEdicaoEnvio
+      ? totalEnviadoAnteriorDetalhado + totalEnviadoNovoDetalhado
+      : gradeItens.reduce((acc, item) => acc + (Number(item.qtd_enviada) || 0), 0);
+
   const totalDisponivelDetalhado = totalSobraAnteriorDetalhado + totalEnviadoDetalhado;
   const totalRetornoDetalhado = gradeItens.reduce(
     (acc, item) => acc + (Number(item.qtd_retorno) || 0),
@@ -826,27 +912,59 @@ export default function AcertoDiarioPage() {
   // Status de bloqueio de edição do fechamento
   const isFechamentoBloqueado =
     etapaAcerto === 'fechamento' &&
-    (statusFechamentoPDV === 'encerrado' ||
-      statusFechamentoPDV === 'auditado' ||
-      statusFechamentoPDV === 'conferido');
+    statusFechamentoPDV !== 'aberto' &&
+    statusFechamentoPDV !== 'sem_carga' &&
+    statusFechamentoPDV !== 'sobra_acumulada';
 
   // Manipulação de Grade e Perdas
   const handleAtualizarItemGrade = (
     indexOrId: number | string,
-    campo: 'qtd_enviada' | 'qtd_retorno',
+    campo: 'qtd_enviada' | 'qtd_enviada_nova' | 'qtd_retorno',
     val: number
   ) => {
     if (typeof indexOrId === 'string') {
       setGradeItens((prev) =>
-        prev.map((item) =>
-          item.produto_id === indexOrId ? { ...item, [campo]: Math.max(0, val) } : item
-        )
+        prev.map((item) => {
+          if (item.produto_id !== indexOrId) return item;
+          const updatedVal = Math.max(0, val);
+          if (campo === 'qtd_enviada_nova') {
+            return {
+              ...item,
+              qtd_enviada_nova: updatedVal,
+              qtd_enviada: (item.qtd_enviada_anterior || 0) + updatedVal,
+            };
+          }
+          if (campo === 'qtd_enviada') {
+            return {
+              ...item,
+              qtd_enviada: updatedVal,
+              qtd_enviada_nova: Math.max(0, updatedVal - (item.qtd_enviada_anterior || 0)),
+            };
+          }
+          return { ...item, [campo]: updatedVal };
+        })
       );
     } else {
       setGradeItens((prev) => {
         const copy = [...prev];
         if (copy[indexOrId]) {
-          copy[indexOrId] = { ...copy[indexOrId], [campo]: Math.max(0, val) };
+          const item = copy[indexOrId];
+          const updatedVal = Math.max(0, val);
+          if (campo === 'qtd_enviada_nova') {
+            copy[indexOrId] = {
+              ...item,
+              qtd_enviada_nova: updatedVal,
+              qtd_enviada: (item.qtd_enviada_anterior || 0) + updatedVal,
+            };
+          } else if (campo === 'qtd_enviada') {
+            copy[indexOrId] = {
+              ...item,
+              qtd_enviada: updatedVal,
+              qtd_enviada_nova: Math.max(0, updatedVal - (item.qtd_enviada_anterior || 0)),
+            };
+          } else {
+            copy[indexOrId] = { ...item, [campo]: updatedVal };
+          }
         }
         return copy;
       });
@@ -1008,7 +1126,7 @@ export default function AcertoDiarioPage() {
 
       const confirmou = await confirmDialog.confirm({
         title: isParcialDinheiro
-          ? `Salvar Sobras + Gaveta (Pix/Cartão Depois) - ${pdvNome}`
+          ? `Salvar Fechamento Parcial (Sobras + Valores) - ${pdvNome}`
           : `Confirmar Encerramento Completo do Turno - ${pdvNome}`,
         message: (
           <div className="space-y-3 text-left">
@@ -1038,7 +1156,7 @@ export default function AcertoDiarioPage() {
               <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex items-center gap-2 font-medium">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
                 <span>
-                  Sobras físicas e dinheiro da gaveta serão gravados. Os valores de Pix e Cartão
+                  Sobras físicas e dinheiro recebido serão gravados. Os valores de Pix e Cartão
                   poderão ser preenchidos posteriormente no Fechamento Noturno.
                 </span>
               </div>
@@ -1163,7 +1281,7 @@ export default function AcertoDiarioPage() {
             </div>
           </div>
         ),
-        confirmText: isParcialDinheiro ? 'Salvar Sobras e Gaveta' : 'Confirmar e Encerrar Turno',
+        confirmText: isParcialDinheiro ? 'Salvar Sobras e valores' : 'Confirmar e Encerrar Turno',
         cancelText: 'Revisar Fechamento',
         variant: 'info',
       });
@@ -1173,6 +1291,28 @@ export default function AcertoDiarioPage() {
 
     setSalvando(true);
     try {
+      const gradeItensSalvar = gradeItens.map((item) => {
+        const finalEnviada =
+          modoEdicaoEnvio || (Number(item.qtd_enviada_anterior) || 0) === 0
+            ? Number(item.qtd_enviada) || 0
+            : (Number(item.qtd_enviada_anterior) || 0) + (Number(item.qtd_enviada_nova) || 0);
+        return {
+          produto_id: item.produto_id,
+          nome: item.nome,
+          preco_unitario: item.preco_unitario,
+          qtd_sobra_anterior: item.qtd_sobra_anterior || 0,
+          qtd_enviada: finalEnviada,
+          qtd_enviada_anterior: finalEnviada,
+          qtd_enviada_nova: 0,
+          qtd_retorno: item.qtd_retorno || 0,
+        };
+      });
+
+      const totalEnviadoCalculado =
+        modo === 'detalhado'
+          ? gradeItensSalvar.reduce((acc, i) => acc + i.qtd_enviada, 0)
+          : qtdEnviadaRapida;
+
       const payload = {
         organization_id: profile?.organization_id,
         local_id: localId,
@@ -1183,12 +1323,12 @@ export default function AcertoDiarioPage() {
         tipo_fechamento: tipoFechamento,
 
         // Totais
-        qtd_total_enviada: totalEnviado,
+        qtd_total_enviada: totalEnviadoCalculado,
         qtd_total_retorno: totalRetorno,
         preco_medio_rapido: modo === 'rapido' ? precoMedioRapido : 0,
 
         // Romaneio Detalhado
-        itens_grade: modo === 'detalhado' ? gradeItens : [],
+        itens_grade: modo === 'detalhado' ? gradeItensSalvar : [],
         ajustes_perdas: perdasList,
         total_descontos_perdas: totalPerdas,
 
@@ -1207,27 +1347,32 @@ export default function AcertoDiarioPage() {
         observacoes: observacoes.trim() || null,
       };
 
-      // Verificar se já existe um lançamento registrado para o mesmo PDV, Data E TURNO
+      // Verificar se já existe lançamento registrado para o mesmo PDV, Data E TURNO (evitando duplicidade)
       const { data: registrosExistentes } = await supabase
         .from('remessas_cargas_pdv')
         .select(
-          'id, status, qtd_total_enviada, valor_dinheiro_gaveta, valor_pix_declarado, valor_cartao_declarado'
+          'id, organization_id, status, qtd_total_enviada, valor_dinheiro_gaveta, valor_pix_declarado, valor_cartao_declarado'
         )
-        .eq('organization_id', profile?.organization_id)
         .eq('local_id', localId)
         .eq('data', dataAcerto)
         .eq('turno', turno)
         .order('created_at', { ascending: true });
 
-      const registroExistente =
-        registrosExistentes && registrosExistentes.length > 0 ? registrosExistentes[0] : null;
+      // Dar preferência ao registro com organization_id caso exista
+      let registroExistente = null;
+      if (registrosExistentes && registrosExistentes.length > 0) {
+        const comOrg = registrosExistentes.find(
+          (r) => r.organization_id === profile?.organization_id
+        );
+        registroExistente = comOrg || registrosExistentes[0];
+      }
 
       let error;
       if (registroExistente) {
         if (etapaAcerto === 'envio') {
-          // === ENVIO (Aba 1): Atualizar APENAS dados de envio, preservando financeiro já registrado ===
+          // === ENVIO (Aba 1): Atualizar APENAS dados de envio no registro existente ===
           const envioPayload: any = {
-            organization_id: profile?.organization_id,
+            organization_id: profile?.organization_id || registroExistente.organization_id,
             local_id: localId,
             data: dataAcerto,
             turno,
@@ -1235,11 +1380,11 @@ export default function AcertoDiarioPage() {
             modo_lancamento: modo,
 
             // Dados de envio
-            qtd_total_enviada: totalEnviado,
-            itens_grade: modo === 'detalhado' ? gradeItens : [],
+            qtd_total_enviada: totalEnviadoCalculado,
+            itens_grade: modo === 'detalhado' ? gradeItensSalvar : [],
             preco_medio_rapido: modo === 'rapido' ? precoMedioRapido : 0,
 
-            // Manter o status atual se já teve fechamento; só marca 'aberto' se ainda era 'aberto'
+            // Manter status atual se já teve fechamento; só marca 'aberto' se ainda era 'aberto'
             status: registroExistente.status === 'aberto' ? 'aberto' : registroExistente.status,
             updated_at: new Date().toISOString(),
           };
@@ -1277,19 +1422,23 @@ export default function AcertoDiarioPage() {
           }
         }
 
-        // Se houver duplicatas do mesmo turno/data/PDV, sincronizar status nos extras
+        // Se houver duplicatas do mesmo turno/data/PDV, sincronizar status em todas para evitar pendência fantasma
         if (registrosExistentes && registrosExistentes.length > 1) {
-          const outrosIds = registrosExistentes.slice(1).map((r) => r.id);
-          await supabase
-            .from('remessas_cargas_pdv')
-            .update({
-              status: etapaAcerto === 'envio' ? 'aberto' : 'encerrado',
-              updated_at: new Date().toISOString(),
-            })
-            .in('id', outrosIds);
+          const outrosIds = registrosExistentes
+            .filter((r) => r.id !== registroExistente.id)
+            .map((r) => r.id);
+          if (outrosIds.length > 0) {
+            await supabase
+              .from('remessas_cargas_pdv')
+              .update({
+                status: etapaAcerto === 'envio' ? 'aberto' : statusAlvoFechamento,
+                updated_at: new Date().toISOString(),
+              })
+              .in('id', outrosIds);
+          }
         }
       } else {
-        // Cria um novo registro para a data/PDV/turno
+        // Cria um novo registro apenas se realmente não existir nenhum para o turno/data/PDV
         const res = await supabase.from('remessas_cargas_pdv').insert([payload]);
         error = res.error;
 
@@ -1336,15 +1485,21 @@ export default function AcertoDiarioPage() {
           },
         });
       } else {
-        setStatusFechamentoPDV('encerrado');
+        setStatusFechamentoPDV(statusAlvoFechamento);
         toast({
-          title: 'Remessa e Fechamento Salvos!',
+          title:
+            statusAlvoFechamento === 'dinheiro_informado'
+              ? 'Fechamento Parcial Salvo!'
+              : 'Fechamento Encerrado!',
           description: `Fechamento (${tipoFechamento.toUpperCase()}) do PDV "${pdvNome}" gravado com sucesso. Pix/Cartão Esperado: R$ ${pixCartaoEsperado.toFixed(2)}`,
           variant: 'success',
         });
         setSuccessModal({
           isOpen: true,
-          title: '🎉 Fechamento Salvo com Sucesso!',
+          title:
+            statusAlvoFechamento === 'dinheiro_informado'
+              ? '🎉 Fechamento Parcial Salvo com Sucesso!'
+              : '🎉 Fechamento Encerrado com Sucesso!',
           description: `O fechamento (${tipoFechamento.toUpperCase()}) do PDV "${pdvNome}" foi gravado com sucesso no sistema.`,
           detalhes: {
             pdv: pdvNome,
@@ -1356,17 +1511,9 @@ export default function AcertoDiarioPage() {
         });
       }
 
-      // Reset
-      setGradeItens(
-        produtosBase.map((p) => ({
-          produto_id: p.id,
-          nome: p.nome,
-          preco_unitario: p.preco,
-          qtd_sobra_anterior: 0,
-          qtd_enviada: 0,
-          qtd_retorno: 0,
-        }))
-      );
+      // Manter os itens salvos na grade para exibir na tela travados com os dados gravados
+      setGradeItens(gradeItensSalvar);
+      setModoEdicaoEnvio(false);
       setQtdEnviadaRapida(0);
       setQtdRetornoRapida(0);
       setValorDinheiro(0);
@@ -1785,16 +1932,28 @@ export default function AcertoDiarioPage() {
 
           {/* Tabela Completa Consolidada */}
           <div className="rounded-2xl border border-primary/20 bg-background overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between p-4 border-b border-primary/10 bg-primary/5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b border-primary/10 bg-primary/5 gap-2">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-2">
                 <Layers className="h-4 w-4" /> Tabela Completa de Romaneios e Fechamentos (
                 {historicoTudo.length} registros)
               </h3>
-              {loadingTudo && (
-                <span className="flex items-center gap-1 text-xs text-primary animate-pulse font-bold">
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Atualizando...
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold">
+                <span className="text-text/50 uppercase tracking-wider text-[10px]">Legenda:</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300">
+                  🟢 Encerrado
                 </span>
-              )}
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full uppercase bg-cyan-100 text-cyan-800 dark:bg-cyan-950/50 dark:text-cyan-300 border border-cyan-300">
+                  🔵 Fechamento Parcial
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-300">
+                  🟠 Em Aberto
+                </span>
+                {loadingTudo && (
+                  <span className="flex items-center gap-1 text-xs text-primary animate-pulse font-bold ml-2">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -1900,16 +2059,28 @@ export default function AcertoDiarioPage() {
                           <td className="p-2.5 text-center">
                             <span
                               className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                                item.status === 'encerrado' || item.status === 'auditado'
+                                item.status === 'encerrado' ||
+                                item.status === 'auditado' ||
+                                item.status === 'conferido'
                                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300'
-                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-300'
+                                  : item.status === 'dinheiro_informado' ||
+                                      item.status === 'sobras_informadas' ||
+                                      item.status === 'parcial'
+                                    ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/50 dark:text-cyan-300 border border-cyan-300'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-300'
                               }`}
                             >
                               {item.status === 'encerrado'
                                 ? 'Encerrado'
                                 : item.status === 'auditado'
                                   ? 'Auditado'
-                                  : 'Aberto'}
+                                  : item.status === 'conferido'
+                                    ? 'Conferido'
+                                    : item.status === 'dinheiro_informado' ||
+                                        item.status === 'sobras_informadas' ||
+                                        item.status === 'parcial'
+                                      ? 'Fechamento Parcial'
+                                      : 'Em Aberto'}
                             </span>
                           </td>
                           <td className="p-2.5 text-center">
@@ -2518,8 +2689,13 @@ export default function AcertoDiarioPage() {
                   )}
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto space-y-4">
                   {(() => {
+                    const totalEnviadoAnteriorDetalhado = gradeItens.reduce(
+                      (acc, i) => acc + (Number(i.qtd_enviada_anterior) || 0),
+                      0
+                    );
+
                     const itensExibidos =
                       etapaAcerto !== 'envio'
                         ? gradeItens.filter(
@@ -2547,17 +2723,56 @@ export default function AcertoDiarioPage() {
 
                     return (
                       <>
+                        {/* Banner Informativo de Envio Anterior / Adicional em Aba 1 */}
+                        {etapaAcerto === 'envio' && totalEnviadoAnteriorDetalhado > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                              <CheckCircle2 className="h-4 w-4 text-amber-600 shrink-0" />
+                              <span>
+                                {modoEdicaoEnvio
+                                  ? '⚠️ Modo de Correção: Você está alterando o total do envio anterior.'
+                                  : `📦 Já existe um envio de ${totalEnviadoAnteriorDetalhado} un gravado. Digite a quantidade ADICIONAL que deseja enviar.`}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setModoEdicaoEnvio(!modoEdicaoEnvio)}
+                              className="px-3 py-1.5 text-xs font-bold rounded-xl border border-amber-500/40 bg-amber-500/20 text-amber-900 dark:text-amber-200 hover:bg-amber-500/30 transition-colors shrink-0"
+                            >
+                              {modoEdicaoEnvio
+                                ? 'Voltar para Envio Adicional'
+                                : '✏️ Corrigir Envio Anterior'}
+                            </button>
+                          </div>
+                        )}
+
                         {/* Desktop View: Tabela adaptável por Etapa */}
                         <table className="hidden sm:table w-full text-left text-xs">
                           <thead className="border-b border-primary/10 bg-primary/5 font-bold uppercase text-text/50">
                             {etapaAcerto === 'envio' ? (
-                              <tr>
-                                <th className="p-2.5">Doce / Produto</th>
-                                <th className="p-2.5 text-center">Preço Unit</th>
-                                <th className="p-2.5 text-center bg-primary/10 text-primary">
-                                  Quantidade Enviada
-                                </th>
-                              </tr>
+                              totalEnviadoAnteriorDetalhado > 0 && !modoEdicaoEnvio ? (
+                                <tr>
+                                  <th className="p-2.5">Doce / Produto</th>
+                                  <th className="p-2.5 text-center">Preço Unit</th>
+                                  <th className="p-2.5 text-center bg-cyan-500/10 text-cyan-700 dark:text-cyan-300">
+                                    Já Enviado
+                                  </th>
+                                  <th className="p-2.5 text-center bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                                    Enviar + (Adicional)
+                                  </th>
+                                  <th className="p-2.5 text-center bg-primary/10 text-primary">
+                                    Total Final Envio
+                                  </th>
+                                </tr>
+                              ) : (
+                                <tr>
+                                  <th className="p-2.5">Doce / Produto</th>
+                                  <th className="p-2.5 text-center">Preço Unit</th>
+                                  <th className="p-2.5 text-center bg-primary/10 text-primary">
+                                    Quantidade Enviada
+                                  </th>
+                                </tr>
+                              )
                             ) : (
                               <tr>
                                 <th className="p-2.5">Doce / Produto</th>
@@ -2580,6 +2795,44 @@ export default function AcertoDiarioPage() {
                               const subtotal = vend * item.preco_unitario;
 
                               if (etapaAcerto === 'envio') {
+                                if (totalEnviadoAnteriorDetalhado > 0 && !modoEdicaoEnvio) {
+                                  return (
+                                    <tr
+                                      key={item.produto_id}
+                                      className="hover:bg-primary/5 transition-colors"
+                                    >
+                                      <td className="p-2.5 font-bold text-text/80">{item.nome}</td>
+                                      <td className="p-2.5 text-center font-mono text-text/60">
+                                        R$ {item.preco_unitario.toFixed(2)}
+                                      </td>
+                                      <td className="p-2.5 text-center font-mono font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-50/50 dark:bg-cyan-950/20">
+                                        {item.qtd_enviada_anterior || 0} un
+                                      </td>
+                                      <td className="p-2.5 text-center">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={item.qtd_enviada_nova || ''}
+                                          onChange={(e) =>
+                                            handleAtualizarItemGrade(
+                                              item.produto_id,
+                                              'qtd_enviada_nova',
+                                              Number(e.target.value)
+                                            )
+                                          }
+                                          placeholder="0"
+                                          className="w-20 rounded-xl border border-emerald-500/40 bg-background px-3 py-1.5 text-center font-bold text-emerald-600 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                                        />
+                                      </td>
+                                      <td className="p-2.5 text-center font-mono font-extrabold text-primary">
+                                        {(item.qtd_enviada_anterior || 0) +
+                                          (item.qtd_enviada_nova || 0)}{' '}
+                                        un
+                                      </td>
+                                    </tr>
+                                  );
+                                }
+
                                 return (
                                   <tr
                                     key={item.produto_id}
@@ -2654,6 +2907,62 @@ export default function AcertoDiarioPage() {
                               );
                             })}
                           </tbody>
+                          <tfoot className="border-t-2 border-primary/20 bg-primary/10 font-bold text-xs">
+                            {etapaAcerto === 'envio' ? (
+                              totalEnviadoAnteriorDetalhado > 0 && !modoEdicaoEnvio ? (
+                                <tr>
+                                  <td className="p-3 font-extrabold uppercase tracking-wider text-text/80">
+                                    Total Acumulado
+                                  </td>
+                                  <td className="p-3 text-center">-</td>
+                                  <td className="p-3 text-center font-mono font-black text-cyan-700 dark:text-cyan-300 bg-cyan-500/10">
+                                    {totalEnviadoAnteriorDetalhado} un
+                                  </td>
+                                  <td className="p-3 text-center font-mono font-black text-emerald-600 bg-emerald-500/10">
+                                    +{totalEnviadoNovoDetalhado} un
+                                  </td>
+                                  <td className="p-3 text-center font-mono text-base font-black text-primary">
+                                    {totalEnviadoDetalhado} un
+                                  </td>
+                                </tr>
+                              ) : (
+                                <tr>
+                                  <td className="p-3 font-extrabold uppercase tracking-wider text-text/80">
+                                    Total a Enviar
+                                  </td>
+                                  <td className="p-3 text-center">-</td>
+                                  <td className="p-3 text-center font-mono text-base font-black text-primary">
+                                    {totalEnviadoDetalhado} un
+                                  </td>
+                                </tr>
+                              )
+                            ) : (
+                              <tr>
+                                <td className="p-3 font-extrabold uppercase tracking-wider text-text/80">
+                                  Totais
+                                </td>
+                                <td className="p-3 text-center">-</td>
+                                <td className="p-3 text-center font-mono font-bold text-cyan-700 dark:text-cyan-300">
+                                  {totalSobraAnteriorDetalhado} un
+                                </td>
+                                <td className="p-3 text-center font-mono font-bold">
+                                  {totalEnviadoDetalhado} un
+                                </td>
+                                <td className="p-3 text-center font-mono font-black text-text/90">
+                                  {totalDisponivelDetalhado} un
+                                </td>
+                                <td className="p-3 text-center font-mono font-extrabold text-amber-800 dark:text-amber-300 bg-amber-500/10">
+                                  {totalRetornoDetalhado} un
+                                </td>
+                                <td className="p-3 text-right font-mono font-black text-primary">
+                                  {totalVendidosDetalhado} un
+                                </td>
+                                <td className="p-3 text-right font-mono font-black text-text/90">
+                                  R$ {faturamentoBrutoDetalhado.toFixed(2)}
+                                </td>
+                              </tr>
+                            )}
+                          </tfoot>
                         </table>
 
                         {/* Mobile View: Cards Adaptáveis por Etapa */}
@@ -2664,6 +2973,93 @@ export default function AcertoDiarioPage() {
                             const subtotal = vend * item.preco_unitario;
 
                             if (etapaAcerto === 'envio') {
+                              if (totalEnviadoAnteriorDetalhado > 0 && !modoEdicaoEnvio) {
+                                return (
+                                  <div
+                                    key={item.produto_id}
+                                    className="rounded-2xl border border-primary/20 bg-background p-4 shadow-2xs space-y-3"
+                                  >
+                                    <div className="flex items-center justify-between border-b border-primary/10 pb-2">
+                                      <span className="font-bold text-sm text-text/90">
+                                        {item.nome}
+                                      </span>
+                                      <span className="rounded-lg bg-primary/10 px-2 py-0.5 font-mono text-xs font-bold text-primary">
+                                        R$ {item.preco_unitario.toFixed(2)}/un
+                                      </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                      <div className="rounded-xl bg-cyan-50 dark:bg-cyan-950/30 p-2 border border-cyan-200 dark:border-cyan-800 text-center">
+                                        <span className="block text-[10px] text-cyan-800 dark:text-cyan-300 font-semibold">
+                                          Já Enviado
+                                        </span>
+                                        <strong className="font-mono text-cyan-900 dark:text-cyan-200 text-sm">
+                                          {item.qtd_enviada_anterior || 0} un
+                                        </strong>
+                                      </div>
+                                      <div className="rounded-xl bg-primary/5 p-2 border border-primary/20 text-center">
+                                        <span className="block text-[10px] text-primary font-semibold">
+                                          Total Final
+                                        </span>
+                                        <strong className="font-mono text-primary text-sm">
+                                          {(item.qtd_enviada_anterior || 0) +
+                                            (item.qtd_enviada_nova || 0)}{' '}
+                                          un
+                                        </strong>
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <label className="block text-xs font-bold text-emerald-600">
+                                        ➕ Enviar Mais (Adicional):
+                                      </label>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleAtualizarItemGrade(
+                                              item.produto_id,
+                                              'qtd_enviada_nova',
+                                              Math.max(0, (item.qtd_enviada_nova || 0) - 1)
+                                            )
+                                          }
+                                          className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-lg font-bold text-emerald-600 active:scale-95 shrink-0 select-none"
+                                        >
+                                          -
+                                        </button>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={item.qtd_enviada_nova || ''}
+                                          onChange={(e) =>
+                                            handleAtualizarItemGrade(
+                                              item.produto_id,
+                                              'qtd_enviada_nova',
+                                              Number(e.target.value)
+                                            )
+                                          }
+                                          placeholder="0"
+                                          className="h-10 w-full rounded-xl border border-emerald-500/40 bg-background px-2 text-center font-bold text-emerald-600 text-base outline-none focus:border-emerald-500"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleAtualizarItemGrade(
+                                              item.produto_id,
+                                              'qtd_enviada_nova',
+                                              (item.qtd_enviada_nova || 0) + 1
+                                            )
+                                          }
+                                          className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-lg font-bold text-emerald-600 active:scale-95 shrink-0 select-none"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div
                                   key={item.produto_id}
@@ -2845,6 +3241,59 @@ export default function AcertoDiarioPage() {
                               </div>
                             );
                           })}
+
+                          {/* Card Resumo do Total em Tempo Real no Mobile */}
+                          {etapaAcerto === 'envio' ? (
+                            <div className="rounded-2xl border-2 border-primary/30 bg-primary/10 p-4 shadow-sm space-y-2 mt-4">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-extrabold uppercase tracking-wider text-text/80">
+                                  📦 Total Unidades a Enviar:
+                                </span>
+                                <span className="font-mono text-xl font-black text-primary">
+                                  {totalEnviadoDetalhado} un
+                                </span>
+                              </div>
+                              {totalEnviadoAnteriorDetalhado > 0 && !modoEdicaoEnvio && (
+                                <div className="flex justify-between text-xs border-t border-primary/10 pt-2 font-medium">
+                                  <span className="text-text/60">
+                                    Já enviado:{' '}
+                                    <strong className="text-cyan-700 dark:text-cyan-300 font-mono">
+                                      {totalEnviadoAnteriorDetalhado} un
+                                    </strong>
+                                  </span>
+                                  <span className="text-text/60">
+                                    Adicional novo:{' '}
+                                    <strong className="text-emerald-600 font-mono">
+                                      +{totalEnviadoNovoDetalhado} un
+                                    </strong>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="rounded-2xl border-2 border-primary/30 bg-primary/10 p-4 shadow-sm space-y-2 mt-4">
+                              <div className="flex justify-between items-center text-xs pb-1.5 border-b border-primary/10">
+                                <span className="font-bold text-text/80">Total Vendidos:</span>
+                                <span className="font-mono text-sm font-black text-primary">
+                                  {totalVendidosDetalhado} un
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs pb-1.5 border-b border-primary/10">
+                                <span className="font-bold text-text/80">
+                                  Total Sobras em Loja:
+                                </span>
+                                <span className="font-mono text-sm font-black text-amber-700 dark:text-amber-300">
+                                  {totalRetornoDetalhado} un
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="font-bold text-text/80">Faturamento Bruto:</span>
+                                <span className="font-mono text-sm font-black text-text/90">
+                                  R$ {faturamentoBrutoDetalhado.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </>
                     );
@@ -3005,7 +3454,13 @@ export default function AcertoDiarioPage() {
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white shadow-sm transition-all hover:opacity-95 active:scale-95 disabled:opacity-50"
                 >
                   <Package className="h-4 w-4" />
-                  {salvando ? 'Gravando Envio...' : 'Registrar Envio de Produtos'}
+                  {salvando
+                    ? 'Gravando Envio...'
+                    : modoEdicaoEnvio
+                      ? 'Salvar Correção do Envio'
+                      : gradeItens.some((i) => (Number(i.qtd_enviada_anterior) || 0) > 0)
+                        ? 'Registrar Envio Adicional'
+                        : 'Registrar Envio de Produtos'}
                 </button>
 
                 <button
@@ -3200,6 +3655,46 @@ export default function AcertoDiarioPage() {
                 )}
               </div>
 
+              {/* Nota Explicativa Colapsável sobre os Modos de Fechamento */}
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setMostrarAjudaFechamento(!mostrarAjudaFechamento)}
+                  className="flex w-full items-center justify-between text-xs font-bold text-primary hover:underline transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <HelpCircle className="h-4 w-4 text-primary shrink-0" />
+                    Dúvidas sobre qual opção de fechamento escolher?
+                  </span>
+                  <span className="text-[11px] font-semibold text-primary/80 shrink-0">
+                    {mostrarAjudaFechamento ? 'Recolher ▲' : 'Ver Guia Rápido ▼'}
+                  </span>
+                </button>
+
+                {mostrarAjudaFechamento && (
+                  <div className="pt-2 border-t border-primary/10 space-y-2 text-[11px] leading-relaxed animate-fade-in">
+                    <div className="rounded-lg bg-amber-500/10 p-2.5 border border-amber-500/20 text-amber-900 dark:text-amber-200">
+                      <strong className="block font-extrabold text-amber-800 dark:text-amber-300 mb-0.5">
+                        🔵 Salvar Fechamento Parcial (Sobras + Valores):
+                      </strong>
+                      Ideal para a{' '}
+                      <strong>troca de turno durante o dia (ex: Manhã ➡️ Tarde)</strong>. Grava as
+                      sobras físicas e o dinheiro em espécie recolhido da gaveta, permitindo deixar
+                      a conferência de Pix e Cartão para depois no Fechamento Noturno.
+                    </div>
+
+                    <div className="rounded-lg bg-emerald-500/10 p-2.5 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200">
+                      <strong className="block font-extrabold text-emerald-800 dark:text-emerald-300 mb-0.5">
+                        🟢 Encerrar Turno Completo:
+                      </strong>
+                      Conclusão <strong>definitiva do turno/dia</strong> no PDV. Grava sobras,
+                      dinheiro, Pix e Cartão, efetuando a conciliação financeira final e{' '}
+                      <strong>bloqueando a edição</strong> por segurança.
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex flex-col gap-2">
                 {isFechamentoBloqueado ? (
                   <button
@@ -3225,7 +3720,7 @@ export default function AcertoDiarioPage() {
                       className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-amber-500 bg-amber-500/10 text-amber-900 dark:text-amber-200 py-2.5 text-xs font-black shadow-sm transition-all hover:bg-amber-500/20 active:scale-95 disabled:opacity-50"
                     >
                       <Banknote className="h-4 w-4 text-amber-600 shrink-0" />
-                      {salvando ? 'Gravando...' : 'Salvar Sobras + Gaveta (Pix/Cartão Depois)'}
+                      {salvando ? 'Gravando...' : 'Salvar Fechamento Parcial (Sobras + Valores)'}
                     </button>
 
                     <button

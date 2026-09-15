@@ -72,7 +72,14 @@ export default function FechamentoDiarioPage() {
   const { theme } = useTheme();
 
   const [abaAtiva, setAbaAtiva] = useState<'conciliacao' | 'historico'>('conciliacao');
+  const [tipoFiltroData, setTipoFiltroData] = useState<'dia' | 'periodo'>('dia');
   const [filtroData, setFiltroData] = useState<string>(() => getLocalDateISOString());
+  const [filtroDataInicio, setFiltroDataInicio] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return getLocalDateISOString(d);
+  });
+  const [filtroDataFim, setFiltroDataFim] = useState<string>(() => getLocalDateISOString());
   const [filtroPDV, setFiltroPDV] = useState<string>('todos');
   const [locais, setLocais] = useState<LocalPDV[]>([]);
   const [registros, setRegistros] = useState<RomaneioRegistro[]>([]);
@@ -132,18 +139,13 @@ export default function FechamentoDiarioPage() {
   useEffect(() => {
     async function carregarLocais() {
       try {
-        let query = supabase.from('locais').select('id, nome, tipo, logo_url, ordem');
+        let query = supabase.from('locais').select('id, nome, tipo').order('nome');
+
         if (profile?.organization_id) {
           query = query.eq('organization_id', profile.organization_id);
         }
-        let data;
-        const resOrd = await query.order('ordem', { ascending: true }).order('nome');
-        data = resOrd.data;
-        if (resOrd.error && resOrd.error.message?.includes('ordem')) {
-          const res = await query.order('nome');
-          data = res.data;
-        }
 
+        const { data } = await query;
         if (data) {
           const pdvs = data.filter((loc) => {
             const t = String(loc.tipo || '').toLowerCase();
@@ -167,15 +169,19 @@ export default function FechamentoDiarioPage() {
   }, [profile?.organization_id]);
 
   const carregarDiasPendentes = useCallback(async () => {
-    if (!profile?.organization_id) return;
     try {
-      const { data } = await supabase
+      let query = supabase
         .from('remessas_cargas_pdv')
         .select('*, locais:local_id(nome)')
-        .eq('organization_id', profile.organization_id)
         .not('status', 'in', '("auditado","conferido")')
         .order('data', { ascending: false })
         .order('created_at', { ascending: false });
+
+      if (profile?.organization_id) {
+        query = query.eq('organization_id', profile.organization_id);
+      }
+
+      const { data } = await query;
 
       if (data) {
         setPendenciasList(data);
@@ -215,12 +221,23 @@ export default function FechamentoDiarioPage() {
         query = query.eq('organization_id', profile.organization_id);
       }
 
+      if (tipoFiltroData === 'dia') {
+        if (filtroData) query = query.eq('data', filtroData);
+      } else {
+        if (filtroDataInicio) query = query.gte('data', filtroDataInicio);
+        if (filtroDataFim) query = query.lte('data', filtroDataFim);
+      }
+
+      if (filtroPDV !== 'todos') {
+        query = query.eq('local_id', filtroPDV);
+      }
+
       const resQuery = await query;
       let data = resQuery.data;
       const error = resQuery.error;
 
-      if (!data || data.length === 0) {
-        const fallback = await supabase
+      if ((!data || data.length === 0) && profile?.organization_id) {
+        let fallbackQuery = supabase
           .from('remessas_cargas_pdv')
           .select(
             `
@@ -240,8 +257,21 @@ export default function FechamentoDiarioPage() {
           )
           .order('data', { ascending: false })
           .order('created_at', { ascending: false });
-        if (fallback.data && fallback.data.length > 0) {
-          data = fallback.data;
+
+        if (tipoFiltroData === 'dia') {
+          if (filtroData) fallbackQuery = fallbackQuery.eq('data', filtroData);
+        } else {
+          if (filtroDataInicio) fallbackQuery = fallbackQuery.gte('data', filtroDataInicio);
+          if (filtroDataFim) fallbackQuery = fallbackQuery.lte('data', filtroDataFim);
+        }
+
+        if (filtroPDV !== 'todos') {
+          fallbackQuery = fallbackQuery.eq('local_id', filtroPDV);
+        }
+
+        const fallbackRes = await fallbackQuery;
+        if (fallbackRes.data && fallbackRes.data.length > 0) {
+          data = fallbackRes.data;
         }
       }
 
@@ -268,10 +298,16 @@ export default function FechamentoDiarioPage() {
     } finally {
       setLoadingHistorico(false);
     }
-  }, [profile?.organization_id]);
+  }, [
+    profile?.organization_id,
+    tipoFiltroData,
+    filtroData,
+    filtroDataInicio,
+    filtroDataFim,
+    filtroPDV,
+  ]);
 
   const carregarDados = useCallback(async () => {
-    if (!profile?.organization_id) return;
     setLoading(true);
     try {
       let query = supabase
@@ -282,16 +318,56 @@ export default function FechamentoDiarioPage() {
           locais(id, nome)
         `
         )
-        .eq('organization_id', profile.organization_id)
-        .eq('data', filtroData)
         .order('created_at', { ascending: false });
+
+      if (profile?.organization_id) {
+        query = query.eq('organization_id', profile.organization_id);
+      }
+
+      if (tipoFiltroData === 'dia') {
+        if (filtroData) query = query.eq('data', filtroData);
+      } else {
+        if (filtroDataInicio) query = query.gte('data', filtroDataInicio);
+        if (filtroDataFim) query = query.lte('data', filtroDataFim);
+      }
 
       if (filtroPDV !== 'todos') {
         query = query.eq('local_id', filtroPDV);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
+      const resQuery = await query;
+      let data = resQuery.data;
+      const error = resQuery.error;
+
+      if ((!data || data.length === 0) && profile?.organization_id) {
+        let fallbackQuery = supabase
+          .from('remessas_cargas_pdv')
+          .select(
+            `
+            *,
+            locais(id, nome)
+          `
+          )
+          .order('created_at', { ascending: false });
+
+        if (tipoFiltroData === 'dia') {
+          if (filtroData) fallbackQuery = fallbackQuery.eq('data', filtroData);
+        } else {
+          if (filtroDataInicio) fallbackQuery = fallbackQuery.gte('data', filtroDataInicio);
+          if (filtroDataFim) fallbackQuery = fallbackQuery.lte('data', filtroDataFim);
+        }
+
+        if (filtroPDV !== 'todos') {
+          fallbackQuery = fallbackQuery.eq('local_id', filtroPDV);
+        }
+
+        const fallbackRes = await fallbackQuery;
+        if (fallbackRes.data && fallbackRes.data.length > 0) {
+          data = fallbackRes.data;
+        }
+      }
+
+      if (error && (!data || data.length === 0)) throw error;
 
       const formatados: RomaneioRegistro[] = (data || []).map((r: any) => ({
         id: r.id,
@@ -335,7 +411,14 @@ export default function FechamentoDiarioPage() {
     } finally {
       setLoading(false);
     }
-  }, [profile?.organization_id, filtroData, filtroPDV]);
+  }, [
+    profile?.organization_id,
+    tipoFiltroData,
+    filtroData,
+    filtroDataInicio,
+    filtroDataFim,
+    filtroPDV,
+  ]);
 
   useEffect(() => {
     carregarDiasPendentes();
@@ -973,7 +1056,9 @@ export default function FechamentoDiarioPage() {
 
                   const badgeText =
                     statusItem === 'dinheiro_informado'
-                      ? 'Gaveta Ok (Pix/Cartão Pendente)'
+                      ? Number(item.valor_dinheiro_gaveta || 0) > 0
+                        ? 'Gaveta / Dinheiro OK (Pix/Cartão Pendente)'
+                        : 'Fechamento Parcial (Pix/Cartão Pendente)'
                       : statusItem === 'sobras_informadas'
                         ? 'Sobras Informadas'
                         : statusItem === 'aberto'
@@ -1021,18 +1106,76 @@ export default function FechamentoDiarioPage() {
           {/* Seleção de Data & PDV */}
           <div className="space-y-4">
             <div className="flex flex-col gap-4 rounded-2xl border border-primary/20 bg-background p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-primary" />
-                <span className="text-xs font-bold text-text/70">Data de Referência:</span>
-                <input
-                  type="date"
-                  value={filtroData}
-                  onChange={(e) => {
-                    setFiltroData(e.target.value);
-                    setModoEdicaoDia(false);
-                  }}
-                  className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-bold outline-none focus:border-primary"
-                />
+              <div className="flex flex-wrap items-center gap-3">
+                <Calendar className="h-4 w-4 text-primary shrink-0" />
+                <div className="flex items-center gap-1 rounded-xl bg-primary/5 p-1 border border-primary/10 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setTipoFiltroData('dia')}
+                    className={`px-3 py-1 rounded-lg transition-all ${
+                      tipoFiltroData === 'dia'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-text/70 hover:text-text'
+                    }`}
+                  >
+                    Por Dia
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTipoFiltroData('periodo')}
+                    className={`px-3 py-1 rounded-lg transition-all ${
+                      tipoFiltroData === 'periodo'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-text/70 hover:text-text'
+                    }`}
+                  >
+                    Por Período
+                  </button>
+                </div>
+
+                {tipoFiltroData === 'dia' ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-text/70">Data:</span>
+                    <input
+                      type="date"
+                      value={filtroData}
+                      onChange={(e) => {
+                        setFiltroData(e.target.value);
+                        setModoEdicaoDia(false);
+                      }}
+                      className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-bold outline-none focus:border-primary"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-text/70">De:</span>
+                    <input
+                      type="date"
+                      value={filtroDataInicio}
+                      onChange={(e) => setFiltroDataInicio(e.target.value)}
+                      className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-bold outline-none focus:border-primary"
+                    />
+                    <span className="text-xs font-bold text-text/70">Até:</span>
+                    <input
+                      type="date"
+                      value={filtroDataFim}
+                      onChange={(e) => setFiltroDataFim(e.target.value)}
+                      className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-bold outline-none focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = new Date();
+                        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                        setFiltroDataInicio(getLocalDateISOString(firstDay));
+                        setFiltroDataFim(getLocalDateISOString(today));
+                      }}
+                      className="rounded-xl border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-[11px] font-bold text-primary hover:bg-primary/20"
+                    >
+                      Este Mês
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="text-right text-xs text-text/50 font-medium">
@@ -1055,49 +1198,68 @@ export default function FechamentoDiarioPage() {
           </div>
 
           {/* Resumo Consolidado dos Caixas do Dia */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-            <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
-              <span className="text-xs font-bold uppercase tracking-wider text-text/50">
-                Vendas (em Dinheiro) R$
-              </span>
-              <p className="mt-1 font-mono text-xl font-black text-emerald-600">
-                R$ {totalDinheiroGaveta.toFixed(2)}
-              </p>
-              <p className="text-[10px] text-text/40">Declarado nos PDVs</p>
-            </div>
+          {(() => {
+            const totalSobrasRetorno = registros.reduce(
+              (acc, r) => acc + (Number(r.qtd_total_retorno) || 0),
+              0
+            );
 
-            <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
-              <span className="text-xs font-bold uppercase tracking-wider text-text/50">
-                Vendas no Pix R$
-              </span>
-              <p className="mt-1 font-mono text-xl font-black text-cyan-600">
-                R$ {totalPixDeclarado.toFixed(2)}
-              </p>
-              <p className="text-[10px] text-text/40">Informado nos PDVs</p>
-            </div>
+            return (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
+                  <span className="text-xs font-bold uppercase tracking-wider text-text/50">
+                    Vendas (em Dinheiro) R$
+                  </span>
+                  <p className="mt-1 font-mono text-xl font-black text-emerald-600">
+                    R$ {totalDinheiroGaveta.toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-text/40">Declarado nos PDVs</p>
+                </div>
 
-            <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
-              <span className="text-xs font-bold uppercase tracking-wider text-text/50">
-                Vendas nos Cartões R$
-              </span>
-              <p className="mt-1 font-mono text-xl font-black text-purple-600">
-                R$ {totalCartaoDeclarado.toFixed(2)}
-              </p>
-              <p className="text-[10px] text-text/40">Informado nos PDVs</p>
-            </div>
+                <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
+                  <span className="text-xs font-bold uppercase tracking-wider text-text/50">
+                    Vendas no Pix R$
+                  </span>
+                  <p className="mt-1 font-mono text-xl font-black text-cyan-600">
+                    R$ {totalPixDeclarado.toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-text/40">Informado nos PDVs</p>
+                </div>
 
-            <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
-              <span className="text-xs font-bold uppercase tracking-wider text-text/50">
-                Diferenças nos Caixas R$
-              </span>
-              <p
-                className={`mt-1 font-mono text-xl font-black ${totalFurosDeCaixa > 0 ? 'text-rose-600' : 'text-emerald-600'}`}
-              >
-                R$ {totalFurosDeCaixa.toFixed(2)}
-              </p>
-              <p className="text-[10px] text-text/40">Diferenças de caixa</p>
-            </div>
-          </div>
+                <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
+                  <span className="text-xs font-bold uppercase tracking-wider text-text/50">
+                    Vendas nos Cartões R$
+                  </span>
+                  <p className="mt-1 font-mono text-xl font-black text-purple-600">
+                    R$ {totalCartaoDeclarado.toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-text/40">Informado nos PDVs</p>
+                </div>
+
+                <div className="rounded-2xl border border-amber-300/80 bg-amber-50/60 dark:bg-amber-950/30 p-4 shadow-sm">
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                    Sobras em Loja (Retorno)
+                  </span>
+                  <p className="mt-1 font-mono text-xl font-black text-amber-700 dark:text-amber-300">
+                    {totalSobrasRetorno} un
+                  </p>
+                  <p className="text-[10px] text-amber-700/70">Produtos devolvidos / sobras</p>
+                </div>
+
+                <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
+                  <span className="text-xs font-bold uppercase tracking-wider text-text/50">
+                    Diferenças nos Caixas R$
+                  </span>
+                  <p
+                    className={`mt-1 font-mono text-xl font-black ${totalFurosDeCaixa > 0 ? 'text-rose-600' : 'text-emerald-600'}`}
+                  >
+                    R$ {totalFurosDeCaixa.toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-text/40">Diferenças de caixa</p>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Card Principal: Formulário de Conciliação Bancária */}
           <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-background to-primary/5 p-6 shadow-md space-y-6">
@@ -1362,7 +1524,9 @@ export default function FechamentoDiarioPage() {
                                   : reg.status === 'encerrado'
                                     ? 'Encerrado'
                                     : reg.status === 'dinheiro_informado'
-                                      ? 'Gaveta Ok (Pix/Cartão Pendente)'
+                                      ? Number(reg.valor_dinheiro_gaveta || 0) > 0
+                                        ? 'Gaveta / Dinheiro OK (Pix/Cartão Pendente)'
+                                        : 'Fechamento Parcial (Dinheiro, Pix/Cartão Pendente)'
                                       : 'Aberto'}
                             </span>
                           </td>
@@ -1478,7 +1642,9 @@ export default function FechamentoDiarioPage() {
                   >
                     <option value="todos">Todos os Status</option>
                     <option value="aberto">Aberto</option>
-                    <option value="dinheiro_informado">Gaveta Ok (Pix/Cartão Pendente)</option>
+                    <option value="dinheiro_informado">
+                      Fechamento Parcial (Dinheiro, Pix/Cartão Pendente)
+                    </option>
                     <option value="encerrado">Encerrado</option>
                     <option value="auditado">Auditado</option>
                   </select>
@@ -1582,7 +1748,9 @@ export default function FechamentoDiarioPage() {
                                   : item.status === 'encerrado'
                                     ? 'Encerrado'
                                     : item.status === 'dinheiro_informado'
-                                      ? 'Gaveta Ok (Pix/Cartão Pendente)'
+                                      ? Number(item.valor_dinheiro_gaveta || 0) > 0
+                                        ? 'Gaveta / Dinheiro OK (Pix/Cartão Pendente)'
+                                        : 'Fechamento Parcial (Pix/Cartão Pendente)'
                                       : 'Aberto'}
                               </span>
                             </td>

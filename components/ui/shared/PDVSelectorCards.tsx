@@ -202,8 +202,8 @@ export function PDVSelectorCards({
 }: PDVSelectorCardsProps) {
   if (carregando) {
     return (
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 w-full max-w-full min-w-0">
-        {[1, 2, 3, 4].map((i) => (
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 w-full max-w-full min-w-0">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <div
             key={i}
             className="aspect-square w-full animate-pulse rounded-2xl border border-primary/10 bg-primary/5 p-3 sm:p-4"
@@ -222,13 +222,9 @@ export function PDVSelectorCards({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 w-full max-w-full min-w-0">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 w-full max-w-full min-w-0">
       {incluirTodos && (
-        <TodosPDVCardItem
-          selectedId={selectedId}
-          onSelect={onSelect}
-          todosLabel={todosLabel}
-        />
+        <TodosPDVCardItem selectedId={selectedId} onSelect={onSelect} todosLabel={todosLabel} />
       )}
 
       {locais.map((pdv) => (

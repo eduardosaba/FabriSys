@@ -71,7 +71,7 @@ export default function FechamentoDiarioPage() {
   const { toast } = useToast();
   const { theme } = useTheme();
 
-  const [abaAtiva, setAbaAtiva] = useState<'conciliacao' | 'historico'>('conciliacao');
+  const [abaAtiva, setAbaAtiva] = useState<'conciliacao' | 'historico'>('historico');
   const [tipoFiltroData, setTipoFiltroData] = useState<'dia' | 'periodo'>('dia');
   const [filtroData, setFiltroData] = useState<string>(() => getLocalDateISOString());
   const [filtroDataInicio, setFiltroDataInicio] = useState<string>(() => {
@@ -999,32 +999,7 @@ export default function FechamentoDiarioPage() {
         </div>
       </div>
 
-      {/* Navegação por Abas: Conciliação do Dia vs Histórico de Fechamentos */}
-      <div className="flex border-b border-primary/10 space-x-4">
-        <button
-          type="button"
-          onClick={() => setAbaAtiva('conciliacao')}
-          className={`flex items-center gap-2 border-b-2 pb-2.5 text-xs font-bold transition-all ${
-            abaAtiva === 'conciliacao'
-              ? 'border-primary text-primary font-black'
-              : 'border-transparent text-text/50 hover:text-text'
-          }`}
-        >
-          <Lock className="h-4 w-4" /> Conciliação do Dia
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAbaAtiva('historico')}
-          className={`flex items-center gap-2 border-b-2 pb-2.5 text-xs font-bold transition-all ${
-            abaAtiva === 'historico'
-              ? 'border-primary text-primary font-black'
-              : 'border-transparent text-text/50 hover:text-text'
-          }`}
-        >
-          <History className="h-4 w-4" /> Histórico de Fechamentos
-        </button>
-      </div>
+      {/* Navegação por Abas removida: A página agora é puramente Histórico */}
 
       {/* ABA 1: CONCILIAÇÃO DO DIA */}
       {abaAtiva === 'conciliacao' && (

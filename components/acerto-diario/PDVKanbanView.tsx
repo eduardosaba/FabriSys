@@ -86,6 +86,7 @@ interface RemessaKanban {
   valor_pix_declarado: number;
   valor_cartao_declarado: number;
   diferenca_auditoria: number;
+  observacoes?: string | null;
   status: string;
   created_at: string;
   updated_at: string;

@@ -2227,7 +2227,7 @@ export function PDVKanbanView({
         className={
           viewMode === 'scroll'
             ? 'flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 px-1 min-h-[70vh]'
-            : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 pb-4 px-1 min-h-[70vh]'
+            : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 pb-4 px-1 min-h-[70vh]'
         }
       >
         {/* Column 1: Preparar Carga */}

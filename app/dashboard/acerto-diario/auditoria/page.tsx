@@ -125,6 +125,8 @@ export default function AuditoriaPDVPage() {
   interface LocalPDV {
     id: string;
     nome: string;
+    logo_url?: string;
+    tipo?: string;
   }
   const [locais, setLocais] = useState<LocalPDV[]>([]);
   const [tipoPeriodo, setTipoPeriodo] = useState<

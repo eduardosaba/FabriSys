@@ -40,6 +40,8 @@ import {
 interface LocalPDV {
   id: string;
   nome: string;
+  logo_url?: string;
+  tipo?: string;
 }
 
 interface RomaneioRegistro {
@@ -139,13 +141,23 @@ export default function FechamentoDiarioPage() {
   useEffect(() => {
     async function carregarLocais() {
       try {
-        let query = supabase.from('locais').select('id, nome, tipo').order('nome');
+        let queryLocais = supabase.from('locais').select('id, nome, tipo, logo_url, ordem');
 
         if (profile?.organization_id) {
-          query = query.eq('organization_id', profile.organization_id);
+          queryLocais = queryLocais.eq('organization_id', profile.organization_id);
         }
 
-        const { data } = await query;
+        const { data: dataLocaisRaw, error: errorLocais } = await queryLocais
+          .order('ordem', { ascending: true })
+          .order('nome');
+
+        let data = dataLocaisRaw;
+
+        if (errorLocais && errorLocais.message?.includes('ordem')) {
+          const res = await queryLocais.order('nome');
+          data = res.data;
+        }
+
         if (data) {
           const pdvs = data.filter((loc) => {
             const t = String(loc.tipo || '').toLowerCase();

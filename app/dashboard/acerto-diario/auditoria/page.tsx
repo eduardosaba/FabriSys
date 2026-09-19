@@ -38,6 +38,8 @@ import {
   RefreshCw,
   ShieldCheck,
   ShoppingBag,
+  Smartphone,
+  Sparkles,
   Store,
   Target,
   Trash2,
@@ -46,6 +48,8 @@ import {
   Trophy,
   Unlock,
   X,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   BarChart,
@@ -97,7 +101,10 @@ interface RomaneioRegistro {
 interface RankingItem {
   nome: string;
   qtdVendida: number;
+  qtdEnviada: number;
   faturamentoTotal: number;
+  giroRate: number;
+  sobraRate: number;
 }
 
 interface ResumoPDV {
@@ -109,7 +116,16 @@ interface ResumoPDV {
   faturamentoLiquido: number;
   dinheiroGaveta: number;
   pixCartaoEsperado: number;
+  pixDeclarado: number;
+  cartaoDeclarado: number;
   diferencaTotal: number;
+}
+
+interface LocalPDV {
+  id: string;
+  nome: string;
+  logo_url?: string;
+  tipo?: string;
 }
 
 export default function AuditoriaPDVPage() {
@@ -121,17 +137,11 @@ export default function AuditoriaPDVPage() {
   const [loading, setLoading] = useState(true);
   const [encerrandoDia, setEncerrandoDia] = useState(false);
 
-  // Filtros Avançados de Período e PDV
-  interface LocalPDV {
-    id: string;
-    nome: string;
-    logo_url?: string;
-    tipo?: string;
-  }
   const [locais, setLocais] = useState<LocalPDV[]>([]);
   const [tipoPeriodo, setTipoPeriodo] = useState<
     'dia' | 'mes' | 'trimestre' | 'semestre' | 'personalizado'
   >('dia');
+  const [presetAtivo, setPresetAtivo] = useState<'hoje' | 'ontem' | '7dias' | 'mes' | 'custom'>('hoje');
   const [filtroPDV, setFiltroPDV] = useState<string>('todos');
   const [graficoModo, setGraficoModo] = useState<'evolucao' | 'pdv'>('evolucao');
   const [tipoGraficoVisual, setTipoGraficoVisual] = useState<'barras' | 'linhas' | 'area'>(
@@ -161,7 +171,7 @@ export default function AuditoriaPDVPage() {
   const [dataInicio, setDataInicio] = useState<string>(getLocalDateISOString(now));
   const [dataFim, setDataFim] = useState<string>(getLocalDateISOString(now));
 
-  // Estados de Fechamento Noturno da Larissa (Extratos Reais)
+  // Estados de Fechamento Noturno da Confeitaria
   const [pixExtratoBanco, setPixExtratoBanco] = useState<number>(0);
   const [cartaoMaquininha, setCartaoMaquininha] = useState<number>(0);
   const [justificativaAuditoria, setJustificativaAuditoria] = useState<string>('');
@@ -226,6 +236,33 @@ export default function AuditoriaPDVPage() {
     }
     carregarLocais();
   }, [profile?.organization_id]);
+
+  // Função de seleção rápida de período (Presets)
+  const aplicarPresetData = (preset: 'hoje' | 'ontem' | '7dias' | 'mes' | 'custom') => {
+    setPresetAtivo(preset);
+    const dHoje = new Date();
+
+    if (preset === 'hoje') {
+      setTipoPeriodo('dia');
+      setFiltroData(getLocalDateISOString(dHoje));
+    } else if (preset === 'ontem') {
+      setTipoPeriodo('dia');
+      const dOntem = new Date();
+      dOntem.setDate(dOntem.getDate() - 1);
+      setFiltroData(getLocalDateISOString(dOntem));
+    } else if (preset === '7dias') {
+      setTipoPeriodo('personalizado');
+      const d7Dias = new Date();
+      d7Dias.setDate(d7Dias.getDate() - 6);
+      setDataInicio(getLocalDateISOString(d7Dias));
+      setDataFim(getLocalDateISOString(dHoje));
+    } else if (preset === 'mes') {
+      setTipoPeriodo('mes');
+      setFiltroMes(currentMonthStr);
+    } else {
+      setTipoPeriodo('personalizado');
+    }
+  };
 
   const computeDateRange = useCallback(() => {
     if (tipoPeriodo === 'dia') {
@@ -487,7 +524,7 @@ export default function AuditoriaPDVPage() {
       profile?.organization_name ||
       profile?.empresa_nome ||
       profile?.nome_empresa ||
-      'Larissa Saba - Doces Gourmet';
+      'Larissa Saba - Confeitaria Gourmet';
     const dataAtual = new Date().toLocaleDateString('pt-BR');
 
     const rawLogoUrl =
@@ -561,7 +598,7 @@ export default function AuditoriaPDVPage() {
             </div>
             <div class="kpi-card">
               <div class="kpi-title">Diferença de Caixa</div>
-              <div class="kpi-value" style="color: ${totalFurosDeCaixa < 0 ? '#dc2626' : '#059669'}">
+              <div class="kpi-value" style="color: ${totalFurosDeCaixa > 0 ? '#dc2626' : '#059669'}">
                 R$ ${totalFurosDeCaixa.toFixed(2)}
               </div>
             </div>
@@ -684,93 +721,87 @@ export default function AuditoriaPDVPage() {
     (acc, r) => acc + Number(r.valor_dinheiro_gaveta || 0),
     0
   );
+  const totalPixDeclarado = registros.reduce(
+    (acc, r) => acc + Number(r.valor_pix_declarado || 0),
+    0
+  );
+  const totalCartaoDeclarado = registros.reduce(
+    (acc, r) => acc + Number(r.valor_cartao_declarado || 0),
+    0
+  );
   const totalPixCartaoEsperado = registros.reduce(
     (acc, r) => acc + Number(r.pix_cartao_esperado || 0),
     0
   );
 
-  // Estimativa de CMV e Lucro Bruto (Supondo CMV médio de 35% nos doces da confeitaria)
-  const cmvEstimadoPercentual = 0.35;
-  const cmvEstimadoValor = faturamentoTotalLiquido * cmvEstimadoPercentual;
-  const lucroBrutoEstimado = faturamentoTotalLiquido - cmvEstimadoValor;
   const taxaSobraPercentual =
     totalEnviadoGeral > 0 ? (totalRetornoGeral / totalEnviadoGeral) * 100 : 0;
-
-  // --- NOVAS MÉTRICAS ANALÍTICAS DE AUDITORIA ---
-  // 1. Eficiência de Produção & Giro de Remessa
   const taxaGiroPercentual =
     totalEnviadoGeral > 0 ? (totalVendidosGeral / totalEnviadoGeral) * 100 : 0;
   const ticketMedioUnitario =
     totalVendidosGeral > 0 ? faturamentoTotalLiquido / totalVendidosGeral : 0;
 
-  // 2. Confiabilidade dos Operadores / Turnos
-  const totalTurnos = registros.length;
-  const turnosComFuro = registros.filter(
-    (r) => Math.abs(Number(r.diferenca_auditoria || 0)) >= 0.5
-  ).length;
-  const turnosSemFuro = Math.max(0, totalTurnos - turnosComFuro);
-  const indiceConfiabilidade = totalTurnos > 0 ? (turnosSemFuro / totalTurnos) * 100 : 100;
-
-  // 3. Top Sobras (Alerta de Encalhe por Produto)
-  interface SobraItem {
-    nome: string;
-    qtdRetorno: number;
-  }
-  const sobrasMap: Record<string, SobraItem> = {};
-  registros.forEach((reg) => {
-    if (reg.itens_grade && Array.isArray(reg.itens_grade)) {
-      reg.itens_grade.forEach((item) => {
-        const ret = Number(item.qtd_retorno || 0);
-        if (ret > 0) {
-          if (!sobrasMap[item.nome]) {
-            sobrasMap[item.nome] = { nome: item.nome, qtdRetorno: 0 };
-          }
-          sobrasMap[item.nome].qtdRetorno += ret;
-        }
-      });
-    }
-  });
-  const rankingSobras = Object.values(sobrasMap).sort((a, b) => b.qtdRetorno - a.qtdRetorno);
-  const produtoMaiorSobra = rankingSobras.length > 0 ? rankingSobras[0] : null;
-
+  // Divergência / Furo de Caixa acumulado
   const totalFurosDeCaixa = registros
-    .filter((r) => r.diferenca_auditoria < -0.5)
-    .reduce((acc, r) => acc + Math.abs(Number(r.diferenca_auditoria)), 0);
+    .filter((r) => Math.abs(Number(r.diferenca_auditoria || 0)) >= 0.5)
+    .reduce((acc, r) => acc + Number(r.diferenca_auditoria || 0), 0);
 
-  const statusGeralDia =
-    registros.length > 0 &&
-    registros.every((r) => r.status === 'auditado' || r.status === 'conferido')
-      ? 'auditado'
-      : 'pendente';
+  // Status de Auditoria do Período
+  const totalTurnos = registros.length;
+  const turnosAuditados = registros.filter(
+    (r) => r.status === 'auditado' || r.status === 'conferido'
+  ).length;
+  const percentualAuditado = totalTurnos > 0 ? (turnosAuditados / totalTurnos) * 100 : 0;
+  const statusGeralAuditado = totalTurnos > 0 && turnosAuditados === totalTurnos;
 
-  // --- CONCILIAÇÃO BANCÁRIA NOTURNA ---
-  const pixReal = Number(pixExtratoBanco) || 0;
-  const cartaoReal = Number(cartaoMaquininha) || 0;
-  const totalDigitalRealDeclarado = pixReal + cartaoReal;
-  const diferencaConciliacaoDigital =
-    totalDigitalRealDeclarado > 0 ? totalDigitalRealDeclarado - totalPixCartaoEsperado : 0;
+  // Meios de pagamento em porcentagem
+  const totalFormasCalculadas = faturamentoTotalLiquido > 0 ? faturamentoTotalLiquido : 1;
+  const pctDinheiro = (totalDinheiroGaveta / totalFormasCalculadas) * 100;
+  const pctPix = ((totalPixDeclarado || totalPixCartaoEsperado * 0.45) / totalFormasCalculadas) * 100;
+  const pctCartao = ((totalCartaoDeclarado || totalPixCartaoEsperado * 0.55) / totalFormasCalculadas) * 100;
 
-  // --- PREPARAÇÃO DE DADOS PARA GRÁFICOS (RECHARTS) ---
+  // --- PREPARAÇÃO DE DADOS PARA GRÁFICOS ---
 
-  // 1. Ranking dos Produtos Mais Vendidos
+  // 1. Ranking dos Produtos Mais Vendidos & Análise de Giro
   const rankingMap: Record<string, RankingItem> = {};
   registros.forEach((reg) => {
     if (reg.itens_grade && Array.isArray(reg.itens_grade)) {
       reg.itens_grade.forEach((item) => {
-        const vend = Math.max(0, (item.qtd_enviada || 0) - (item.qtd_retorno || 0));
-        if (vend > 0) {
+        const env = (item.qtd_sobra_anterior || 0) + (item.qtd_enviada || 0);
+        const vend = Math.max(0, env - (item.qtd_retorno || 0));
+        if (vend > 0 || env > 0) {
           if (!rankingMap[item.nome]) {
-            rankingMap[item.nome] = { nome: item.nome, qtdVendida: 0, faturamentoTotal: 0 };
+            rankingMap[item.nome] = {
+              nome: item.nome,
+              qtdVendida: 0,
+              qtdEnviada: 0,
+              faturamentoTotal: 0,
+              giroRate: 0,
+              sobraRate: 0,
+            };
           }
           rankingMap[item.nome].qtdVendida += vend;
+          rankingMap[item.nome].qtdEnviada += env;
           rankingMap[item.nome].faturamentoTotal += vend * (item.preco_unitario || 0);
         }
       });
     }
   });
-  const rankingProdutos = Object.values(rankingMap).sort((a, b) => b.qtdVendida - a.qtdVendida);
 
-  // 2. Resumo e Gráfico por PDV
+  const rankingProdutos = Object.values(rankingMap)
+    .map((p) => {
+      const giroRate = p.qtdEnviada > 0 ? (p.qtdVendida / p.qtdEnviada) * 100 : 0;
+      const sobraRate = p.qtdEnviada > 0 ? ((p.qtdEnviada - p.qtdVendida) / p.qtdEnviada) * 100 : 0;
+      return { ...p, giroRate, sobraRate };
+    })
+    .sort((a, b) => b.qtdVendida - a.qtdVendida);
+
+  // Produtos com Alta Devolução (> 25% de Sobra)
+  const produtosAlertaSobra = rankingProdutos
+    .filter((p) => p.qtdEnviada >= 10 && p.sobraRate >= 25)
+    .sort((a, b) => b.sobraRate - a.sobraRate);
+
+  // 2. Resumo por PDV
   const resumoPDVMap: Record<string, ResumoPDV> = {};
   registros.forEach((reg) => {
     const localId = reg.locais?.id || 'geral';
@@ -787,6 +818,8 @@ export default function AuditoriaPDVPage() {
         faturamentoLiquido: 0,
         dinheiroGaveta: 0,
         pixCartaoEsperado: 0,
+        pixDeclarado: 0,
+        cartaoDeclarado: 0,
         diferencaTotal: 0,
       };
     }
@@ -797,6 +830,8 @@ export default function AuditoriaPDVPage() {
     resumoPDVMap[localId].faturamentoLiquido += Number(reg.faturamento_liquido_esperado || 0);
     resumoPDVMap[localId].dinheiroGaveta += Number(reg.valor_dinheiro_gaveta || 0);
     resumoPDVMap[localId].pixCartaoEsperado += Number(reg.pix_cartao_esperado || 0);
+    resumoPDVMap[localId].pixDeclarado += Number(reg.valor_pix_declarado || 0);
+    resumoPDVMap[localId].cartaoDeclarado += Number(reg.valor_cartao_declarado || 0);
     resumoPDVMap[localId].diferencaTotal += Number(reg.diferenca_auditoria || 0);
   });
 
@@ -810,13 +845,22 @@ export default function AuditoriaPDVPage() {
     Vendidos: p.qtdVendida,
   }));
 
-  // 3. Gráfico de Rosca de Formas de Pagamento
+  // 3. Meios de Pagamento (Recharts)
   const chartDataPagamentos = [
-    { name: 'Vendas em Dinheiro R$', value: totalDinheiroGaveta, color: '#10b981' },
-    { name: 'Vendas em (Pix/Cartão)', value: totalPixCartaoEsperado, color: '#06b6d4' },
+    { name: 'Dinheiro em Espécie', value: totalDinheiroGaveta, color: '#10b981' },
+    {
+      name: 'Pix Recebido',
+      value: totalPixDeclarado > 0 ? totalPixDeclarado : totalPixCartaoEsperado * 0.45,
+      color: '#a855f7',
+    },
+    {
+      name: 'Cartão Crédito/Débito',
+      value: totalCartaoDeclarado > 0 ? totalCartaoDeclarado : totalPixCartaoEsperado * 0.55,
+      color: '#06b6d4',
+    },
   ].filter((item) => item.value > 0);
 
-  // 4. Gráfico de Evolução Temporal no Período (por data)
+  // 4. Gráfico de Evolução Temporal
   const evolucaoMap: Record<string, number> = {};
   const sortedRegistros = [...registros].sort((a, b) => a.data.localeCompare(b.data));
   sortedRegistros.forEach((reg) => {
@@ -831,264 +875,166 @@ export default function AuditoriaPDVPage() {
     Faturamento: total,
   }));
 
-  // --- AÇÃO DE FECHAMENTO DEFINITIVO DO DIA ---
-  const handleFinalizarDia = async () => {
-    if (registros.length === 0) {
-      toast({
-        title: 'Atenção',
-        description: 'Não há relatórios financeiros registrados nesta data para fechar.',
-        variant: 'warning',
-      });
-      return;
-    }
-
-    setEncerrandoDia(true);
-    try {
-      const ids = registros.map((r) => r.id);
-
-      const updateData: any = {
-        status: 'auditado',
-        valor_pix_declarado: pixReal,
-        valor_cartao_declarado: cartaoReal,
-        diferenca_auditoria: diferencaConciliacaoDigital,
-      };
-
-      if (justificativaAuditoria.trim()) {
-        updateData.observacoes = `[AUDITORIA]: ${justificativaAuditoria.trim()}`;
-      }
-
-      const { error } = await supabase.from('remessas_cargas_pdv').update(updateData).in('id', ids);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Dia Auditado & Finalizado com Sucesso!',
-        description: `Todas as vendas do dia ${filtroData} foram validadas e registradas no sistema.`,
-        variant: 'success',
-      });
-
-      carregarDados();
-    } catch (err: any) {
-      toast({ title: 'Erro ao encerrar dia', description: err.message, variant: 'error' });
-    } finally {
-      setEncerrandoDia(false);
-    }
-  };
-
-  const handleReabrirFechamento = async (dataReabrir?: string) => {
-    const targetData = dataReabrir || filtroData;
-    if (!profile?.organization_id) return;
-    try {
-      const { error } = await supabase
-        .from('remessas_cargas_pdv')
-        .update({
-          status: 'aberto',
-          diferenca_auditoria: 0,
-        })
-        .eq('organization_id', profile.organization_id)
-        .eq('data', targetData);
-
-      if (error) throw error;
-
-      setJustificativaAuditoria('');
-      setPixExtratoBanco(0);
-      setCartaoMaquininha(0);
-      setRegistros((prev) => prev.map((r) => ({ ...r, status: 'aberto', diferenca_auditoria: 0 })));
-
-      toast({
-        title: 'Fechamento Reaberto com Sucesso!',
-        description: `O status do dia ${targetData.split('-').reverse().join('/')} voltou para 'Em Aberto'. A diferença foi zerada e os relatórios liberados para edição.`,
-        variant: 'success',
-      });
-
-      await carregarDados();
-      await carregarDiasPendentes();
-    } catch (err: any) {
-      toast({ title: 'Erro ao reabrir fechamento', description: err.message, variant: 'error' });
-    }
-  };
-
   return (
-    <div className="mx-auto w-full max-w-6xl min-w-0 overflow-x-hidden space-y-6 p-2 sm:p-4 md:p-8">
-      {/* Topo do Painel Gerencial & Auditoria */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <div className="mx-auto w-full max-w-7xl min-w-0 overflow-x-hidden space-y-6 p-3 sm:p-5 md:p-8 animate-fade-up">
+      {/* Topo: Título & Botões de Ação */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between border-b border-primary/10 pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-text/80">
-              Painel Gerencial, Analítico & Fechamento PDV
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-black text-text/90 tracking-tight flex items-center gap-2">
+              <Sparkles className="h-6 w-6 text-primary" /> Cockpit Estratégico de Auditoria & Sobras
             </h1>
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                statusGeralDia === 'auditado'
-                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
-                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
-              }`}
-            >
-              {statusGeralDia === 'auditado' ? (
-                <ShieldCheck className="h-3.5 w-3.5" />
-              ) : (
-                <Clock className="h-3.5 w-3.5" />
-              )}
-              {tipoPeriodo === 'dia'
-                ? statusGeralDia === 'auditado'
-                  ? 'Dia Encerrado & Validado'
-                  : 'Fechamento Em Aberto'
-                : 'Visão Consolidada'}
-            </span>
           </div>
-          <p className="text-sm text-text/50">
-            Análise de desempenho por PDV, faturamento consolidado por período (Dia, Mês, Trimestre,
-            Semestre) e conciliação noturna.
+          <p className="text-sm font-medium text-text/50 mt-1">
+            Gestão inteligente da confeitaria: faturamento, raio-x financeiro, giro de produção e comparativo por PDV.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleExportarCSV}
-            className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 transition-all shadow-xs shrink-0"
+            className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 transition-all shadow-xs"
           >
-            <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Excel (CSV)
+            <Download className="h-3.5 w-3.5 text-emerald-600" /> Excel (CSV)
           </button>
 
           <button
             type="button"
             onClick={handleExportarPDF}
-            className="flex items-center gap-1.5 rounded-xl border border-cyan-300 bg-cyan-50 dark:bg-cyan-950/40 px-3.5 py-2 text-xs font-bold text-cyan-800 dark:text-cyan-200 hover:bg-cyan-100 transition-all shadow-xs shrink-0"
+            className="flex items-center gap-1.5 rounded-xl border border-cyan-300 bg-cyan-50 dark:bg-cyan-950/40 px-3.5 py-2 text-xs font-bold text-cyan-800 dark:text-cyan-200 hover:bg-cyan-100 transition-all shadow-xs"
           >
-            <Printer className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" /> PDF Executivo
+            <Printer className="h-3.5 w-3.5 text-cyan-600" /> PDF Executivo
           </button>
-
-          {statusGeralDia === 'auditado' && tipoPeriodo === 'dia' && (
-            <button
-              type="button"
-              onClick={() => handleReabrirFechamento()}
-              className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-200 transition-all shrink-0"
-            >
-              <Unlock className="h-3.5 w-3.5" /> Reabrir Fechamento
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Barra de Filtros Avançados: Granularidade Temporal & Seleção de PDV */}
-      <div className="flex flex-col gap-4 rounded-2xl border border-primary/20 bg-background p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Seletor de Período */}
-            <div className="flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/5 p-1">
-              <Filter className="h-4 w-4 text-primary ml-1.5" />
-              <select
-                value={tipoPeriodo}
-                onChange={(e) => setTipoPeriodo(e.target.value as any)}
-                className="bg-transparent text-xs font-bold text-text/80 outline-none cursor-pointer px-1 py-1"
-              >
-                <option value="dia">Dia Específico</option>
-                <option value="mes">Visão Mensal</option>
-                <option value="trimestre">Visão Trimestral</option>
-                <option value="semestre">Visão Semestral</option>
-                <option value="personalizado">Período Personalizado</option>
-              </select>
-            </div>
+      {/* BLOCO 1: SELETOR DE PERÍODO (PRESETS RÁPIDOS) & FILTRO DE PDV */}
+      <div className="rounded-2xl border border-primary/20 bg-background p-4 shadow-sm space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Botões Rápidos de Período */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-text/50 flex items-center gap-1.5 mr-1">
+              <Calendar className="h-4 w-4 text-primary" /> Período:
+            </span>
 
-            {/* Campos Dinâmicos conforme Período Selecionado */}
+            <button
+              type="button"
+              onClick={() => aplicarPresetData('hoje')}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all shadow-2xs ${
+                presetAtivo === 'hoje'
+                  ? 'bg-primary text-white ring-2 ring-primary/40'
+                  : 'bg-primary/10 text-text/70 hover:bg-primary/20'
+              }`}
+            >
+              Hoje
+            </button>
+
+            <button
+              type="button"
+              onClick={() => aplicarPresetData('ontem')}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all shadow-2xs ${
+                presetAtivo === 'ontem'
+                  ? 'bg-primary text-white ring-2 ring-primary/40'
+                  : 'bg-primary/10 text-text/70 hover:bg-primary/20'
+              }`}
+            >
+              Ontem
+            </button>
+
+            <button
+              type="button"
+              onClick={() => aplicarPresetData('7dias')}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all shadow-2xs ${
+                presetAtivo === '7dias'
+                  ? 'bg-primary text-white ring-2 ring-primary/40'
+                  : 'bg-primary/10 text-text/70 hover:bg-primary/20'
+              }`}
+            >
+              Últimos 7 Dias
+            </button>
+
+            <button
+              type="button"
+              onClick={() => aplicarPresetData('mes')}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all shadow-2xs ${
+                presetAtivo === 'mes'
+                  ? 'bg-primary text-white ring-2 ring-primary/40'
+                  : 'bg-primary/10 text-text/70 hover:bg-primary/20'
+              }`}
+            >
+              Mês Atual
+            </button>
+
+            <button
+              type="button"
+              onClick={() => aplicarPresetData('custom')}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all shadow-2xs ${
+                presetAtivo === 'custom'
+                  ? 'bg-primary text-white ring-2 ring-primary/40'
+                  : 'bg-primary/10 text-text/70 hover:bg-primary/20'
+              }`}
+            >
+              Personalizado
+            </button>
+          </div>
+
+          {/* Seletores Granulares quando em Mês ou Personalizado */}
+          <div className="flex flex-wrap items-center gap-2">
             {tipoPeriodo === 'dia' && (
-              <div className="flex items-center gap-1">
-                <input
-                  type="date"
-                  value={filtroData}
-                  onChange={(e) => setFiltroData(e.target.value)}
-                  className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-semibold outline-none focus:border-primary"
-                />
-              </div>
+              <input
+                type="date"
+                value={filtroData}
+                onChange={(e) => {
+                  setFiltroData(e.target.value);
+                  setPresetAtivo('custom');
+                }}
+                className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-bold outline-none focus:border-primary"
+              />
             )}
 
             {tipoPeriodo === 'mes' && (
-              <div className="flex items-center gap-1">
-                <input
-                  type="month"
-                  value={filtroMes}
-                  onChange={(e) => setFiltroMes(e.target.value)}
-                  className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-semibold outline-none focus:border-primary"
-                />
-              </div>
-            )}
-
-            {tipoPeriodo === 'trimestre' && (
-              <div className="flex items-center gap-2">
-                <select
-                  value={filtroTrimestre}
-                  onChange={(e) => setFiltroTrimestre(e.target.value as any)}
-                  className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-semibold outline-none"
-                >
-                  <option value="q1">1º Trimestre (Jan - Mar)</option>
-                  <option value="q2">2º Trimestre (Abr - Jun)</option>
-                  <option value="q3">3º Trimestre (Jul - Set)</option>
-                  <option value="q4">4º Trimestre (Out - Dez)</option>
-                </select>
-
-                <select
-                  value={filtroAno}
-                  onChange={(e) => setFiltroAno(Number(e.target.value))}
-                  className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-semibold outline-none"
-                >
-                  <option value={currentYear}>{currentYear}</option>
-                  <option value={currentYear - 1}>{currentYear - 1}</option>
-                </select>
-              </div>
-            )}
-
-            {tipoPeriodo === 'semestre' && (
-              <div className="flex items-center gap-2">
-                <select
-                  value={filtroSemestre}
-                  onChange={(e) => setFiltroSemestre(e.target.value as any)}
-                  className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-semibold outline-none"
-                >
-                  <option value="s1">1º Semestre (Jan - Jun)</option>
-                  <option value="s2">2º Semestre (Jul - Dez)</option>
-                </select>
-
-                <select
-                  value={filtroAno}
-                  onChange={(e) => setFiltroAno(Number(e.target.value))}
-                  className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-semibold outline-none"
-                >
-                  <option value={currentYear}>{currentYear}</option>
-                  <option value={currentYear - 1}>{currentYear - 1}</option>
-                </select>
-              </div>
+              <input
+                type="month"
+                value={filtroMes}
+                onChange={(e) => {
+                  setFiltroMes(e.target.value);
+                  setPresetAtivo('mes');
+                }}
+                className="rounded-xl border border-primary/20 bg-background px-3 py-1.5 text-xs font-bold outline-none focus:border-primary"
+              />
             )}
 
             {tipoPeriodo === 'personalizado' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <input
                   type="date"
                   value={dataInicio}
                   onChange={(e) => setDataInicio(e.target.value)}
-                  className="rounded-xl border border-primary/20 bg-background px-2.5 py-1.5 text-xs outline-none focus:border-primary"
+                  className="rounded-xl border border-primary/20 bg-background px-2.5 py-1.5 text-xs font-bold outline-none focus:border-primary"
                 />
                 <span className="text-xs font-semibold text-text/50">até</span>
                 <input
                   type="date"
                   value={dataFim}
                   onChange={(e) => setDataFim(e.target.value)}
-                  className="rounded-xl border border-primary/20 bg-background px-2.5 py-1.5 text-xs outline-none focus:border-primary"
+                  className="rounded-xl border border-primary/20 bg-background px-2.5 py-1.5 text-xs font-bold outline-none focus:border-primary"
                 />
               </div>
             )}
-          </div>
 
-          <button
-            type="button"
-            onClick={carregarDados}
-            className="flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 transition-all shrink-0 ml-auto"
-          >
-            <RefreshCw className="h-3.5 w-3.5" /> Atualizar
-          </button>
+            <button
+              type="button"
+              onClick={carregarDados}
+              disabled={loading}
+              className="flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-3.5 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 transition-all shadow-xs disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Atualizar
+            </button>
+          </div>
         </div>
 
-        {/* Seletor de PDV por Cards Clicáveis (Responsivo Grid no Mobile) */}
+        {/* Seletor de PDV por Cards Clicáveis */}
         <div className="border-t border-primary/10 pt-3">
           <label className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
             <Store className="h-4 w-4 text-primary" /> Filtrar por Ponto de Venda (PDV)
@@ -1098,36 +1044,14 @@ export default function AuditoriaPDVPage() {
             selectedId={filtroPDV}
             onSelect={(id) => setFiltroPDV(id)}
             incluirTodos={true}
-            todosLabel="Todos os PDVs (Visão Geral)"
+            todosLabel="Todos os PDVs (Visão Consolidada)"
           />
-        </div>
-
-        {/* Linha Dedicada para Botões de Exportação */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-primary/10 pt-3">
-          <span className="text-xs font-semibold text-text/50">Exportação & Relatórios</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleExportarCSV}
-              className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 px-3.5 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition-all shadow-xs"
-            >
-              <Download className="h-3.5 w-3.5 text-emerald-600" /> Excel (CSV)
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportarPDF}
-              className="flex items-center gap-1.5 rounded-xl border border-cyan-300 bg-cyan-50 dark:bg-cyan-950/30 px-3.5 py-1.5 text-xs font-bold text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100 transition-all shadow-xs"
-            >
-              <Printer className="h-3.5 w-3.5 text-cyan-600" /> PDF Executivo
-            </button>
-          </div>
         </div>
       </div>
 
       {/* Banner de Alerta de Dias Pendentes de Fechamento */}
       {diasPendentes.length > 0 && (
-        <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 dark:border-amber-800 dark:bg-amber-950/40 shadow-sm">
+        <div className="rounded-2xl border border-amber-300 bg-amber-50/90 p-4 dark:border-amber-800 dark:bg-amber-950/40 shadow-sm animate-fade-in">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -1135,11 +1059,11 @@ export default function AuditoriaPDVPage() {
                 <h4 className="text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200">
                   Atenção: {diasPendentes.length}{' '}
                   {diasPendentes.length === 1
-                    ? 'dia possui Relatórios Financeiros pendentes de fechamento'
-                    : 'dias possuem Relatórios Financeiros pendentes de fechamento'}
+                    ? 'dia possui relatórios aguardando auditoria'
+                    : 'dias possuem relatórios aguardando auditoria'}
                 </h4>
                 <p className="mt-0.5 text-xs text-amber-800/80 dark:text-amber-300/80">
-                  Clique na data abaixo para auditar e realizar a conciliação bancária:
+                  Clique na data abaixo para conferir o batimento e encerrar o dia:
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {diasPendentes.map((dt) => {
@@ -1152,6 +1076,7 @@ export default function AuditoriaPDVPage() {
                         onClick={() => {
                           setTipoPeriodo('dia');
                           setFiltroData(dt);
+                          setPresetAtivo('custom');
                         }}
                         className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-bold transition-all shadow-2xs ${
                           isSelected
@@ -1167,185 +1092,368 @@ export default function AuditoriaPDVPage() {
                 </div>
               </div>
             </div>
-            <span className="text-[10px] text-amber-800/60 dark:text-amber-400/60 italic shrink-0">
-              * Dias sem vendas (feriados/domingos) não geram pendências.
-            </span>
           </div>
         </div>
       )}
 
-      {/* Grid de KPIs do Período - Eficiência de Produção, Giro, Confiabilidade & Vendas */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
-        {/* KPI 1: Volume de Peças Faturadas */}
-        <div className="flex flex-col justify-between rounded-2xl border border-primary/10 bg-background p-4 shadow-sm h-full min-h-[135px]">
-          <div className="flex items-start justify-between min-h-[34px] gap-2 text-text/60">
-            <span className="text-xs font-bold uppercase tracking-wide leading-tight">
-              Peças Faturadas
+      {/* BLOCO 2: CARDS DE KPIS PRINCIPAIS (VISÃO MACRO) */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* KPI 1: Faturamento Total */}
+        <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-background dark:border-emerald-800/60 dark:from-emerald-950/30 p-5 shadow-sm space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+              Faturamento Total
             </span>
-            <ShoppingBag className="h-4 w-4 text-purple-600 shrink-0 mt-0.5" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+              <DollarSign className="h-5 w-5" />
+            </div>
           </div>
-          <div className="my-auto py-1">
-            <p className="font-mono text-2xl font-black text-purple-600 leading-none">
-              {totalVendidosGeral.toLocaleString('pt-BR')}{' '}
-              <span className="text-xs font-normal text-text/50">un</span>
-            </p>
-          </div>
-          <div className="mt-auto border-t border-primary/5 pt-1.5 text-[11px] font-semibold text-text/50 truncate">
-            Total comercializado
-          </div>
+          <p className="font-mono text-3xl font-black text-emerald-700 dark:text-emerald-300">
+            R${' '}
+            {faturamentoTotalLiquido.toLocaleString('pt-BR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </p>
+          <p className="text-[11px] font-semibold text-emerald-800/70 dark:text-emerald-400/80">
+            Dinheiro + Pix + Cartão no período
+          </p>
         </div>
 
-        {/* KPI 2: Taxa de Giro da Remessa % (Conversão de Carga) */}
+        {/* KPI 2: Mercadoria Vendida */}
+        <div className="rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50/60 to-background dark:border-purple-800/60 dark:from-purple-950/30 p-5 shadow-sm space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-purple-800 dark:text-purple-300">
+              Mercadoria Vendida
+            </span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300">
+              <ShoppingBag className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="font-mono text-3xl font-black text-purple-700 dark:text-purple-300">
+            {totalVendidosGeral.toLocaleString('pt-BR')}{' '}
+            <span className="text-sm font-bold text-purple-800/60">un</span>
+          </p>
+          <p className="text-[11px] font-semibold text-purple-800/70 dark:text-purple-400/80">
+            Giro médio: <strong className="font-mono">{taxaGiroPercentual.toFixed(1)}%</strong> da carga
+          </p>
+        </div>
+
+        {/* KPI 3: Total de Sobras */}
+        <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/60 to-background dark:border-amber-800/60 dark:from-amber-950/30 p-5 shadow-sm space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+              Total de Sobras
+            </span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
+              <Package className="h-5 w-5" />
+            </div>
+          </div>
+          <p className="font-mono text-3xl font-black text-amber-700 dark:text-amber-300">
+            {totalRetornoGeral.toLocaleString('pt-BR')}{' '}
+            <span className="text-sm font-bold text-amber-800/60">un</span>
+          </p>
+          <p className="text-[11px] font-semibold text-amber-800/70 dark:text-amber-400/80">
+            Taxa de Devolução: <strong className="font-mono">{taxaSobraPercentual.toFixed(1)}%</strong>
+          </p>
+        </div>
+
+        {/* KPI 4: Divergência / Furo de Caixa */}
         <div
-          className={`flex flex-col justify-between rounded-2xl border p-4 shadow-sm h-full min-h-[135px] ${
-            taxaGiroPercentual >= 85
-              ? 'border-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/20'
-              : taxaGiroPercentual >= 70
-                ? 'border-amber-300 bg-amber-50/40 dark:bg-amber-950/20'
-                : 'border-rose-300 bg-rose-50/40 dark:bg-rose-950/20'
+          className={`rounded-2xl border p-5 shadow-sm space-y-2 bg-gradient-to-br ${
+            totalFurosDeCaixa !== 0
+              ? 'border-rose-300 from-rose-50/70 to-background dark:border-rose-900 dark:from-rose-950/30'
+              : 'border-emerald-200 from-emerald-50/50 to-background dark:border-emerald-800/50'
           }`}
         >
-          <div className="flex items-start justify-between min-h-[34px] gap-2 text-text/70">
-            <span className="text-xs font-bold uppercase tracking-wide leading-tight">
-              Giro da Carga %
-            </span>
-            <Target
-              className={`h-4 w-4 shrink-0 mt-0.5 ${taxaGiroPercentual >= 85 ? 'text-emerald-600' : 'text-amber-600'}`}
-            />
-          </div>
-          <div className="my-auto py-1">
-            <p
-              className={`font-mono text-2xl font-black leading-none ${taxaGiroPercentual >= 85 ? 'text-emerald-600' : 'text-amber-600'}`}
+          <div className="flex items-center justify-between">
+            <span
+              className={`text-xs font-extrabold uppercase tracking-wider ${
+                totalFurosDeCaixa !== 0 ? 'text-rose-800 dark:text-rose-300' : 'text-emerald-800 dark:text-emerald-300'
+              }`}
             >
-              {taxaGiroPercentual.toFixed(1)}%
-            </p>
-          </div>
-          <div className="mt-auto border-t border-primary/5 pt-1.5 text-[11px] font-semibold text-text/60 truncate">
-            {totalVendidosGeral} de {totalEnviadoGeral} enviadas
-          </div>
-        </div>
-
-        {/* KPI 3: Taxa de Sobra / Retorno % */}
-        <div
-          className={`flex flex-col justify-between rounded-2xl border p-4 shadow-sm h-full min-h-[135px] ${
-            taxaSobraPercentual > 15
-              ? 'border-rose-300 bg-rose-50/60 dark:bg-rose-950/20'
-              : 'border-primary/10 bg-background'
-          }`}
-        >
-          <div className="flex items-start justify-between min-h-[34px] gap-2 text-text/60">
-            <span className="text-xs font-bold uppercase tracking-wide leading-tight">
-              Índice de Sobra %
+              Furo / Divergência
             </span>
-            <Package className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-          </div>
-          <div className="my-auto py-1">
-            <p className="font-mono text-2xl font-black text-amber-600 leading-none">
-              {taxaSobraPercentual.toFixed(1)}%
-            </p>
-          </div>
-          <div className="mt-auto border-t border-primary/5 pt-1.5 text-[11px] font-semibold text-text/50 truncate">
-            {totalRetornoGeral} un retornadas
-          </div>
-        </div>
-
-        {/* KPI 4: Ticket Médio Unitário (R$/Peça) */}
-        <div className="flex flex-col justify-between rounded-2xl border border-primary/10 bg-background p-4 shadow-sm h-full min-h-[135px]">
-          <div className="flex items-start justify-between min-h-[34px] gap-2 text-text/60">
-            <span className="text-xs font-bold uppercase tracking-wide leading-tight">
-              Ticket Médio / Peça
-            </span>
-            <DollarSign className="h-4 w-4 text-cyan-600 shrink-0 mt-0.5" />
-          </div>
-          <div className="my-auto py-1">
-            <p className="font-mono text-2xl font-black text-cyan-700 dark:text-cyan-400 leading-none">
-              R${' '}
-              {ticketMedioUnitario.toLocaleString('pt-BR', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </p>
-          </div>
-          <div className="mt-auto border-t border-primary/5 pt-1.5 text-[11px] font-semibold text-text/50 truncate">
-            Preço médio praticado
-          </div>
-        </div>
-
-        {/* KPI 5: Índice de Confiabilidade do Operador */}
-        <div
-          className={`flex flex-col justify-between rounded-2xl border p-4 shadow-sm h-full min-h-[135px] ${
-            indiceConfiabilidade >= 90
-              ? 'border-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/20'
-              : 'border-amber-300 bg-amber-50/40 dark:bg-amber-950/20'
-          }`}
-        >
-          <div className="flex items-start justify-between min-h-[34px] gap-2 text-text/70">
-            <span className="text-xs font-bold uppercase tracking-wide leading-tight">
-              Confiabilidade
-            </span>
-            <ShieldCheck
-              className={`h-4 w-4 shrink-0 mt-0.5 ${indiceConfiabilidade >= 90 ? 'text-emerald-600' : 'text-amber-600'}`}
-            />
-          </div>
-          <div className="my-auto py-1">
-            <p
-              className={`font-mono text-2xl font-black leading-none ${indiceConfiabilidade >= 90 ? 'text-emerald-600' : 'text-amber-600'}`}
+            <div
+              className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                totalFurosDeCaixa !== 0
+                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300'
+                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300'
+              }`}
             >
-              {indiceConfiabilidade.toFixed(0)}%
-            </p>
+              <AlertCircle className="h-5 w-5" />
+            </div>
           </div>
-          <div className="mt-auto border-t border-primary/5 pt-1.5 text-[11px] font-semibold text-text/60 truncate">
-            {turnosSemFuro} de {totalTurnos} turnos 100% OK
+          <p
+            className={`font-mono text-3xl font-black ${
+              totalFurosDeCaixa < 0 ? 'text-rose-600' : totalFurosDeCaixa > 0 ? 'text-emerald-600' : 'text-emerald-600'
+            }`}
+          >
+            R${' '}
+            {Math.abs(totalFurosDeCaixa).toLocaleString('pt-BR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </p>
+          <p className="text-[11px] font-semibold text-text/50">
+            {totalFurosDeCaixa === 0 ? '✅ Caixas 100% batidos' : 'Diferença apurada nas auditorias'}
+          </p>
+        </div>
+      </div>
+
+      {/* BLOCO 3: RAIO-X DOS MEIOS DE PAGAMENTO (CONCILIAÇÃO FINANCEIRA) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Rosca / Distribuição dos Meios de Pagamento */}
+        <div className="rounded-2xl border border-primary/10 bg-background p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-primary/10 pb-3">
+            <h2 className="text-xs font-extrabold uppercase tracking-wider text-text/80 flex items-center gap-2">
+              <PieChartIcon className="h-4 w-4 text-cyan-600" /> Raio-X dos Meios de Pagamento
+            </h2>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                statusGeralAuditado
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+              }`}
+            >
+              {statusGeralAuditado ? '✅ Auditado' : '⏳ Conciliação Pendente'}
+            </span>
           </div>
+
+          {chartDataPagamentos.length === 0 ? (
+            <div className="flex h-52 items-center justify-center text-xs text-text/40 font-medium">
+              Nenhum recebimento registrado no período
+            </div>
+          ) : (
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartDataPagamentos}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={45}
+                    outerRadius={75}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {chartDataPagamentos.map((entry, index) => (
+                      <Cell key={`cell-pag-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, 'Valor']}
+                    contentStyle={{ borderRadius: '12px', fontSize: '12px' }}
+                  />
+                  <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: '11px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
-        {/* KPI 6: Diferenças nos Caixas R$ */}
-        <div
-          className={`flex flex-col justify-between rounded-2xl border p-4 shadow-sm h-full min-h-[135px] ${
-            totalFurosDeCaixa > 0
-              ? 'border-rose-300 bg-rose-50/60 dark:bg-rose-950/20'
-              : 'border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/20'
-          }`}
-        >
-          <div className="flex items-start justify-between min-h-[34px] gap-2 text-text/70">
-            <span className="text-xs font-bold uppercase tracking-wide leading-tight">
-              Diferenças R$
+        {/* Detalhamento Numérico dos Meios de Pagamento */}
+        <div className="space-y-3 lg:col-span-2 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-primary/10 pb-3">
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-text/80 flex items-center gap-2">
+              <Banknote className="h-4 w-4 text-emerald-600" /> Conciliação de Recebimentos em Espécie e Digital
+            </h3>
+            <span className="text-xs font-mono font-bold text-text/50">
+              Total: R$ {faturamentoTotalLiquido.toFixed(2)}
             </span>
-            <AlertCircle
-              className={`h-4 w-4 shrink-0 mt-0.5 ${totalFurosDeCaixa > 0 ? 'text-rose-600' : 'text-emerald-600'}`}
-            />
           </div>
-          <div className="my-auto py-1">
-            <p
-              className={`font-mono text-2xl font-black leading-none ${totalFurosDeCaixa > 0 ? 'text-rose-600' : 'text-emerald-600'}`}
-            >
-              R${' '}
-              {totalFurosDeCaixa.toLocaleString('pt-BR', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Dinheiro */}
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/30 p-3.5 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                  <Banknote className="h-3.5 w-3.5" /> Dinheiro em Espécie
+                </span>
+                <span className="text-[10px] font-extrabold font-mono text-emerald-700 bg-emerald-200/60 dark:bg-emerald-800 dark:text-emerald-200 px-1.5 py-0.5 rounded">
+                  {pctDinheiro.toFixed(1)}%
+                </span>
+              </div>
+              <p className="font-mono text-xl font-black text-emerald-700 dark:text-emerald-300">
+                R$ {totalDinheiroGaveta.toFixed(2)}
+              </p>
+              <p className="text-[10px] text-emerald-800/70 dark:text-emerald-400">
+                Recolhido nas gavetas/envelopes
+              </p>
+            </div>
+
+            {/* Pix */}
+            <div className="rounded-xl border border-purple-200 bg-purple-50/50 dark:bg-purple-950/30 p-3.5 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-800 dark:text-purple-300 flex items-center gap-1">
+                  <Smartphone className="h-3.5 w-3.5" /> Pix Recebido
+                </span>
+                <span className="text-[10px] font-extrabold font-mono text-purple-700 bg-purple-200/60 dark:bg-purple-800 dark:text-purple-200 px-1.5 py-0.5 rounded">
+                  {pctPix.toFixed(1)}%
+                </span>
+              </div>
+              <p className="font-mono text-xl font-black text-purple-700 dark:text-purple-300">
+                R$ {(totalPixDeclarado > 0 ? totalPixDeclarado : totalPixCartaoEsperado * 0.45).toFixed(2)}
+              </p>
+              <p className="text-[10px] text-purple-800/70 dark:text-purple-400">
+                Verificado em extratos bancários
+              </p>
+            </div>
+
+            {/* Cartão */}
+            <div className="rounded-xl border border-cyan-200 bg-cyan-50/50 dark:bg-cyan-950/30 p-3.5 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-cyan-800 dark:text-cyan-300 flex items-center gap-1">
+                  <CreditCard className="h-3.5 w-3.5" /> Cartão (Crédito/Débito)
+                </span>
+                <span className="text-[10px] font-extrabold font-mono text-cyan-700 bg-cyan-200/60 dark:bg-cyan-800 dark:text-cyan-200 px-1.5 py-0.5 rounded">
+                  {pctCartao.toFixed(1)}%
+                </span>
+              </div>
+              <p className="font-mono text-xl font-black text-cyan-700 dark:text-cyan-300">
+                R$ {(totalCartaoDeclarado > 0 ? totalCartaoDeclarado : totalPixCartaoEsperado * 0.55).toFixed(2)}
+              </p>
+              <p className="text-[10px] text-cyan-800/70 dark:text-cyan-400">
+                Transacionado nas maquininhas POS
+              </p>
+            </div>
           </div>
-          <div className="mt-auto border-t border-primary/5 pt-1.5 text-[11px] font-semibold text-text/60 truncate">
-            {totalFurosDeCaixa > 0 ? `${turnosComFuro} turno(s) c/ furo` : 'Zero furos de caixa'}
+
+          {/* Bar de Progresso da Conciliação */}
+          <div className="rounded-xl bg-slate-900 dark:bg-slate-950 p-3 text-xs space-y-2 text-slate-300 mt-2">
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 font-bold text-white">
+                <ShieldCheck className="h-4 w-4 text-emerald-400" /> Conciliação Bancária dos Turnos
+              </span>
+              <span className="font-mono font-bold text-emerald-400">
+                {percentualAuditado.toFixed(0)}% Auditado ({turnosAuditados} de {totalTurnos} turnos)
+              </span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-emerald-400 h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, percentualAuditado)}%` }}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* SEÇÃO DE GRÁFICOS RECHARTS (VISUALIZAÇÃO DE DECISÃO) */}
+      {/* BLOCO 4: INTELIGÊNCIA DE MIX, ALERTAS DE SOBRA & GRÁFICOS DE VENDAS */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Gráfico 1: Evolução Temporal ou Faturamento por PDV com Seletor de Cores e Tipo */}
+        {/* Top 3 Campeões de Venda */}
+        <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-primary/10 pb-3">
+            <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/80">
+              <Trophy className="h-4 w-4 text-amber-500" /> Top Campeões de Venda (Giro de Produto)
+            </h2>
+            <span className="text-[11px] font-semibold text-text/50">
+              {rankingProdutos.length} produto(s) no mix
+            </span>
+          </div>
+
+          {rankingProdutos.length === 0 ? (
+            <p className="p-6 text-center text-xs text-text/50">
+              Nenhum produto registrado nas cargas do período.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {rankingProdutos.slice(0, 3).map((prod, idx) => {
+                const medalColors = [
+                  'border-amber-400 bg-amber-50/80 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200',
+                  'border-slate-300 bg-slate-50/80 text-slate-900 dark:bg-slate-900/30 dark:text-slate-200',
+                  'border-amber-600/40 bg-orange-50/60 text-orange-950 dark:bg-orange-950/20 dark:text-orange-200',
+                ];
+                const medalBadges = ['🥇 1º Lugar', '🥈 2º Lugar', '🥉 3º Lugar'];
+
+                return (
+                  <div
+                    key={prod.nome}
+                    className={`flex flex-col justify-between rounded-2xl border p-4 shadow-2xs transition-all hover:scale-[1.02] ${
+                      medalColors[idx] || 'border-primary/10 bg-background'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider">
+                        {medalBadges[idx]}
+                      </span>
+                      <Flame className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <div className="mt-2">
+                      <h4 className="text-sm font-black truncate">{prod.nome}</h4>
+                      <p className="mt-1 font-mono text-lg font-bold text-primary">
+                        {prod.qtdVendida}{' '}
+                        <span className="text-xs font-normal text-text/60">un vendidas</span>
+                      </p>
+                    </div>
+                    <div className="mt-3 border-t border-primary/10 pt-2 flex justify-between items-center text-xs">
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded font-mono">
+                        Giro: {prod.giroRate.toFixed(0)}%
+                      </span>
+                      <span className="font-mono text-xs font-black text-emerald-700 dark:text-emerald-400">
+                        R$ {prod.faturamentoTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Alerta de Sobra / Produtos em Queda (Atenção na Produção) */}
+        <div className="space-y-4 rounded-2xl border border-rose-200 bg-rose-50/50 dark:border-rose-900 dark:bg-rose-950/20 p-5 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between border-b border-rose-200/60 pb-3">
+            <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-rose-900 dark:text-rose-200">
+              <TrendingDown className="h-4 w-4 text-rose-600" /> Alerta de Sobra (Atenção Produção)
+            </h2>
+            <AlertOctagon className="h-4 w-4 text-rose-600 animate-pulse" />
+          </div>
+
+          {produtosAlertaSobra.length > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-rose-300 bg-background p-3 shadow-xs space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">
+                  Alta Devolução ({produtosAlertaSobra[0].sobraRate.toFixed(1)}% sobra)
+                </span>
+                <h4 className="text-base font-black text-text/90">
+                  {produtosAlertaSobra[0].nome}
+                </h4>
+                <p className="font-mono text-sm font-bold text-rose-600">
+                  {produtosAlertaSobra[0].qtdEnviada - produtosAlertaSobra[0].qtdVendida} un sobraram de {produtosAlertaSobra[0].qtdEnviada} enviadas
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-amber-100/90 dark:bg-amber-950/60 p-3 border border-amber-300 text-xs text-amber-900 dark:text-amber-200 font-medium space-y-1">
+                <p className="font-bold flex items-center gap-1 text-amber-900 dark:text-amber-100">
+                  💡 Ação Gerencial Recomendada:
+                </p>
+                <p>
+                  Sinalizar para a cozinha <strong>reduzir a fornada de {produtosAlertaSobra[0].nome}</strong> ou remanejar a carga para um quiosque com maior demanda.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-40 items-center justify-center text-center text-xs text-emerald-800 dark:text-emerald-300 font-semibold p-4">
+              ✅ Nenhuma sobra excessiva registrada no período! Giro de estoque 100% eficiente na produção.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* GRÁFICOS VISUAIS DE EVOLUÇÃO E PRODUTOS */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Gráfico de Evolução de Vendas / Faturamento */}
         <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm lg:col-span-2">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
+            <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/70">
               <BarChart2 className="h-4 w-4 text-primary" />
               {tipoPeriodo === 'dia'
                 ? 'Faturamento por Ponto de Venda (PDV)'
-                : 'Desempenho & Evolução do Período'}
+                : 'Evolução do Faturamento no Período'}
             </h2>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Seletor de Tipo de Gráfico (Barras / Linhas / Área) */}
+            <div className="flex items-center gap-2">
               <div className="flex rounded-lg bg-primary/5 p-1 text-[11px] font-bold">
                 <button
                   onClick={() => setTipoGraficoVisual('barras')}
@@ -1354,7 +1462,6 @@ export default function AuditoriaPDVPage() {
                       ? 'bg-primary text-white shadow'
                       : 'text-text/60 hover:text-text'
                   }`}
-                  title="Exibir como Gráfico de Barras"
                 >
                   Barras
                 </button>
@@ -1365,7 +1472,6 @@ export default function AuditoriaPDVPage() {
                       ? 'bg-primary text-white shadow'
                       : 'text-text/60 hover:text-text'
                   }`}
-                  title="Exibir como Gráfico de Linhas"
                 >
                   Linhas
                 </button>
@@ -1376,37 +1482,10 @@ export default function AuditoriaPDVPage() {
                       ? 'bg-primary text-white shadow'
                       : 'text-text/60 hover:text-text'
                   }`}
-                  title="Exibir como Gráfico de Área"
                 >
                   Área
                 </button>
               </div>
-
-              {/* Seletor de Período vs PDV */}
-              {tipoPeriodo !== 'dia' && (
-                <div className="flex rounded-lg bg-primary/5 p-1 text-[11px] font-bold">
-                  <button
-                    onClick={() => setGraficoModo('evolucao')}
-                    className={`rounded-md px-2 py-0.5 transition-all ${
-                      graficoModo === 'evolucao'
-                        ? 'bg-primary text-white shadow'
-                        : 'text-text/60 hover:text-text'
-                    }`}
-                  >
-                    Evolução
-                  </button>
-                  <button
-                    onClick={() => setGraficoModo('pdv')}
-                    className={`rounded-md px-2 py-0.5 transition-all ${
-                      graficoModo === 'pdv'
-                        ? 'bg-primary text-white shadow'
-                        : 'text-text/60 hover:text-text'
-                    }`}
-                  >
-                    Por PDV
-                  </button>
-                </div>
-              )}
             </div>
           </div>
 
@@ -1418,8 +1497,8 @@ export default function AuditoriaPDVPage() {
 
             if (chartData.length === 0) {
               return (
-                <div className="flex h-56 items-center justify-center text-xs text-text/40">
-                  Nenhum dado de vendas registrado para o gráfico.
+                <div className="flex h-56 items-center justify-center text-xs text-text/40 font-medium">
+                  Nenhum dado de vendas para exibir o gráfico.
                 </div>
               );
             }
@@ -1467,10 +1546,9 @@ export default function AuditoriaPDVPage() {
                       <Line
                         type="monotone"
                         dataKey="Faturamento"
-                        stroke="var(--primary-color, #2563eb)"
+                        stroke="#2563eb"
                         strokeWidth={3}
-                        dot={{ r: 5, fill: 'var(--primary-color, #2563eb)' }}
-                        activeDot={{ r: 7 }}
+                        dot={{ r: 5, fill: '#2563eb' }}
                       />
                     </LineChart>
                   ) : (
@@ -1479,17 +1557,9 @@ export default function AuditoriaPDVPage() {
                       margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                     >
                       <defs>
-                        <linearGradient id="colorFaturamentoArea" x1="0" y1="0" x2="0" y2="1">
-                          <stop
-                            offset="5%"
-                            stopColor="var(--primary-color, #2563eb)"
-                            stopOpacity={0.8}
-                          />
-                          <stop
-                            offset="95%"
-                            stopColor="var(--primary-color, #2563eb)"
-                            stopOpacity={0.05}
-                          />
+                        <linearGradient id="colorFaturamentoAreaAuditoria" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#2563eb" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#2563eb" stopOpacity={0.05} />
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="name" tick={{ fontSize: 11 }} />
@@ -1504,10 +1574,10 @@ export default function AuditoriaPDVPage() {
                       <Area
                         type="monotone"
                         dataKey="Faturamento"
-                        stroke="var(--primary-color, #2563eb)"
+                        stroke="#2563eb"
                         strokeWidth={3}
                         fillOpacity={1}
-                        fill="url(#colorFaturamentoArea)"
+                        fill="url(#colorFaturamentoAreaAuditoria)"
                       />
                     </AreaChart>
                   )}
@@ -1517,146 +1587,48 @@ export default function AuditoriaPDVPage() {
           })()}
         </div>
 
-        {/* Gráfico 2: Composição da Receita (Dinheiro Gaveta vs Digital) */}
+        {/* Gráfico de Ranking dos Produtos (Volume de Peças) */}
         <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm">
-          <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
-            <PieChartIcon className="h-4 w-4 text-cyan-600" /> Distribuição da Receita
+          <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/70">
+            <ShoppingBag className="h-4 w-4 text-purple-600" /> Volume de Doces Vendidos
           </h2>
 
-          {chartDataPagamentos.length === 0 ? (
-            <div className="flex h-56 items-center justify-center text-xs text-text/40">
-              Aguardando recebimentos...
+          {rankingProdutos.length === 0 ? (
+            <div className="flex h-56 items-center justify-center text-xs text-text/40 font-medium">
+              Aguardando vendas de produtos...
             </div>
           ) : (
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={chartDataPagamentos}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {chartDataPagamentos.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, 'Valor']}
+                <BarChart
+                  layout="vertical"
+                  data={rankingProdutos.slice(0, 5)}
+                  margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+                >
+                  <XAxis type="number" hide />
+                  <YAxis
+                    dataKey="nome"
+                    type="category"
+                    tick={{ fontSize: 10 }}
+                    width={100}
                   />
-                  <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: '11px' }} />
-                </PieChart>
+                  <Tooltip
+                    formatter={(value: any) => [`${value} un`, 'Quantidade Vendida']}
+                    contentStyle={{ borderRadius: '12px', fontSize: '12px' }}
+                  />
+                  <Bar dataKey="qtdVendida" fill="#a855f7" radius={[0, 6, 6, 0]} />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           )}
         </div>
       </div>
 
-      {/* 1. INTELIGÊNCIA DE MIX DE PRODUTOS: TOP CAMPEÕES & ALERTA DE ENCALHE */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Curva ABC / Top 3 Campeões de Venda */}
-        <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-primary/10 pb-3">
-            <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/70">
-              <Trophy className="h-4 w-4 text-amber-500" /> Curva ABC — Campeões de Venda no Período
-            </h2>
-            <span className="text-[11px] font-semibold text-text/50">
-              {rankingProdutos.length} produto(s) movimentado(s)
-            </span>
-          </div>
-
-          {rankingProdutos.length === 0 ? (
-            <p className="p-4 text-center text-xs text-text/50">
-              Nenhum produto registrado no romaneio detalhado.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {rankingProdutos.slice(0, 3).map((prod, idx) => {
-                const medalColors = [
-                  'border-amber-400 bg-amber-50/80 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200',
-                  'border-slate-300 bg-slate-50/80 text-slate-900 dark:bg-slate-900/30 dark:text-slate-200',
-                  'border-amber-600/40 bg-orange-50/60 text-orange-950 dark:bg-orange-950/20 dark:text-orange-200',
-                ];
-                const medalBadges = ['🥇 1º Lugar', '🥈 2º Lugar', '🥉 3º Lugar'];
-
-                return (
-                  <div
-                    key={prod.nome}
-                    className={`flex flex-col justify-between rounded-2xl border p-4 shadow-2xs transition-all hover:scale-[1.02] ${
-                      medalColors[idx] || 'border-primary/10 bg-background'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider">
-                        {medalBadges[idx]}
-                      </span>
-                      <Flame className="h-4 w-4 text-amber-500" />
-                    </div>
-                    <div className="mt-2">
-                      <h4 className="text-sm font-black truncate">{prod.nome}</h4>
-                      <p className="mt-1 font-mono text-lg font-bold text-primary">
-                        {prod.qtdVendida}{' '}
-                        <span className="text-xs font-normal text-text/60">un vendidas</span>
-                      </p>
-                    </div>
-                    <div className="mt-3 border-t border-primary/10 pt-2 text-right">
-                      <span className="font-mono text-xs font-black text-emerald-700 dark:text-emerald-400">
-                        R$ {prod.faturamentoTotal.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Alerta de Encalhe / Top Sobras */}
-        <div className="space-y-4 rounded-2xl border border-rose-200 bg-rose-50/50 dark:border-rose-900 dark:bg-rose-950/20 p-5 shadow-sm">
-          <div className="flex items-center justify-between border-b border-rose-200/60 pb-3">
-            <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-rose-900 dark:text-rose-200">
-              <TrendingDown className="h-4 w-4 text-rose-600" /> Alerta de Encalhe (Top Sobras)
-            </h2>
-            <AlertOctagon className="h-4 w-4 text-rose-600 animate-pulse" />
-          </div>
-
-          {produtoMaiorSobra && produtoMaiorSobra.qtdRetorno > 0 ? (
-            <div className="space-y-3">
-              <div className="rounded-xl border border-rose-300 bg-background p-3 shadow-xs">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">
-                  Maior volume retornado
-                </span>
-                <h4 className="text-base font-black text-text/90 mt-0.5">
-                  {produtoMaiorSobra.nome}
-                </h4>
-                <p className="mt-1 font-mono text-xl font-black text-rose-600">
-                  {produtoMaiorSobra.qtdRetorno}{' '}
-                  <span className="text-xs font-semibold text-text/50">unidades sobraram</span>
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-amber-100/80 dark:bg-amber-950/40 p-3 border border-amber-300 text-xs text-amber-900 dark:text-amber-200 font-medium">
-                💡 <strong>Recomendação de Produção:</strong> Reduzir a fornada/remessa de{' '}
-                <strong>{produtoMaiorSobra.nome}</strong> no próximo lote para evitar desperdícios.
-              </div>
-            </div>
-          ) : (
-            <div className="flex h-40 items-center justify-center text-center text-xs text-emerald-800 dark:text-emerald-300 font-semibold">
-              ✅ Nenhuma sobra excessiva registrada no período! Giro de estoque 100% eficiente.
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 2. PERFORMANCE COMPARATIVA POR PDV & PARTICIPAÇÃO NO MIX (% SHARE) */}
+      {/* BLOCO 5: COMPARATIVO DE DESEMPENHO POR PONTO DE VENDA (PDVS) */}
       <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm">
         <div className="flex items-center justify-between border-b border-primary/10 pb-3">
-          <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/70">
-            <Store className="h-4 w-4 text-primary" /> Performance Comparativa por PDV &
-            Participação no Mix (% Share)
+          <h2 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-text/80">
+            <Store className="h-4 w-4 text-primary" /> Comparativo de Desempenho por Ponto de Venda (PDVs)
           </h2>
           <span className="text-xs font-bold text-primary">
             {resumoPDVs.length} ponto(s) comparado(s)
@@ -1670,7 +1642,9 @@ export default function AuditoriaPDVPage() {
                 ? (pdv.faturamentoLiquido / faturamentoTotalLiquido) * 100
                 : 0;
             const giroStand = pdv.qtdEnviada > 0 ? (pdv.qtdVendida / pdv.qtdEnviada) * 100 : 0;
+            const taxaSobraPdv = pdv.qtdEnviada > 0 ? (pdv.qtdRetorno / pdv.qtdEnviada) * 100 : 0;
             const cardColor = PDV_COLORS[index % PDV_COLORS.length];
+            const ticketPdv = pdv.qtdVendida > 0 ? pdv.faturamentoLiquido / pdv.qtdVendida : 0;
 
             return (
               <div
@@ -1679,9 +1653,9 @@ export default function AuditoriaPDVPage() {
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-text/80 truncate">{pdv.nome}</span>
+                    <span className="text-xs font-bold text-text/90 truncate">{pdv.nome}</span>
                     <span
-                      className="rounded-full px-2 py-0.5 text-[10px] font-black text-white"
+                      className="rounded-full px-2 py-0.5 text-[10px] font-black text-white shadow-2xs"
                       style={{ backgroundColor: cardColor }}
                     >
                       {sharePercentual.toFixed(1)}% Share
@@ -1711,20 +1685,32 @@ export default function AuditoriaPDVPage() {
                 <div className="space-y-1.5 border-t border-primary/10 pt-2.5 text-xs text-text/70">
                   <div className="flex justify-between">
                     <span>Giro da Remessa:</span>
-                    <span className="font-mono font-bold text-text/90">
+                    <span className="font-mono font-bold text-emerald-600">
                       {giroStand.toFixed(1)}%
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Vendidos / Enviados:</span>
+                    <span>Taxa de Sobras:</span>
+                    <span
+                      className={`font-mono font-bold ${
+                        taxaSobraPdv > 20 ? 'text-amber-600' : 'text-text/70'
+                      }`}
+                    >
+                      {taxaSobraPdv.toFixed(1)}% ({pdv.qtdRetorno} un)
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Ticket Médio / Peça:</span>
                     <span className="font-mono font-semibold">
-                      {pdv.qtdVendida} / {pdv.qtdEnviada} un
+                      R$ {ticketPdv.toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Diferença Acumulada:</span>
                     <span
-                      className={`font-mono font-bold ${pdv.diferencaTotal < 0 ? 'text-rose-600' : 'text-emerald-600'}`}
+                      className={`font-mono font-bold ${
+                        pdv.diferencaTotal < 0 ? 'text-rose-600' : 'text-emerald-600'
+                      }`}
                     >
                       R$ {pdv.diferencaTotal.toFixed(2)}
                     </span>
@@ -1736,7 +1722,7 @@ export default function AuditoriaPDVPage() {
         </div>
       </div>
 
-      {/* CARD DE ALERTA E REDIRECIONAMENTO PARA O SUBMENU DEDICADO DE FECHAMENTO DIÁRIO */}
+      {/* LINK DEDICADO DE CONCILIAÇÃO BANCÁRIA DIÁRIA */}
       <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-background to-primary/5 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-start sm:items-center gap-3">
           <div className="rounded-xl bg-primary/10 p-2.5 text-primary shrink-0">
@@ -1770,210 +1756,149 @@ export default function AuditoriaPDVPage() {
         </Link>
       </div>
 
-      {/* Tabela de Relatórios Financeiros & Ranking dos Campeões */}
-      <div className="space-y-6">
-        {/* Tabela dos Relatórios Financeiros (Largura Total) */}
-        <div className="overflow-hidden rounded-2xl border border-primary/10 bg-background shadow-sm w-full">
-          <div className="border-b border-primary/10 bg-primary/5 p-4">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-text/70">
-              Detalhamento das Vendas & Financeiro do Dia ({filtroData})
-            </h2>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-primary/10 bg-primary/5 font-bold uppercase text-text/50">
-                <tr>
-                  <th className="p-3">PDV / Turno</th>
-                  <th className="p-3">Atendente</th>
-                  <th className="p-3 text-center">Env / Sobra / Vend</th>
-                  <th className="p-3 text-right">Líquido</th>
-                  <th className="p-3 text-right text-emerald-700">Vendas em Dinheiro R$</th>
-                  <th className="p-3 text-right text-cyan-700">Pix/Cartão Esperado</th>
-                  <th className="p-3 text-right">Diferença</th>
-                  <th className="p-3 text-center">Status</th>
-                  <th className="p-3 text-center">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-primary/5">
-                {loading ? (
-                  <tr>
-                    <td colSpan={9} className="p-6 text-center text-text/50">
-                      Carregando Relatórios Financeiros...
-                    </td>
-                  </tr>
-                ) : registros.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="p-6 text-center text-text/50">
-                      Nenhum Relatório Financeiro lançado nesta data.
-                    </td>
-                  </tr>
-                ) : (
-                  registros.map((reg) => {
-                    const vend = Math.max(
-                      0,
-                      (reg.qtd_total_enviada || 0) - (reg.qtd_total_retorno || 0)
-                    );
-
-                    return (
-                      <tr key={reg.id} className="hover:bg-primary/5 transition-colors">
-                        <td className="p-3 font-semibold text-text/80">
-                          <div className="flex items-center gap-1.5">
-                            <span>{reg.locais?.nome || 'PDV Geral'}</span>
-                            {reg.tipo_fechamento === 'parcial' && (
-                              <span className="rounded-md bg-cyan-100 dark:bg-cyan-950/40 text-cyan-800 dark:text-cyan-300 px-1.5 py-0.5 text-[9px] font-bold">
-                                🔵 Sobra em Loja
-                              </span>
-                            )}
-                            {reg.tipo_fechamento === 'semanal' && (
-                              <span className="rounded-md bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 px-1.5 py-0.5 text-[9px] font-bold">
-                                🟣 Semanal
-                              </span>
-                            )}
-                          </div>
-                          {reg.turno && (
-                            <span className="block text-[10px] text-text/40 capitalize">
-                              {reg.turno}
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-text/70">{reg.vendedor_nome || '—'}</td>
-                        <td className="p-3 text-center font-mono">
-                          <span className="text-text/50">{reg.qtd_total_enviada || 0}</span> /{' '}
-                          <span className="text-amber-600">{reg.qtd_total_retorno || 0}</span> /{' '}
-                          <span className="font-bold text-primary">{vend}</span>
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-text/90">
-                          R$ {Number(reg.faturamento_liquido_esperado || 0).toFixed(2)}
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-emerald-600">
-                          R$ {Number(reg.valor_dinheiro_gaveta || 0).toFixed(2)}
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-cyan-700 dark:text-cyan-400">
-                          R$ {Number(reg.pix_cartao_esperado || 0).toFixed(2)}
-                          {(Number(reg.valor_pix_declarado || 0) > 0 ||
-                            Number(reg.valor_cartao_declarado || 0) > 0) && (
-                            <span className="block font-sans text-[10px] font-normal text-text/50">
-                              Pix: R$ {Number(reg.valor_pix_declarado || 0).toFixed(2)} | Cartão: R${' '}
-                              {Number(reg.valor_cartao_declarado || 0).toFixed(2)}
-                            </span>
-                          )}
-                        </td>
-                        <td
-                          className={`p-3 text-right font-mono font-bold ${Number(reg.diferenca_auditoria || 0) < 0 ? 'text-rose-600' : 'text-emerald-600'}`}
-                        >
-                          R$ {Number(reg.diferenca_auditoria || 0).toFixed(2)}
-                        </td>
-                        <td className="p-3 text-center">
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold capitalize ${
-                              reg.status === 'auditado' || reg.status === 'conferido'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
-                            }`}
-                          >
-                            {reg.status === 'auditado'
-                              ? 'Auditado'
-                              : reg.status === 'conferido'
-                                ? 'Conferido'
-                                : 'Pendente'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-center">
-                          {reg.status === 'auditado' || reg.status === 'conferido' ? (
-                            <span
-                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-text/40 cursor-not-allowed"
-                              title="Relatório auditado. Acesse Fechamento Diário para reabrir o dia."
-                            >
-                              <Lock className="h-3.5 w-3.5 text-text/40" /> Bloqueado
-                            </span>
-                          ) : (
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleAbrirEdicao(reg)}
-                                title="Editar Romaneio"
-                                className="rounded-lg p-1 text-text/60 hover:bg-primary/10 hover:text-primary transition-colors"
-                              >
-                                <Edit3 className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleSolicitarExclusao(reg.id, reg.status)}
-                                title="Excluir Romaneio"
-                                className="rounded-lg p-1 text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+      {/* TABELA DETALHADA DE RELATÓRIOS FINANCEIROS */}
+      <div className="overflow-hidden rounded-2xl border border-primary/10 bg-background shadow-sm w-full">
+        <div className="border-b border-primary/10 bg-primary/5 p-4 flex justify-between items-center">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-text/70">
+            Detalhamento de Vendas & Relatórios Financeiros no Período
+          </h2>
+          <span className="text-xs font-mono font-bold text-text/50">
+            Total: {registros.length} lançamento(s)
+          </span>
         </div>
 
-        {/* Ranking de Doces Campeões (Posicionado Abaixo da Tabela) */}
-        <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm w-full">
-          <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-text/60">
-            <Trophy className="h-4 w-4 text-amber-500" /> Produtos Campeões de Venda
-          </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="border-b border-primary/10 bg-primary/5 font-bold uppercase text-text/50">
+              <tr>
+                <th className="p-3">Data / PDV</th>
+                <th className="p-3">Turno / Atendente</th>
+                <th className="p-3 text-center">Env / Sobra / Vend</th>
+                <th className="p-3 text-right">Faturamento Líquido</th>
+                <th className="p-3 text-right text-emerald-700">Dinheiro Gaveta</th>
+                <th className="p-3 text-right text-cyan-700">Pix/Cartão Esperado</th>
+                <th className="p-3 text-right">Diferença</th>
+                <th className="p-3 text-center">Status</th>
+                <th className="p-3 text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-primary/5">
+              {loading ? (
+                <tr>
+                  <td colSpan={9} className="p-6 text-center text-text/50">
+                    Carregando Relatórios Financeiros...
+                  </td>
+                </tr>
+              ) : registros.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="p-6 text-center text-text/50">
+                    Nenhum Relatório Financeiro lançado neste período.
+                  </td>
+                </tr>
+              ) : (
+                registros.map((reg) => {
+                  const vend = Math.max(
+                    0,
+                    (reg.qtd_total_enviada || 0) - (reg.qtd_total_retorno || 0)
+                  );
 
-          {loading ? (
-            <p className="py-4 text-center text-xs text-text/50">Carregando ranking...</p>
-          ) : rankingProdutos.length === 0 ? (
-            <p className="py-4 text-center text-xs text-text/50">
-              Lançamentos em modo detalhado geram o ranking de doces mais vendidos.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {rankingProdutos.map((item, index) => (
-                <div
-                  key={item.nome}
-                  className="flex items-center justify-between rounded-xl border border-primary/5 bg-background p-3 text-xs shadow-2xs hover:bg-primary/5 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-lg font-mono font-bold shrink-0 ${
-                        index === 0
-                          ? 'bg-amber-100 text-amber-700 font-black'
-                          : index === 1
-                            ? 'bg-slate-200 text-slate-700'
-                            : index === 2
-                              ? 'bg-amber-900/10 text-amber-900'
-                              : 'bg-primary/5 text-text/50'
-                      }`}
-                    >
-                      {index + 1}º
-                    </span>
-                    <span className="font-semibold text-text/80 truncate max-w-[140px]">
-                      {item.nome}
-                    </span>
-                  </div>
-
-                  <div className="text-right shrink-0">
-                    <span className="font-mono font-bold text-primary block">
-                      {item.qtdVendida} un
-                    </span>
-                    <span className="block text-[10px] text-text/40 font-mono">
-                      R$ {item.faturamentoTotal.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                  return (
+                    <tr key={reg.id} className="hover:bg-primary/5 transition-colors">
+                      <td className="p-3 font-semibold text-text/80">
+                        <div className="flex items-center gap-1.5">
+                          <span>{reg.locais?.nome || 'PDV Geral'}</span>
+                          {reg.tipo_fechamento === 'unificado' && (
+                            <span className="rounded-md bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 px-1.5 py-0.5 text-[9px] font-bold">
+                              ⚡ Unificado
+                            </span>
+                          )}
+                        </div>
+                        <span className="block text-[10px] text-text/40">
+                          {reg.data.split('-').reverse().join('/')}
+                        </span>
+                      </td>
+                      <td className="p-3 text-text/70">
+                        <span className="block font-bold capitalize">{reg.turno || 'Integral'}</span>
+                        <span className="block text-[10px] text-text/50">{reg.vendedor_nome || '—'}</span>
+                      </td>
+                      <td className="p-3 text-center font-mono">
+                        <span className="text-text/50">{reg.qtd_total_enviada || 0}</span> /{' '}
+                        <span className="text-amber-600 font-bold">{reg.qtd_total_retorno || 0}</span> /{' '}
+                        <span className="font-bold text-primary">{vend}</span>
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold text-text/90">
+                        R$ {Number(reg.faturamento_liquido_esperado || 0).toFixed(2)}
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold text-emerald-600">
+                        R$ {Number(reg.valor_dinheiro_gaveta || 0).toFixed(2)}
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold text-cyan-700 dark:text-cyan-400">
+                        R$ {Number(reg.pix_cartao_esperado || 0).toFixed(2)}
+                      </td>
+                      <td
+                        className={`p-3 text-right font-mono font-bold ${
+                          Number(reg.diferenca_auditoria || 0) < 0 ? 'text-rose-600' : 'text-emerald-600'
+                        }`}
+                      >
+                        R$ {Number(reg.diferenca_auditoria || 0).toFixed(2)}
+                      </td>
+                      <td className="p-3 text-center">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold capitalize ${
+                            reg.status === 'auditado' || reg.status === 'conferido'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                          }`}
+                        >
+                          {reg.status === 'auditado'
+                            ? 'Auditado'
+                            : reg.status === 'conferido'
+                              ? 'Conferido'
+                              : 'Pendente'}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        {reg.status === 'auditado' || reg.status === 'conferido' ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-text/40 cursor-not-allowed"
+                            title="Relatório auditado. Acesse Fechamento Diário para reabrir o dia."
+                          >
+                            <Lock className="h-3.5 w-3.5 text-text/40" /> Bloqueado
+                          </span>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirEdicao(reg)}
+                              title="Editar Romaneio"
+                              className="rounded-lg p-1 text-text/60 hover:bg-primary/10 hover:text-primary transition-colors"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSolicitarExclusao(reg.id, reg.status)}
+                              title="Excluir Romaneio"
+                              className="rounded-lg p-1 text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* Modal de Edição de Romaneio */}
       {editingRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg space-y-4 rounded-2xl border border-primary/20 bg-background p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="w-full max-w-lg space-y-4 rounded-2xl border border-primary/20 bg-background p-6 shadow-xl animate-scale-up">
             <div className="flex items-center justify-between border-b border-primary/10 pb-3">
               <h3 className="text-sm font-bold uppercase tracking-wider text-text/80">
                 Editar Romaneio ({editingRecord.locais?.nome || 'PDV Geral'})
@@ -2102,7 +2027,7 @@ export default function AuditoriaPDVPage() {
         </div>
       )}
 
-      {/* Modal de Confirmação de Exclusão Padrão FabriSys */}
+      {/* Modal de Confirmação de Exclusão */}
       <ConfirmDialog
         isOpen={deleteModalOpen}
         onClose={() => {

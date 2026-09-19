@@ -1936,10 +1936,25 @@ function FechamentoUnificadoPDVModal({
   const pdvNome = local.nome || 'PDV';
   const [salvando, setSalvando] = useState(false);
 
-  // Lançamentos Financeiros (Dinheiro, Pix, Cartão)
-  const [valorDinheiro, setValorDinheiro] = useState<number>(0);
-  const [valorPix, setValorPix] = useState<number>(0);
-  const [valorCartao, setValorCartao] = useState<number>(0);
+  // Somar automaticamente os valores financeiros já lançados nos turnos individuais
+  const initialDinheiro = records.reduce(
+    (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+    0
+  );
+  const initialPix = records.reduce(
+    (acc, r) => acc + (Number(r.valor_pix_declarado) || 0),
+    0
+  );
+  const initialCartao = records.reduce(
+    (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
+    0
+  );
+
+  // Lançamentos Financeiros (pré-preenchidos com a soma dos turnos)
+  const [valorDinheiro, setValorDinheiro] = useState<number>(initialDinheiro);
+  const [valorPix, setValorPix] = useState<number>(initialPix);
+  const [valorCartao, setValorCartao] = useState<number>(initialCartao);
+  const [mostrarDetalhesTurnos, setMostrarDetalhesTurnos] = useState(false);
 
   // Turnos sendo unificados (ex: Manhã + Tarde + Noite)
   const turnosLabel = records.map((r) => formatTurno(r.turno)).join(' + ');
@@ -2129,8 +2144,89 @@ function FechamentoUnificadoPDVModal({
           <div className="flex items-center gap-3 text-xs text-cyan-800 dark:text-cyan-200 bg-cyan-50 dark:bg-cyan-950/40 rounded-xl p-3 border border-cyan-200 dark:border-cyan-800">
             <Calendar className="h-4 w-4 text-cyan-600 shrink-0" />
             <span>
-              Este procedimento somará o estoque e permitirá informar o valor em <strong>Dinheiro, Pix e Cartão</strong> para todos os turnos juntos.
+              Este procedimento somará o estoque e consolidará os valores em <strong>Dinheiro, Pix e Cartão</strong> de todos os turnos juntos.
             </span>
+          </div>
+
+          {/* Expansão para Ver Valor e Detalhe de Cada Turno do PDV */}
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setMostrarDetalhesTurnos(!mostrarDetalhesTurnos)}
+              className="flex items-center justify-between w-full rounded-xl bg-cyan-100/70 dark:bg-cyan-950/60 p-2.5 text-xs font-bold text-cyan-900 dark:text-cyan-100 hover:bg-cyan-200/70 dark:hover:bg-cyan-900 transition-colors border border-cyan-200 dark:border-cyan-800"
+            >
+              <span className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                <span>Ver Valores e Detalhes de Cada Turno ({records.length})</span>
+              </span>
+              <span className="flex items-center gap-1 text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300">
+                {mostrarDetalhesTurnos ? 'Ocultar' : 'Ver Detalhes'}
+                {mostrarDetalhesTurnos ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </span>
+            </button>
+
+            {mostrarDetalhesTurnos && (
+              <div className="space-y-2 max-h-52 overflow-y-auto p-2.5 bg-slate-50 dark:bg-slate-900/80 rounded-xl border border-slate-200 dark:border-slate-800 animate-fade-in">
+                {records.map((r, idx) => {
+                  const env = Number(r.qtd_total_enviada) || 0;
+                  const ret = Number(r.qtd_total_retorno) || 0;
+                  const vend = Math.max(0, env - ret);
+                  const din = Number(r.valor_dinheiro_gaveta) || 0;
+                  const px = Number(r.valor_pix_declarado) || 0;
+                  const car = Number(r.valor_cartao_declarado) || 0;
+                  const fat =
+                    Number(r.faturamento_liquido_esperado) ||
+                    Number(r.faturamento_bruto_teorico) ||
+                    din + px + car;
+
+                  return (
+                    <div
+                      key={r.id || idx}
+                      className="rounded-lg bg-background p-2.5 border border-primary/10 space-y-1.5 text-xs shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between font-bold">
+                        <span className="text-cyan-800 dark:text-cyan-300 flex items-center gap-1.5 capitalize">
+                          <Clock className="h-3.5 w-3.5 text-cyan-600" />
+                          {formatTurno(r.turno)}
+                          {r.vendedor_nome && (
+                            <span className="text-[10px] font-medium text-text/50">
+                              ({r.vendedor_nome})
+                            </span>
+                          )}
+                        </span>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400 font-extrabold">
+                          Fat: R$ {fat.toFixed(2)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1 text-[10px] font-mono text-text/60 bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-md text-center">
+                        <div>
+                          Enviado: <strong className="text-text/80">{env}</strong>
+                        </div>
+                        <div>
+                          Sobra: <strong className="text-amber-700 dark:text-amber-400">{ret}</strong>
+                        </div>
+                        <div>
+                          Vendido: <strong className="text-emerald-700 dark:text-emerald-400">{vend}</strong>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between text-[10px] text-text/70 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        <span className="flex items-center gap-1 font-mono">
+                          <Banknote className="h-3 w-3 text-emerald-500" /> Din: R$ {din.toFixed(2)}
+                        </span>
+                        <span className="flex items-center gap-1 font-mono">
+                          <Smartphone className="h-3 w-3 text-purple-500" /> Pix: R$ {px.toFixed(2)}
+                        </span>
+                        <span className="flex items-center gap-1 font-mono">
+                          <CreditCard className="h-3 w-3 text-cyan-500" /> Cartão: R$ {car.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Atalho Vendeu Tudo */}
@@ -2748,31 +2844,55 @@ export function PDVKanbanView({
           />
           <div className="p-3 space-y-3 flex-1 overflow-y-auto">
             {/* Banner de Ação em Bloco: Unificar Turnos e Fechar PDV */}
-            {pdvsPendentesAgrupados.map(({ local, records }) => (
-              <div
-                key={`unificar-${local.id}`}
-                className="rounded-xl border-2 border-cyan-400 bg-cyan-100/50 dark:bg-cyan-950/60 p-3 shadow-xs space-y-2 mb-2"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <Layers className="h-4 w-4 text-cyan-700 dark:text-cyan-300 shrink-0" />
-                    <span className="text-xs font-black uppercase text-cyan-950 dark:text-cyan-100 truncate">
-                      {local.nome}
+            {pdvsPendentesAgrupados.map(({ local, records }) => {
+              const dinTotal = records.reduce(
+                (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+                0
+              );
+              const pixTotal = records.reduce(
+                (acc, r) => acc + (Number(r.valor_pix_declarado) || 0),
+                0
+              );
+              const cartaoTotal = records.reduce(
+                (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
+                0
+              );
+
+              return (
+                <div
+                  key={`unificar-${local.id}`}
+                  className="rounded-xl border-2 border-cyan-400 bg-cyan-100/50 dark:bg-cyan-950/60 p-3 shadow-xs space-y-2 mb-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Layers className="h-4 w-4 text-cyan-700 dark:text-cyan-300 shrink-0" />
+                      <span className="text-xs font-black uppercase text-cyan-950 dark:text-cyan-100 truncate">
+                        {local.nome}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-200 dark:bg-cyan-800 text-cyan-900 dark:text-cyan-100 shrink-0 font-mono">
+                      {records.length} {records.length === 1 ? 'turno' : 'turnos'}
                     </span>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-200 dark:bg-cyan-800 text-cyan-900 dark:text-cyan-100 shrink-0 font-mono">
-                    {records.length} {records.length === 1 ? 'turno' : 'turnos'}
-                  </span>
+
+                  {(dinTotal > 0 || pixTotal > 0 || cartaoTotal > 0) && (
+                    <div className="flex flex-wrap items-center justify-between text-[10px] text-cyan-900 dark:text-cyan-200 font-mono bg-cyan-200/60 dark:bg-cyan-900/50 px-2 py-1 rounded-md font-semibold">
+                      {dinTotal > 0 && <span>Din: R$ {dinTotal.toFixed(2)}</span>}
+                      {pixTotal > 0 && <span>Pix: R$ {pixTotal.toFixed(2)}</span>}
+                      {cartaoTotal > 0 && <span>Cart: R$ {cartaoTotal.toFixed(2)}</span>}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setModalUnificarPDV({ local, records })}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-extrabold text-xs py-2 shadow-xs transition-all active:scale-[0.98]"
+                  >
+                    <Layers className="h-3.5 w-3.5" /> ⚡ Unificar Turnos e Fechar PDV
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setModalUnificarPDV({ local, records })}
-                  className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-extrabold text-xs py-2 shadow-xs transition-all active:scale-[0.98]"
-                >
-                  <Layers className="h-3.5 w-3.5" /> ⚡ Unificar Turnos e Fechar PDV
-                </button>
-              </div>
-            ))}
+              );
+            })}
 
             {loading ? (
               <div className="flex flex-col items-center gap-2 py-6 text-text/40">

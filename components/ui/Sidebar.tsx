@@ -69,6 +69,10 @@ const DEFAULT_PERMISSOES: Record<string, string[]> = {
     'ranking_produtos',
     'produtos',
     'agenda',
+    'configuracoes_lojas',
+    'pdv',
+    'pdv_caixa',
+    'pdv_controle_caixa',
     'ajuda',
   ],
   pdv_simples: [
@@ -162,7 +166,7 @@ const sidebarItems: SidebarItem[] = [
     name: 'PDV & Lojas',
     href: '/dashboard/pdv',
     icon: <Store className="h-5 w-5" />,
-    allowedRoles: ['pdv', 'admin', 'master'],
+    allowedRoles: ['pdv', 'admin', 'master', 'express', 'pdv_simples'],
     children: [
       { id: 'pdv_caixa', name: 'Frente de Caixa', href: '/dashboard/pdv/caixa' },
       {
@@ -273,7 +277,7 @@ const sidebarItems: SidebarItem[] = [
     name: 'Configurações',
     href: '/dashboard/configuracoes',
     icon: <Settings className="h-5 w-5" />,
-    allowedRoles: ['admin', 'master'],
+    allowedRoles: ['admin', 'master', 'express', 'pdv_simples', 'gerente'],
     children: [
       {
         id: 'configuracoes_sistema',

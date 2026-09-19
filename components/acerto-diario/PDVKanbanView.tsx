@@ -39,6 +39,7 @@ import { supabase } from '@/lib/supabase-client';
 import { useToast } from '@/hooks/useToast';
 import { useConfirm } from '@/hooks/useConfirm';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import confetti from 'canvas-confetti';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1708,9 +1709,21 @@ function AuditarPDVModal({
         }
       }
 
+      if (diferenca === 0) {
+        try {
+          void confetti({
+            particleCount: 120,
+            spread: 80,
+            origin: { y: 0.6 },
+          });
+        } catch (e) {
+          void e;
+        }
+      }
+
       toast({
         title: 'PDV Auditado!',
-        description: `O PDV ${pdvNome} foi auditado com sucesso.`,
+        description: `O PDV ${pdvNome} foi auditado com sucesso.${diferenca === 0 ? ' Caixa 100% perfeito!' : ''}`,
         variant: 'success',
       });
 

@@ -10,6 +10,7 @@ import Loading from '@/components/ui/Loading';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useAuth } from '@/lib/auth';
 import { useTheme } from '@/lib/theme';
+import { supabase } from '@/lib/supabase-client';
 import SystemAlertPopup from '@/components/SystemAlertPopup';
 
 import MobileQuickActionBar from '@/components/ui/MobileQuickActionBar';
@@ -23,12 +24,85 @@ export default function DashboardClientWrapper({
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [effectiveLogo, setEffectiveLogo] = useState<string | undefined>(logoUrl);
+  const [userPerms, setUserPerms] = useState<string[]>([]);
   const router = useRouter();
   const pathname = usePathname();
 
   const { profile } = useAuth();
   const { org, loading: loadingOrg } = useOrganization();
   const { loadThemeByOrg } = useTheme();
+
+  // Carrega permissões do perfil express/pdv_simples para liberação dinâmica de rotas
+  useEffect(() => {
+    if (!profile?.role) return;
+    if (profile.role !== 'express' && profile.role !== 'pdv_simples') return;
+
+    let isMounted = true;
+    const fetchPerms = async () => {
+      try {
+        const { data: globalData } = await supabase
+          .from('configuracoes_sistema')
+          .select('valor')
+          .eq('chave', 'permissoes_acesso')
+          .is('organization_id', null)
+          .maybeSingle();
+
+        let orgData = null;
+        if (profile?.organization_id) {
+          const { data } = await supabase
+            .from('configuracoes_sistema')
+            .select('valor')
+            .eq('chave', 'permissoes_acesso')
+            .eq('organization_id', profile.organization_id)
+            .maybeSingle();
+          orgData = data;
+        }
+
+        const parseValor = (valor: unknown): Record<string, string[]> => {
+          if (!valor) return {};
+          if (typeof valor === 'string') {
+            try {
+              return JSON.parse(valor);
+            } catch {
+              return {};
+            }
+          }
+          if (typeof valor === 'object') return valor as Record<string, string[]>;
+          return {};
+        };
+
+        const globalP = parseValor(globalData?.valor);
+        const orgP = parseValor(orgData?.valor);
+
+        const defaultExpress = [
+          'acertos_rapidos',
+          'lancar_turno',
+          'fechamento_diario',
+          'auditoria_geral',
+          'conciliacao_bancaria',
+          'ranking_produtos',
+          'produtos',
+          'agenda',
+          'configuracoes_lojas',
+          'pdv',
+          'pdv_caixa',
+          'pdv_controle_caixa',
+          'ajuda',
+        ];
+
+        const rolePerms = orgP[profile.role] || globalP[profile.role] || defaultExpress;
+        if (isMounted) setUserPerms(rolePerms);
+      } catch {
+        if (isMounted) {
+          setUserPerms(['acertos_rapidos', 'agenda', 'configuracoes_lojas', 'pdv', 'produtos']);
+        }
+      }
+    };
+    void fetchPerms();
+    return () => {
+      isMounted = false;
+    };
+  }, [profile?.role, profile?.organization_id]);
 
   // Sempre que o profile/org mudar, atualizamos variáveis CSS e forçamos
   // atualização da logo usada pelo Header/Sidebar.
@@ -67,18 +141,51 @@ export default function DashboardClientWrapper({
     if (!loadingOrg && org && profile) {
       if (profile.role === 'master') return;
 
-      // Trava de Rota para Perfil Express / PDV Simples
+      // Trava de Rota Dinâmica para Perfil Express / PDV Simples
       if (profile.role === 'express' || profile.role === 'pdv_simples') {
         if (pathname === '/dashboard/producao' || pathname === '/dashboard/producao/') {
           router.replace('/dashboard/producao/produtos');
           return;
         }
-        const rotasPermitidas = [
+
+        const defaultAllowed = [
           '/dashboard/acerto-diario',
-          '/dashboard/acerto-diario/auditoria',
           '/dashboard/producao/produtos',
+          '/dashboard/agenda',
+          '/dashboard/configuracoes/lojas',
+          '/dashboard/pdv',
+          '/dashboard/ajuda',
         ];
-        const rotaPermitida = rotasPermitidas.some((r) => pathname.startsWith(r));
+
+        const modRouteMap: Record<string, string[]> = {
+          agenda: ['/dashboard/agenda'],
+          configuracoes_lojas: ['/dashboard/configuracoes/lojas', '/dashboard/configuracoes'],
+          pdv: ['/dashboard/pdv'],
+          pdv_caixa: ['/dashboard/pdv/caixa', '/dashboard/pdv'],
+          pdv_controle_caixa: ['/dashboard/pdv/controle-caixa', '/dashboard/pdv'],
+          pdv_recebimento: ['/dashboard/pdv/recebimento', '/dashboard/pdv'],
+          pdv_inventario: ['/dashboard/pdv/inventario', '/dashboard/pdv'],
+          acertos_rapidos: ['/dashboard/acerto-diario'],
+          auditoria_geral: ['/dashboard/acerto-diario/auditoria', '/dashboard/acerto-diario'],
+          lancar_turno: ['/dashboard/acerto-diario'],
+          fechamento_diario: ['/dashboard/acerto-diario/fechamento', '/dashboard/acerto-diario'],
+          produtos: ['/dashboard/producao/produtos'],
+          producao: ['/dashboard/producao'],
+          ajuda: ['/dashboard/ajuda'],
+        };
+
+        const allowedRoutesSet = new Set<string>(defaultAllowed);
+        userPerms.forEach((mod) => {
+          if (modRouteMap[mod]) {
+            modRouteMap[mod].forEach((r) => allowedRoutesSet.add(r));
+          }
+        });
+
+        const rotasPermitidas = Array.from(allowedRoutesSet);
+        const rotaPermitida = rotasPermitidas.some(
+          (r) => pathname === r || pathname.startsWith(r + '/') || pathname.startsWith(r)
+        );
+
         if (!rotaPermitida) {
           router.replace('/dashboard/acerto-diario/auditoria');
           return;
@@ -92,7 +199,7 @@ export default function DashboardClientWrapper({
         router.replace('/dashboard');
       }
     }
-  }, [org, loadingOrg, isOnboardingPage, router, profile, pathname]);
+  }, [org, loadingOrg, isOnboardingPage, router, profile, pathname, userPerms]);
 
   if (loadingOrg) {
     return (

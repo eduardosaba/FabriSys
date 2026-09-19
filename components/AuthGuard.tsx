@@ -51,7 +51,7 @@ export default function AuthGuard({
           break;
         case 'express':
         case 'pdv_simples':
-          if (!currentPath.startsWith('/dashboard/acerto-diario')) {
+          if (!currentPath.startsWith('/dashboard')) {
             router.push('/dashboard/acerto-diario/auditoria');
           }
           break;

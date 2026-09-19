@@ -286,7 +286,13 @@ export default function ControleCaixaPage() {
   useEffect(() => {
     const buscarLojas = async () => {
       if (!profile) return;
-      if (profile.role === 'admin' || profile.role === 'master') {
+      if (
+        profile.role === 'admin' ||
+        profile.role === 'master' ||
+        profile.role === 'express' ||
+        profile.role === 'pdv_simples' ||
+        profile.role === 'gerente'
+      ) {
         try {
           const { data } = await supabase
             .from('locais')

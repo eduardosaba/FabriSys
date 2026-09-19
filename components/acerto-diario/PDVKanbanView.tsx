@@ -1916,6 +1916,418 @@ function AuditarPDVModal({
   );
 }
 
+// ─── Modal Fechamento Unificado PDV ─────────────────────────────────────────
+
+function FechamentoUnificadoPDVModal({
+  local,
+  records,
+  produtosBase,
+  onClose,
+  onSave,
+}: {
+  local: LocalPDV;
+  records: RemessaKanban[];
+  produtosBase: ProdutoItem[];
+  onClose: () => void;
+  onSave: (updated: RemessaKanban[]) => void;
+}) {
+  const { toast } = useToast();
+  const confirmDialog = useConfirm();
+  const pdvNome = local.nome || 'PDV';
+  const [salvando, setSalvando] = useState(false);
+
+  // Lançamentos Financeiros (Dinheiro, Pix, Cartão)
+  const [valorDinheiro, setValorDinheiro] = useState<number>(0);
+  const [valorPix, setValorPix] = useState<number>(0);
+  const [valorCartao, setValorCartao] = useState<number>(0);
+
+  // Turnos sendo unificados (ex: Manhã + Tarde + Noite)
+  const turnosLabel = records.map((r) => formatTurno(r.turno)).join(' + ');
+
+  // Consolidar grade de produtos de todos os turnos do PDV
+  const [gradeConsolidada, setGradeConsolidada] = useState<ItemGradeKanban[]>(() => {
+    const map = new Map<string, ItemGradeKanban>();
+
+    produtosBase.forEach((p) => {
+      map.set(p.id, {
+        produto_id: p.id,
+        nome: p.nome,
+        preco_unitario: p.preco,
+        qtd_sobra_anterior: 0,
+        qtd_enviada: 0,
+        qtd_retorno: 0,
+      });
+    });
+
+    records.forEach((rec) => {
+      if (Array.isArray(rec.itens_grade) && rec.itens_grade.length > 0) {
+        rec.itens_grade.forEach((it) => {
+          const existing = map.get(it.produto_id) || {
+            produto_id: it.produto_id,
+            nome: it.nome,
+            preco_unitario: Number(it.preco_unitario) || 0,
+            qtd_sobra_anterior: 0,
+            qtd_enviada: 0,
+            qtd_retorno: 0,
+          };
+          map.set(it.produto_id, {
+            ...existing,
+            nome: it.nome || existing.nome,
+            preco_unitario: Number(it.preco_unitario) || existing.preco_unitario,
+            qtd_sobra_anterior:
+              (Number(existing.qtd_sobra_anterior) || 0) + (Number(it.qtd_sobra_anterior) || 0),
+            qtd_enviada: (Number(existing.qtd_enviada) || 0) + (Number(it.qtd_enviada) || 0),
+            qtd_retorno: (Number(existing.qtd_retorno) || 0) + (Number(it.qtd_retorno) || 0),
+          });
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  });
+
+  const totalEnviado = gradeConsolidada.reduce(
+    (acc, it) => acc + (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0),
+    0
+  );
+  const totalRetorno = gradeConsolidada.reduce(
+    (acc, it) => acc + (Number(it.qtd_retorno) || 0),
+    0
+  );
+  const totalVendido = Math.max(0, totalEnviado - totalRetorno);
+
+  const faturamentoBrutoTeorico = gradeConsolidada.reduce((acc, it) => {
+    const disp = (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0);
+    const vend = Math.max(0, disp - (Number(it.qtd_retorno) || 0));
+    return acc + vend * (Number(it.preco_unitario) || 0);
+  }, 0);
+
+  const pixCartaoEsperado = Math.max(0, faturamentoBrutoTeorico - valorDinheiro);
+  const totalDeclarado = valorDinheiro + valorPix + valorCartao;
+
+  const handleZerarSobras = () => {
+    setGradeConsolidada((prev) => prev.map((it) => ({ ...it, qtd_retorno: 0 })));
+    toast({
+      title: 'Vendeu tudo nos turnos!',
+      description: 'Todas as sobras zeradas para o fechamento unificado.',
+      variant: 'info',
+    });
+  };
+
+  const handleSalvarFechamentoUnificado = async () => {
+    const confirmou = await confirmDialog.confirm({
+      title: `Fechamento Unificado — ${pdvNome}`,
+      message: `Confirma a unificação de ${records.length} turno(s) (${turnosLabel}) do PDV "${pdvNome}"?\n\n- Sobras Totais: ${totalRetorno} un\n- Dinheiro: R$ ${valorDinheiro.toFixed(2)}\n- Pix: R$ ${valorPix.toFixed(2)}\n- Cartão: R$ ${valorCartao.toFixed(2)}\n- Total Declarado: R$ ${totalDeclarado.toFixed(2)}`,
+      confirmText: 'Confirmar e Encerrar Turnos Unificados',
+      cancelText: 'Revisar',
+      variant: 'info',
+    });
+    if (!confirmou) return;
+
+    setSalvando(true);
+    try {
+      const primaryRecord = records[records.length - 1]; // Registro principal para armazenar totais
+
+      const totalEnviadaNum = gradeConsolidada.reduce(
+        (acc, it) => acc + (Number(it.qtd_enviada) || 0),
+        0
+      );
+
+      const payloadPrimary = {
+        qtd_total_retorno: totalRetorno,
+        qtd_total_enviada: totalEnviadaNum,
+        itens_grade: gradeConsolidada,
+        valor_dinheiro_gaveta: valorDinheiro,
+        valor_pix_declarado: valorPix,
+        valor_cartao_declarado: valorCartao,
+        faturamento_bruto_teorico: faturamentoBrutoTeorico,
+        faturamento_liquido_esperado: faturamentoBrutoTeorico,
+        pix_cartao_esperado: pixCartaoEsperado,
+        tipo_fechamento: 'unificado',
+        observacoes: `Fechamento Unificado (${records.length} turnos: ${turnosLabel})`,
+        status: 'encerrado',
+        updated_at: new Date().toISOString(),
+      };
+
+      const payloadSecondary = {
+        qtd_total_retorno: 0,
+        valor_dinheiro_gaveta: 0,
+        valor_pix_declarado: 0,
+        valor_cartao_declarado: 0,
+        faturamento_bruto_teorico: 0,
+        faturamento_liquido_esperado: 0,
+        pix_cartao_esperado: 0,
+        tipo_fechamento: 'unificado',
+        observacoes: `Unificado no registro principal (${primaryRecord.id})`,
+        status: 'encerrado',
+        updated_at: new Date().toISOString(),
+      };
+
+      // 1. Atualizar registro principal com totais
+      const { error: errPrimary } = await supabase
+        .from('remessas_cargas_pdv')
+        .update(payloadPrimary)
+        .eq('id', primaryRecord.id);
+
+      if (errPrimary) throw errPrimary;
+
+      // 2. Atualizar registros secundários
+      for (const rec of records) {
+        if (rec.id !== primaryRecord.id) {
+          const { error: errSec } = await supabase
+            .from('remessas_cargas_pdv')
+            .update(payloadSecondary)
+            .eq('id', rec.id);
+          if (errSec) console.warn('Erro ao atualizar turno secundário:', errSec);
+        }
+      }
+
+      toast({
+        title: 'Turnos Unificados com Sucesso! ⚡',
+        description: `Fechamento do PDV ${pdvNome} realizado (${records.length} turnos). Total: R$ ${totalDeclarado.toFixed(2)}.`,
+        variant: 'success',
+      });
+
+      const updatedRecords = records.map((rec) =>
+        rec.id === primaryRecord.id
+          ? { ...rec, ...payloadPrimary }
+          : { ...rec, ...payloadSecondary }
+      );
+
+      onSave(updatedRecords);
+    } catch (err: any) {
+      toast({ title: 'Erro no Fechamento Unificado', description: err.message, variant: 'error' });
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+        <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-cyan-300 dark:border-cyan-800 bg-background p-5 shadow-xl space-y-4 animate-scale-up">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-cyan-200 dark:border-cyan-800 pb-3">
+            <div>
+              <h3 className="text-sm font-extrabold uppercase tracking-wider text-cyan-700 dark:text-cyan-300 flex items-center gap-2">
+                <Layers className="h-4 w-4 text-cyan-600" /> Fechamento Unificado — {pdvNome}
+              </h3>
+              <p className="text-[11px] font-medium text-text/50 mt-0.5">
+                Agrupando {records.length} turno(s): <span className="font-bold text-cyan-800 dark:text-cyan-200">{turnosLabel}</span>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1 text-text/40 hover:bg-primary/10 hover:text-text transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Info Banner */}
+          <div className="flex items-center gap-3 text-xs text-cyan-800 dark:text-cyan-200 bg-cyan-50 dark:bg-cyan-950/40 rounded-xl p-3 border border-cyan-200 dark:border-cyan-800">
+            <Calendar className="h-4 w-4 text-cyan-600 shrink-0" />
+            <span>
+              Este procedimento somará o estoque e permitirá informar o valor em <strong>Dinheiro, Pix e Cartão</strong> para todos os turnos juntos.
+            </span>
+          </div>
+
+          {/* Atalho Vendeu Tudo */}
+          <button
+            type="button"
+            onClick={handleZerarSobras}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+          >
+            <CheckCircle2 className="h-4 w-4" /> Vendeu Tudo nos Turnos (Sobra Zero)
+          </button>
+
+          {/* Grade Consolidada de Produtos */}
+          <div className="space-y-1.5 max-h-52 overflow-y-auto">
+            {gradeConsolidada
+              .filter(
+                (it) => (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0) > 0
+              )
+              .map((item) => {
+                const disponivel =
+                  (Number(item.qtd_sobra_anterior) || 0) + (Number(item.qtd_enviada) || 0);
+                return (
+                  <div
+                    key={item.produto_id}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-primary/10 bg-background p-2.5"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-text/80 truncate">{item.nome}</p>
+                      <p className="text-[10px] text-text/40">
+                        Disponível Total: <span className="font-mono font-bold text-text/70">{disponivel} un</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <label className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">
+                        Sobra Unificada:
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={disponivel}
+                        value={item.qtd_retorno}
+                        onChange={(e) => {
+                          const val = Math.max(
+                            0,
+                            Math.min(disponivel, Number(e.target.value) || 0)
+                          );
+                          setGradeConsolidada((prev) =>
+                            prev.map((it) =>
+                              it.produto_id === item.produto_id ? { ...it, qtd_retorno: val } : it
+                            )
+                          );
+                        }}
+                        className="w-16 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 text-center text-sm font-mono font-bold text-amber-800 dark:text-amber-200 outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+
+          {/* Resumo da Contagem */}
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-2">
+              <span className="text-[9px] font-bold uppercase text-text/40 block">Total Disponível</span>
+              <span className="font-mono font-black text-text/80 text-sm">{totalEnviado}</span>
+            </div>
+            <div className="rounded-xl bg-amber-100 dark:bg-amber-900/30 p-2">
+              <span className="text-[9px] font-bold uppercase text-amber-700 dark:text-amber-400 block">
+                Total Sobras
+              </span>
+              <span className="font-mono font-black text-amber-700 dark:text-amber-300 text-sm">
+                {totalRetorno}
+              </span>
+            </div>
+            <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/30 p-2">
+              <span className="text-[9px] font-bold uppercase text-emerald-700 dark:text-emerald-400 block">
+                Total Vendido
+              </span>
+              <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-sm">
+                {totalVendido}
+              </span>
+            </div>
+          </div>
+
+          {/* Lançamento dos Valores Financeiros (Dinheiro, Pix, Cartão) */}
+          <div className="space-y-3 pt-1">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-text/70 flex items-center gap-1.5">
+              <Banknote className="h-4 w-4 text-emerald-600" /> Lançamento dos Valores do Fechamento
+            </h4>
+
+            {/* Dinheiro */}
+            <div>
+              <label className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 mb-1">
+                <Banknote className="h-3.5 w-3.5" /> Valor em Dinheiro (R$)
+              </label>
+              <BRLCurrencyInput
+                value={valorDinheiro}
+                onChange={(val) => setValorDinheiro(val)}
+                className="w-full rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 font-mono text-base font-bold text-emerald-800 dark:text-emerald-200 outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
+
+            {/* Pix e Cartão */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1.5 mb-1">
+                  <Smartphone className="h-3.5 w-3.5" /> Pix (R$)
+                </label>
+                <BRLCurrencyInput
+                  value={valorPix}
+                  onChange={(val) => setValorPix(val)}
+                  className="w-full rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20 px-3 py-2 font-mono text-sm font-bold text-purple-800 dark:text-purple-200 outline-none focus:ring-2 focus:ring-purple-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-cyan-700 dark:text-cyan-400 flex items-center gap-1.5 mb-1">
+                  <CreditCard className="h-3.5 w-3.5" /> Cartão (R$)
+                </label>
+                <BRLCurrencyInput
+                  value={valorCartao}
+                  onChange={(val) => setValorCartao(val)}
+                  className="w-full rounded-xl border border-cyan-300 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 px-3 py-2 font-mono text-sm font-bold text-cyan-800 dark:text-cyan-200 outline-none focus:ring-2 focus:ring-cyan-400"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Painel com Faturamento Teórico vs Declarado */}
+          <div className="rounded-xl bg-slate-900 dark:bg-slate-950 p-3 text-xs space-y-1.5">
+            <div className="flex justify-between text-slate-300">
+              <span>Faturamento Bruto Teórico ({records.length} Turnos):</span>
+              <span className="font-mono font-bold text-white">
+                R$ {faturamentoBrutoTeorico.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
+              <span>Pix/Cartão Esperado:</span>
+              <span className="font-mono font-bold text-cyan-300">
+                R$ {pixCartaoEsperado.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
+              <span className="font-bold text-white">Total Declarado (Dinheiro + Pix + Cartão):</span>
+              <span
+                className={`font-mono font-extrabold ${
+                  Math.abs(totalDeclarado - faturamentoBrutoTeorico) < 1
+                    ? 'text-emerald-400'
+                    : 'text-amber-300'
+                }`}
+              >
+                R$ {totalDeclarado.toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          {/* Botões de Ação */}
+          <div className="flex gap-2 pt-2 border-t border-primary/10">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={salvando}
+              className="flex-1 rounded-xl border border-primary/20 bg-primary/5 py-2.5 text-xs font-bold text-text/70 hover:bg-primary/10 transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleSalvarFechamentoUnificado}
+              disabled={salvando}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 py-2.5 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-50 active:scale-[0.97]"
+            >
+              {salvando ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Salvando...
+                </>
+              ) : (
+                <>
+                  <Layers className="h-3.5 w-3.5" /> Concluir Fechamento Unificado
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={confirmDialog.handleCancel}
+        onConfirm={confirmDialog.handleConfirm}
+        title={confirmDialog.options.title}
+        message={confirmDialog.options.message}
+        confirmText={confirmDialog.options.confirmText}
+        cancelText={confirmDialog.options.cancelText}
+        variant={confirmDialog.options.variant}
+      />
+    </>
+  );
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export function PDVKanbanView({
@@ -1935,6 +2347,10 @@ export function PDVKanbanView({
   // Modal states
   const [modalSobras, setModalSobras] = useState<RemessaKanban | null>(null);
   const [modalPixCartao, setModalPixCartao] = useState<RemessaKanban | null>(null);
+  const [modalUnificarPDV, setModalUnificarPDV] = useState<{
+    local: LocalPDV;
+    records: RemessaKanban[];
+  } | null>(null);
   const [modalNovoEnvio, setModalNovoEnvio] = useState(false);
   const [modalRomaneio, setModalRomaneio] = useState<RemessaKanban | null>(null);
 
@@ -2087,6 +2503,7 @@ export function PDVKanbanView({
     });
     setModalSobras(null);
     setModalPixCartao(null);
+    setModalUnificarPDV(null);
     setModalNovoEnvio(false);
   };
 
@@ -2103,6 +2520,20 @@ export function PDVKanbanView({
     .map((local) => {
       const records = registros.filter(
         (r) => r.local_id === local.id && (r.status === 'auditado' || r.status === 'conferido')
+      );
+      if (records.length === 0) return null;
+      return { local, records };
+    })
+    .filter(Boolean) as { local: LocalPDV; records: RemessaKanban[] }[];
+
+  const pdvsPendentesAgrupados = locais
+    .map((local) => {
+      const records = registros.filter(
+        (r) =>
+          r.local_id === local.id &&
+          (r.status === 'aberto' ||
+            r.status === 'dinheiro_informado' ||
+            r.status === 'sobras_informadas')
       );
       if (records.length === 0) return null;
       return { local, records };
@@ -2316,6 +2747,33 @@ export function PDVKanbanView({
             borderClass="border-cyan-300 dark:border-cyan-700"
           />
           <div className="p-3 space-y-3 flex-1 overflow-y-auto">
+            {/* Banner de Ação em Bloco: Unificar Turnos e Fechar PDV */}
+            {pdvsPendentesAgrupados.map(({ local, records }) => (
+              <div
+                key={`unificar-${local.id}`}
+                className="rounded-xl border-2 border-cyan-400 bg-cyan-100/50 dark:bg-cyan-950/60 p-3 shadow-xs space-y-2 mb-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Layers className="h-4 w-4 text-cyan-700 dark:text-cyan-300 shrink-0" />
+                    <span className="text-xs font-black uppercase text-cyan-950 dark:text-cyan-100 truncate">
+                      {local.nome}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-200 dark:bg-cyan-800 text-cyan-900 dark:text-cyan-100 shrink-0 font-mono">
+                    {records.length} {records.length === 1 ? 'turno' : 'turnos'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalUnificarPDV({ local, records })}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-extrabold text-xs py-2 shadow-xs transition-all active:scale-[0.98]"
+                >
+                  <Layers className="h-3.5 w-3.5" /> ⚡ Unificar Turnos e Fechar PDV
+                </button>
+              </div>
+            ))}
+
             {loading ? (
               <div className="flex flex-col items-center gap-2 py-6 text-text/40">
                 <RefreshCw className="h-5 w-5 animate-spin" />
@@ -2433,6 +2891,15 @@ export function PDVKanbanView({
           registro={modalPixCartao}
           locais={locais}
           onClose={() => setModalPixCartao(null)}
+          onSave={handleRegistroUpdated}
+        />
+      )}
+      {modalUnificarPDV && (
+        <FechamentoUnificadoPDVModal
+          local={modalUnificarPDV.local}
+          records={modalUnificarPDV.records}
+          produtosBase={produtosBase}
+          onClose={() => setModalUnificarPDV(null)}
           onSave={handleRegistroUpdated}
         />
       )}

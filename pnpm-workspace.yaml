@@ -1,0 +1,6 @@
+allowBuilds:
+  core-js: true
+  puppeteer: true
+  sharp: true
+  tesseract.js: true
+  unrs-resolver: true

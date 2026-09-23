@@ -1824,10 +1824,68 @@ function AuditarPDVModal({
           </div>
 
           {diferenca !== 0 && (
-            <div className="space-y-1 mt-2">
-              <label className="text-xs font-bold text-rose-500 mb-1 block">
-                Justificativa da Diferença *
-              </label>
+            <div className="space-y-2 mt-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-rose-500 block">
+                  Justificativa da Diferença *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const diffNeed = faturamento - dinheiro;
+                    const half = Math.max(0, diffNeed / 2);
+                    setPixReal(Math.round(half * 100) / 100);
+                    setCartaoReal(Math.round((diffNeed - half) * 100) / 100);
+                    setJustificativa(
+                      'Erro de digitação no fechamento original — valores corrigidos na auditoria'
+                    );
+                  }}
+                  className="text-[10px] font-bold text-purple-700 dark:text-purple-300 underline hover:text-purple-900 cursor-pointer flex items-center gap-1"
+                >
+                  ✏️ Foi Erro de Digitação (Zerar Diferença)
+                </button>
+              </div>
+
+              {/* Botões de atalho rápido */}
+              <div className="flex flex-wrap gap-1 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setJustificativa('Erro de digitação no lançamento de caixa')}
+                  className="px-2 py-1 rounded-md bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 font-semibold hover:bg-purple-200 transition-colors"
+                >
+                  ✏️ Erro de Digitação
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setJustificativa((prev) =>
+                      prev ? `${prev}, Perda/Quebra` : 'Perda/Quebra de produto'
+                    )
+                  }
+                  className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-text/80 font-semibold hover:bg-slate-200 transition-colors"
+                >
+                  🍌 Perda/Quebra
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setJustificativa((prev) => (prev ? `${prev}, Doação` : 'Doação/Degustação'))
+                  }
+                  className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-text/80 font-semibold hover:bg-slate-200 transition-colors"
+                >
+                  🎁 Doação/Degustação
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setJustificativa((prev) => (prev ? `${prev}, Consumo` : 'Consumo Interno'))
+                  }
+                  className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-text/80 font-semibold hover:bg-slate-200 transition-colors"
+                >
+                  ☕ Consumo
+                </button>
+              </div>
+
               <textarea
                 value={justificativa}
                 onChange={(e) => setJustificativa(e.target.value)}
@@ -2375,6 +2433,7 @@ function UnificarTodosPDVsModal({
   const [salvando, setSalvando] = useState(false);
   const [sobrasZeradas, setSobrasZeradas] = useState(false);
   const [mostrarDetalhesPdvs, setMostrarDetalhesPdvs] = useState(false);
+  const [justificativa, setJustificativa] = useState('');
 
   // Modo de preenchimento: 'global' (Padrão para extrato único) ou 'individual' (Por PDV)
   const [modoPreenchimento, setModoPreenchimento] = useState<'global' | 'individual'>('global');
@@ -2607,6 +2666,10 @@ function UnificarTodosPDVsModal({
   const totalVendido = Math.max(0, totalEnviado - totalRetorno);
 
   const totalDeclarado = dinheiroTotal + pixTotal + cartaoTotal;
+  const totalEstSalesAllSelected = selectedPdvs.reduce((acc, p) => acc + getPdvEstRevenue(p), 0);
+  const faturamentoEsperadoTotal = totalEstSalesAllSelected;
+  const diferencaGeral = totalDeclarado - faturamentoEsperadoTotal;
+  const temDiferenca = Math.abs(diferencaGeral) > 0.05;
 
   const handleZerarSobras = () => {
     setSobrasZeradas(true);
@@ -2627,19 +2690,28 @@ function UnificarTodosPDVsModal({
       return;
     }
 
+    if (temDiferenca && justificativa.trim() === '') {
+      toast({
+        title: 'Informe a Justificativa',
+        description: `Existe uma diferença de R$ ${Math.abs(diferencaGeral).toFixed(2)} no fechamento. Por favor, escreva o motivo (ex: perda, doação, consumo, erro de troco) para prosseguir.`,
+        variant: 'warning',
+      });
+      return;
+    }
+
     const confirmou = await confirmDialog.confirm({
       title: `Unificar ${selectedPdvs.length} PDV(s) em Sobras & Caixa`,
       message:
         `Confirma o fechamento unificado de ${selectedPdvs.length} PDV(s) (${selectedRecords.length} turnos)?\n\n` +
         `- Modo: ${modoPreenchimento === 'global' ? 'Lote Unificado Global (Extrato Único)' : 'Detalhado Por PDV'}\n` +
         `- Sobras Totais: ${totalRetorno} un\n` +
-        `- Dinheiro Gaveta: R$ ${dinheiroTotal.toFixed(2)}\n` +
-        `- Pix Declarado: R$ ${pixTotal.toFixed(2)}\n` +
-        `- Cartão Declarado: R$ ${cartaoTotal.toFixed(2)}\n` +
-        `- Total Declarado: R$ ${totalDeclarado.toFixed(2)}`,
+        `- Faturamento Esperado: R$ ${faturamentoEsperadoTotal.toFixed(2)}\n` +
+        `- Total Declarado: R$ ${totalDeclarado.toFixed(2)}\n` +
+        `- Diferença Apurada: ${diferencaGeral < 0 ? `-R$ ${Math.abs(diferencaGeral).toFixed(2)}` : diferencaGeral > 0 ? `+R$ ${diferencaGeral.toFixed(2)}` : 'R$ 0.00 (Exato)'}\n` +
+        (justificativa.trim() ? `- Justificativa: "${justificativa.trim()}"` : ''),
       confirmText: 'Confirmar e Unificar Todos',
       cancelText: 'Revisar',
-      variant: 'info',
+      variant: temDiferenca && diferencaGeral < 0 ? 'danger' : 'info',
     });
 
     if (!confirmou) return;
@@ -2649,7 +2721,6 @@ function UnificarTodosPDVsModal({
 
     try {
       for (const { local, records } of selectedPdvs) {
-        const pdvNome = local.nome || 'PDV';
         const primaryRecord = records[records.length - 1];
 
         const pdvGrade = (primaryRecord.itens_grade || []).map((it) => ({
@@ -2679,12 +2750,17 @@ function UnificarTodosPDVsModal({
         }, 0);
 
         const pdvPixCartaoEsperado = Math.max(0, pdvFat - pdvDinheiro);
+        const pdvDiferenca = pdvDinheiro + pdvPix + pdvCartao - pdvFat;
         const turnosLabel = records.map((r) => formatTurno(r.turno)).join(' + ');
 
         const totalEnviadaNum = records.reduce(
           (acc, r) => acc + (Number(r.qtd_total_enviada) || 0),
           0
         );
+
+        const obsFinal = `Fechamento Unificado em Lote (${records.length} turnos: ${turnosLabel}) - Modo ${modoPreenchimento.toUpperCase()}${
+          justificativa.trim() ? ` | Motivo: ${justificativa.trim()}` : ''
+        }`;
 
         const payloadPrimary = {
           qtd_total_retorno: pdvTotalRetorno,
@@ -2696,8 +2772,9 @@ function UnificarTodosPDVsModal({
           faturamento_bruto_teorico: pdvFat,
           faturamento_liquido_esperado: pdvFat,
           pix_cartao_esperado: pdvPixCartaoEsperado,
+          diferenca_auditoria: pdvDiferenca,
           tipo_fechamento: 'unificado',
-          observacoes: `Fechamento Unificado em Lote (${records.length} turnos: ${turnosLabel}) - Modo ${modoPreenchimento.toUpperCase()}`,
+          observacoes: obsFinal,
           status: 'encerrado',
           updated_at: new Date().toISOString(),
         };
@@ -2710,6 +2787,7 @@ function UnificarTodosPDVsModal({
           faturamento_bruto_teorico: 0,
           faturamento_liquido_esperado: 0,
           pix_cartao_esperado: 0,
+          diferenca_auditoria: 0,
           tipo_fechamento: 'unificado',
           observacoes: `Unificado no registro principal (${primaryRecord.id})`,
           status: 'encerrado',
@@ -2744,7 +2822,7 @@ function UnificarTodosPDVsModal({
 
       toast({
         title: '⚡ Unificação em Lote Concluída!',
-        description: `${selectedPdvs.length} PDV(s) unificados com sucesso no modo ${modoPreenchimento === 'global' ? 'Global' : 'Individual'}. Avançados para Aguardando Auditoria.`,
+        description: `${selectedPdvs.length} PDV(s) unificados com sucesso. Avançados para Aguardando Auditoria.`,
         variant: 'success',
       });
 
@@ -2755,9 +2833,6 @@ function UnificarTodosPDVsModal({
       setSalvando(false);
     }
   };
-
-  // Faturamento estimado acumulado para calculo da % de cada PDV
-  const totalEstSalesAllSelected = selectedPdvs.reduce((acc, p) => acc + getPdvEstRevenue(p), 0);
 
   return (
     <>
@@ -2934,30 +3009,30 @@ function UnificarTodosPDVsModal({
                         : 'border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 opacity-70'
                     }`}
                   >
-                    {/* Header do Card com Checkbox */}
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    {/* Header do Card com Checkbox (Responsivo para Mobile) */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3 mb-1">
+                      <label className="flex items-center gap-2 cursor-pointer select-none min-w-0">
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => togglePdv(local.id)}
-                          className="h-4 w-4 rounded-md border-cyan-400 text-cyan-600 focus:ring-cyan-500 accent-cyan-600 cursor-pointer"
+                          className="h-4 w-4 rounded-md border-cyan-400 text-cyan-600 focus:ring-cyan-500 accent-cyan-600 cursor-pointer shrink-0"
                         />
-                        <span className="text-xs font-black uppercase text-cyan-950 dark:text-cyan-100">
+                        <span className="text-xs font-black uppercase text-cyan-950 dark:text-cyan-100 truncate">
                           {local.nome}
                         </span>
-                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-200/50 dark:bg-cyan-900/50 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-200/50 dark:bg-cyan-900/50 px-1.5 py-0.5 rounded-full shrink-0">
                           {records.length} {records.length === 1 ? 'turno' : 'turnos'}
                         </span>
                       </label>
 
-                      <div className="flex items-center gap-3 text-xs">
+                      <div className="flex items-center justify-between sm:justify-end gap-2 text-xs w-full sm:w-auto">
                         {modoPreenchimento === 'global' && isSelected && (
-                          <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-100 dark:bg-cyan-900/80 px-2 py-0.5 rounded-md">
+                          <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-100 dark:bg-cyan-900/80 px-2 py-0.5 rounded-md shrink-0">
                             Rateio: {pctShare.toFixed(1)}%
                           </span>
                         )}
-                        <span className="font-mono font-black text-emerald-700 dark:text-emerald-300">
+                        <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
                           Total PDV: R$ {totPdv.toFixed(2)}
                         </span>
                       </div>
@@ -3133,6 +3208,164 @@ function UnificarTodosPDVsModal({
               <span className="font-mono font-black text-sm text-cyan-950 dark:text-cyan-50">
                 R$ {totalDeclarado.toFixed(2)}
               </span>
+            </div>
+          </div>
+
+          {/* Card de Faturamento Esperado vs Declarado & Divergência */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 space-y-3 shadow-2xs bg-background">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-2">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-text/80 flex items-center gap-1.5">
+                <TrendingUp className="h-4 w-4 text-cyan-600" /> Balanço do Caixa & Divergência
+              </h4>
+              <span className="text-[11px] font-mono font-semibold text-text/60">
+                Vendas Esperadas:{' '}
+                <strong className="text-text/90">R$ {faturamentoEsperadoTotal.toFixed(2)}</strong>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                <span className="text-[10px] text-text/50 font-bold block uppercase">
+                  Faturamento Esperado Vendas
+                </span>
+                <span className="font-mono font-black text-sm text-text/90">
+                  R$ {faturamentoEsperadoTotal.toFixed(2)}
+                </span>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                <span className="text-[10px] text-text/50 font-bold block uppercase">
+                  Total Declarado (Caixa + Pix + Cartão)
+                </span>
+                <span className="font-mono font-black text-sm text-cyan-700 dark:text-cyan-300">
+                  R$ {totalDeclarado.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Badge de Divergência */}
+            {temDiferenca ? (
+              <div
+                className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs font-medium animate-fade-in ${
+                  diferencaGeral < 0
+                    ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-100'
+                    : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-100'
+                }`}
+              >
+                <AlertTriangle
+                  className={`h-5 w-5 shrink-0 mt-0.5 ${diferencaGeral < 0 ? 'text-rose-600' : 'text-emerald-600'}`}
+                />
+                <div className="space-y-1">
+                  <div className="font-bold flex items-center gap-2">
+                    <span>
+                      {diferencaGeral < 0
+                        ? '⚠️ Furo de Caixa / Falta Observada:'
+                        : 'ℹ️ Sobra de Caixa Registrada:'}
+                    </span>
+                    <span className="font-mono font-black text-sm">
+                      {diferencaGeral < 0
+                        ? `-R$ ${Math.abs(diferencaGeral).toFixed(2)}`
+                        : `+R$ ${diferencaGeral.toFixed(2)}`}
+                    </span>
+                  </div>
+                  <p className="text-[11px] opacity-80">
+                    O total recebido/declarado difere do faturamento esperado. Registre abaixo a
+                    justificativa ou especifique perdas/doações para arquivar na auditoria.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 text-xs font-bold flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>Caixas 100% Batidos! Faturamento das vendas igual ao valor declarado.</span>
+                </span>
+                <span className="font-mono text-emerald-700 dark:text-emerald-300">
+                  Diferença: R$ 0,00
+                </span>
+              </div>
+            )}
+
+            {/* Campo de Justificativa / Motivo da Divergência */}
+            <div className="space-y-2 pt-1 border-t border-slate-200 dark:border-slate-800">
+              <label className="text-xs font-bold text-text/80 uppercase tracking-wide flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-cyan-600" /> Justificativa / Motivo da
+                  Divergência
+                  {temDiferenca && <span className="text-rose-500 font-extrabold">*</span>}
+                </span>
+                <span className="text-[10px] font-normal text-text/50">
+                  {temDiferenca ? '(Obrigatório para registrar no banco)' : '(Opcional)'}
+                </span>
+              </label>
+
+              {/* Botões de atalho rápido */}
+              <div className="flex flex-wrap gap-1.5 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setJustificativa((prev) =>
+                      prev ? `${prev}, Perda/Quebra de Produto` : 'Perda/Quebra de Produto'
+                    )
+                  }
+                  className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-text/80 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  🍌 Perda/Quebra
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setJustificativa((prev) =>
+                      prev ? `${prev}, Doação/Degustação` : 'Doação/Degustação'
+                    )
+                  }
+                  className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-text/80 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  🎁 Doação/Degustação
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setJustificativa((prev) =>
+                      prev ? `${prev}, Consumo Interno` : 'Consumo Interno'
+                    )
+                  }
+                  className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-text/80 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  ☕ Consumo Interno
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setJustificativa((prev) => (prev ? `${prev}, Erro de Troco` : 'Erro de Troco'))
+                  }
+                  className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-text/80 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  💵 Erro de Troco
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setJustificativa((prev) =>
+                      prev ? `${prev}, Diferença de Taxa POS` : 'Diferença de Taxa POS'
+                    )
+                  }
+                  className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-text/80 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  💳 Taxa/Diferença POS
+                </button>
+              </div>
+
+              <textarea
+                value={justificativa}
+                onChange={(e) => setJustificativa(e.target.value)}
+                placeholder={
+                  temDiferenca
+                    ? 'Descreva a causa da diferença (ex: 2 bolos doados para evento, avaria de produtos na vitrine, erro de troco, consumo de funcionários...)'
+                    : 'Observações adicionais sobre esta unificação em lote (opcional)...'
+                }
+                rows={2}
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-background p-2.5 text-xs text-text focus:border-cyan-500 focus:outline-hidden transition-all placeholder:text-text/40"
+              />
             </div>
           </div>
 

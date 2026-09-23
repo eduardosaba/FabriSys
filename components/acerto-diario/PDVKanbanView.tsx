@@ -2357,6 +2357,561 @@ function AuditarTodosPDVsModal({
   );
 }
 
+// ─── Modal Unificar Todos os PDVs (Sobras e Caixa em Lote) ──────────────────
+
+function UnificarTodosPDVsModal({
+  allPdvs,
+  produtosBase,
+  onClose,
+  onSave,
+}: {
+  allPdvs: { local: LocalPDV; records: RemessaKanban[] }[];
+  produtosBase: ProdutoItem[];
+  onClose: () => void;
+  onSave: (updated: RemessaKanban[]) => void;
+}) {
+  const { toast } = useToast();
+  const confirmDialog = useConfirm();
+  const [salvando, setSalvando] = useState(false);
+  const [sobrasZeradas, setSobrasZeradas] = useState(false);
+  const [mostrarDetalhesPdvs, setMostrarDetalhesPdvs] = useState(false);
+
+  // Todos os PDVs começam selecionados
+  const [selectedPdvIds, setSelectedPdvIds] = useState<Set<string>>(
+    () => new Set(allPdvs.map((p) => p.local.id))
+  );
+
+  const selectedPdvs = allPdvs.filter((p) => selectedPdvIds.has(p.local.id));
+  const selectedRecords = selectedPdvs.flatMap((p) => p.records);
+
+  const togglePdv = (id: string) => {
+    setSelectedPdvIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedPdvIds.size === allPdvs.length) {
+      setSelectedPdvIds(new Set());
+    } else {
+      setSelectedPdvIds(new Set(allPdvs.map((p) => p.local.id)));
+    }
+  };
+
+  const selectionKey = Array.from(selectedPdvIds).sort().join('|');
+
+  const [gradeConsolidada, setGradeConsolidada] = useState<ItemGradeKanban[]>([]);
+
+  useEffect(() => {
+    const map = new Map<string, ItemGradeKanban>();
+
+    produtosBase.forEach((p) => {
+      map.set(p.id, {
+        produto_id: p.id,
+        nome: p.nome,
+        preco_unitario: p.preco,
+        qtd_sobra_anterior: 0,
+        qtd_enviada: 0,
+        qtd_retorno: 0,
+      });
+    });
+
+    selectedRecords.forEach((rec) => {
+      if (Array.isArray(rec.itens_grade) && rec.itens_grade.length > 0) {
+        rec.itens_grade.forEach((it) => {
+          const existing = map.get(it.produto_id) || {
+            produto_id: it.produto_id,
+            nome: it.nome,
+            preco_unitario: Number(it.preco_unitario) || 0,
+            qtd_sobra_anterior: 0,
+            qtd_enviada: 0,
+            qtd_retorno: 0,
+          };
+          map.set(it.produto_id, {
+            ...existing,
+            nome: it.nome || existing.nome,
+            preco_unitario: Number(it.preco_unitario) || existing.preco_unitario,
+            qtd_sobra_anterior:
+              (Number(existing.qtd_sobra_anterior) || 0) + (Number(it.qtd_sobra_anterior) || 0),
+            qtd_enviada: (Number(existing.qtd_enviada) || 0) + (Number(it.qtd_enviada) || 0),
+            qtd_retorno: sobrasZeradas
+              ? 0
+              : (Number(existing.qtd_retorno) || 0) + (Number(it.qtd_retorno) || 0),
+          });
+        });
+      }
+    });
+
+    setGradeConsolidada(Array.from(map.values()));
+  }, [selectionKey, selectedRecords.length, produtosBase, sobrasZeradas]);
+
+  const dinheiroTotal = selectedRecords.reduce(
+    (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+    0
+  );
+  const pixTotal = selectedRecords.reduce(
+    (acc, r) => acc + (Number(r.valor_pix_declarado) || 0),
+    0
+  );
+  const cartaoTotal = selectedRecords.reduce(
+    (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
+    0
+  );
+
+  const totalEnviado = gradeConsolidada.reduce(
+    (acc, it) => acc + (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0),
+    0
+  );
+  const totalRetorno = sobrasZeradas
+    ? 0
+    : gradeConsolidada.reduce((acc, it) => acc + (Number(it.qtd_retorno) || 0), 0);
+  const totalVendido = Math.max(0, totalEnviado - totalRetorno);
+
+  const totalDeclarado = dinheiroTotal + pixTotal + cartaoTotal;
+
+  const handleZerarSobras = () => {
+    setSobrasZeradas(true);
+    toast({
+      title: 'Vendeu tudo nos PDVs!',
+      description: 'Todas as sobras foram zeradas para os PDVs selecionados.',
+      variant: 'info',
+    });
+  };
+
+  const handleSalvarUnificacaoEmLote = async () => {
+    if (selectedPdvs.length === 0 || selectedRecords.length === 0) {
+      toast({
+        title: 'Selecione ao menos 1 PDV',
+        description: 'Marque pelo menos um PDV para realizar a unificação.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    const confirmou = await confirmDialog.confirm({
+      title: `Unificar ${selectedPdvs.length} PDV(s) em Sobras & Caixa`,
+      message:
+        `Confirma o fechamento unificado de ${selectedPdvs.length} PDV(s) (${selectedRecords.length} turnos)?\n\n` +
+        `- Sobras Totais: ${totalRetorno} un\n` +
+        `- Dinheiro: R$ ${dinheiroTotal.toFixed(2)}\n` +
+        `- Pix: R$ ${pixTotal.toFixed(2)}\n` +
+        `- Cartão: R$ ${cartaoTotal.toFixed(2)}\n` +
+        `- Total Declarado: R$ ${totalDeclarado.toFixed(2)}`,
+      confirmText: 'Confirmar e Unificar Todos',
+      cancelText: 'Revisar',
+      variant: 'info',
+    });
+
+    if (!confirmou) return;
+
+    setSalvando(true);
+    const allUpdatedRecords: RemessaKanban[] = [];
+
+    try {
+      for (const { local, records } of selectedPdvs) {
+        const pdvNome = local.nome || 'PDV';
+        const primaryRecord = records[records.length - 1];
+
+        const pdvGrade = (primaryRecord.itens_grade || []).map((it) => ({
+          ...it,
+          qtd_retorno: sobrasZeradas ? 0 : Number(it.qtd_retorno) || 0,
+        }));
+
+        const pdvTotalRetorno = sobrasZeradas
+          ? 0
+          : records.reduce((acc, r) => acc + (Number(r.qtd_total_retorno) || 0), 0);
+
+        const pdvDinheiro = records.reduce(
+          (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+          0
+        );
+        const pdvPix = records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
+        const pdvCartao = records.reduce(
+          (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
+          0
+        );
+
+        const pdvFat = records.reduce((acc, r) => {
+          const env = Number(r.qtd_total_enviada) || 0;
+          const ret = sobrasZeradas ? 0 : Number(r.qtd_total_retorno) || 0;
+          const vend = Math.max(0, env - ret);
+          const pr = Number(r.preco_medio_rapido) || 0;
+          const fat =
+            Number(r.faturamento_liquido_esperado) ||
+            Number(r.faturamento_bruto_teorico) ||
+            (pr > 0 ? vend * pr : pdvDinheiro + pdvPix + pdvCartao);
+          return acc + fat;
+        }, 0);
+
+        const pdvPixCartaoEsperado = Math.max(0, pdvFat - pdvDinheiro);
+        const turnosLabel = records.map((r) => formatTurno(r.turno)).join(' + ');
+
+        const totalEnviadaNum = records.reduce(
+          (acc, r) => acc + (Number(r.qtd_total_enviada) || 0),
+          0
+        );
+
+        const payloadPrimary = {
+          qtd_total_retorno: pdvTotalRetorno,
+          qtd_total_enviada: totalEnviadaNum,
+          itens_grade: pdvGrade,
+          valor_dinheiro_gaveta: pdvDinheiro,
+          valor_pix_declarado: pdvPix,
+          valor_cartao_declarado: pdvCartao,
+          faturamento_bruto_teorico: pdvFat,
+          faturamento_liquido_esperado: pdvFat,
+          pix_cartao_esperado: pdvPixCartaoEsperado,
+          tipo_fechamento: 'unificado',
+          observacoes: `Fechamento Unificado em Lote (${records.length} turnos: ${turnosLabel})`,
+          status: 'encerrado',
+          updated_at: new Date().toISOString(),
+        };
+
+        const payloadSecondary = {
+          qtd_total_retorno: 0,
+          valor_dinheiro_gaveta: 0,
+          valor_pix_declarado: 0,
+          valor_cartao_declarado: 0,
+          faturamento_bruto_teorico: 0,
+          faturamento_liquido_esperado: 0,
+          pix_cartao_esperado: 0,
+          tipo_fechamento: 'unificado',
+          observacoes: `Unificado no registro principal (${primaryRecord.id})`,
+          status: 'encerrado',
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: errPrimary } = await supabase
+          .from('remessas_cargas_pdv')
+          .update(payloadPrimary)
+          .eq('id', primaryRecord.id);
+
+        if (errPrimary) throw errPrimary;
+
+        for (const rec of records) {
+          if (rec.id !== primaryRecord.id) {
+            const { error: errSec } = await supabase
+              .from('remessas_cargas_pdv')
+              .update(payloadSecondary)
+              .eq('id', rec.id);
+            if (errSec) console.warn('Erro ao atualizar turno secundário:', errSec);
+          }
+        }
+
+        records.forEach((rec) => {
+          if (rec.id === primaryRecord.id) {
+            allUpdatedRecords.push({ ...rec, ...payloadPrimary });
+          } else {
+            allUpdatedRecords.push({ ...rec, ...payloadSecondary });
+          }
+        });
+      }
+
+      toast({
+        title: '⚡ Unificação em Lote Concluída!',
+        description: `${selectedPdvs.length} PDV(s) unificados com sucesso. Foram avançados para Aguardando Auditoria.`,
+        variant: 'success',
+      });
+
+      onSave(allUpdatedRecords);
+    } catch (err: any) {
+      toast({ title: 'Erro na Unificação em Lote', description: err.message, variant: 'error' });
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+        <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-cyan-300 dark:border-cyan-800 bg-background p-5 shadow-xl space-y-4 animate-scale-up">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-cyan-200 dark:border-cyan-800 pb-3">
+            <div>
+              <h3 className="text-sm font-extrabold uppercase tracking-wider text-cyan-700 dark:text-cyan-300 flex items-center gap-2">
+                <Layers className="h-5 w-5 text-cyan-600" /> Unificação em Lote de PDVs
+              </h3>
+              <p className="text-[11px] font-medium text-text/50 mt-0.5">
+                Fechamento simultâneo de {allPdvs.length} PDV(s) com turnos em Sobras & Caixa
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1 text-text/40 hover:bg-primary/10 hover:text-text transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Banner de Ajuda */}
+          <div className="flex items-center justify-between gap-3 text-xs text-cyan-900 dark:text-cyan-100 bg-cyan-100/60 dark:bg-cyan-950/50 p-3 rounded-xl border border-cyan-300 dark:border-cyan-800">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-cyan-600 shrink-0" />
+              <span>
+                Selecione os PDVs que deseja fechar. Os turnos parciais serão consolidados e
+                enviados para <strong>Aguardando Auditoria</strong>.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="shrink-0 text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300 underline hover:text-cyan-900 dark:hover:text-cyan-100"
+            >
+              {selectedPdvIds.size === allPdvs.length ? 'Desmarcar Todos' : 'Marcar Todos'}
+            </button>
+          </div>
+
+          {/* Seleção por Checkbox por PDV */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-text/70 uppercase tracking-wide">
+              PDVs Pendentes ({selectedPdvs.length} de {allPdvs.length} selecionados):
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1">
+              {allPdvs.map(({ local, records }) => {
+                const isSelected = selectedPdvIds.has(local.id);
+                const din = records.reduce(
+                  (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+                  0
+                );
+                const px = records.reduce(
+                  (acc, r) => acc + (Number(r.valor_pix_declarado) || 0),
+                  0
+                );
+                const car = records.reduce(
+                  (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
+                  0
+                );
+                const tot = din + px + car;
+
+                return (
+                  <label
+                    key={local.id}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
+                      isSelected
+                        ? 'border-cyan-400 bg-cyan-50/80 dark:bg-cyan-950/60 shadow-xs'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 opacity-60'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => togglePdv(local.id)}
+                      className="mt-0.5 h-4 w-4 rounded-md border-cyan-400 text-cyan-600 focus:ring-cyan-500 accent-cyan-600"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase text-cyan-950 dark:text-cyan-100 truncate">
+                          {local.nome}
+                        </span>
+                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-300">
+                          {records.length} {records.length === 1 ? 'turno' : 'turnos'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-mono font-semibold text-text/60 mt-0.5">
+                        Declarado:{' '}
+                        <span className="text-cyan-800 dark:text-cyan-200">
+                          R$ {tot.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Resumo Consolidado do Estoque */}
+          <div className="rounded-xl border border-cyan-200 dark:border-cyan-800/80 bg-cyan-50/40 dark:bg-cyan-950/30 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-cyan-800 dark:text-cyan-200 flex items-center gap-1.5">
+                <Package className="h-4 w-4 text-cyan-600" /> Estoque Consolidado (PDVs
+                Selecionados)
+              </h4>
+              {totalRetorno > 0 && (
+                <button
+                  type="button"
+                  onClick={handleZerarSobras}
+                  className="flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[10px] px-2 py-1 shadow-2xs transition-all active:scale-[0.97]"
+                >
+                  <CheckCircle2 className="h-3 w-3" /> ⚡ Zerar Sobras (Vendeu Tudo)
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="bg-background rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
+                <span className="text-[10px] text-text/50 font-bold block">Enviado</span>
+                <span className="font-mono font-black text-cyan-900 dark:text-cyan-100">
+                  {totalEnviado} un
+                </span>
+              </div>
+              <div className="bg-background rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
+                <span className="text-[10px] text-text/50 font-bold block">Sobras (Retorno)</span>
+                <span
+                  className={`font-mono font-black ${totalRetorno > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+                >
+                  {totalRetorno} un
+                </span>
+              </div>
+              <div className="bg-background rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
+                <span className="text-[10px] text-text/50 font-bold block">Vendido Estimado</span>
+                <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">
+                  {totalVendido} un
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Resumo Financeiro Consolidado */}
+          <div className="rounded-xl border border-cyan-300 dark:border-cyan-800 bg-cyan-100/40 dark:bg-cyan-950/60 p-3 space-y-2">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-cyan-900 dark:text-cyan-100 flex items-center gap-1.5">
+              <DollarSign className="h-4 w-4 text-cyan-600" /> Totais Financeiros Declarados
+            </h4>
+
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="bg-background rounded-lg p-2 border border-cyan-200 dark:border-cyan-800 text-center">
+                <span className="text-[10px] text-text/50 font-bold block">Dinheiro Gaveta</span>
+                <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                  R$ {dinheiroTotal.toFixed(2)}
+                </span>
+              </div>
+              <div className="bg-background rounded-lg p-2 border border-cyan-200 dark:border-cyan-800 text-center">
+                <span className="text-[10px] text-text/50 font-bold block">Pix Declarado</span>
+                <span className="font-mono font-bold text-cyan-700 dark:text-cyan-300">
+                  R$ {pixTotal.toFixed(2)}
+                </span>
+              </div>
+              <div className="bg-background rounded-lg p-2 border border-cyan-200 dark:border-cyan-800 text-center">
+                <span className="text-[10px] text-text/50 font-bold block">Cartão Declarado</span>
+                <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
+                  R$ {cartaoTotal.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between bg-cyan-200/60 dark:bg-cyan-900/50 p-2.5 rounded-lg text-xs font-bold">
+              <span className="text-cyan-950 dark:text-cyan-100">
+                Total Declarado ({selectedPdvs.length} PDVs):
+              </span>
+              <span className="font-mono font-black text-sm text-cyan-950 dark:text-cyan-50">
+                R$ {totalDeclarado.toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          {/* Accordion de Detalhes por PDV */}
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setMostrarDetalhesPdvs(!mostrarDetalhesPdvs)}
+              className="flex items-center justify-between w-full rounded-xl bg-cyan-100/70 dark:bg-cyan-950/60 p-2.5 text-xs font-bold text-cyan-900 dark:text-cyan-100 hover:bg-cyan-200/70 dark:hover:bg-cyan-900 transition-colors border border-cyan-200 dark:border-cyan-800"
+            >
+              <span className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                <span>Ver Detalhes dos PDVs Selecionados ({selectedPdvs.length})</span>
+              </span>
+              <span className="flex items-center gap-1 text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300">
+                {mostrarDetalhesPdvs ? 'Ocultar' : 'Ver Detalhes'}
+                {mostrarDetalhesPdvs ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </span>
+            </button>
+
+            {mostrarDetalhesPdvs && (
+              <div className="space-y-2 max-h-48 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-900/80 rounded-xl border border-slate-200 dark:border-slate-800 animate-fade-in">
+                {selectedPdvs.map(({ local, records }) => {
+                  const din = records.reduce(
+                    (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+                    0
+                  );
+                  const px = records.reduce(
+                    (acc, r) => acc + (Number(r.valor_pix_declarado) || 0),
+                    0
+                  );
+                  const car = records.reduce(
+                    (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
+                    0
+                  );
+                  const tot = din + px + car;
+                  const tNames = records.map((r) => formatTurno(r.turno)).join(', ');
+
+                  return (
+                    <div
+                      key={local.id}
+                      className="rounded-lg bg-background p-2.5 border border-primary/10 space-y-1 text-xs shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between font-bold">
+                        <span className="text-cyan-900 dark:text-cyan-200 uppercase">
+                          {local.nome}
+                        </span>
+                        <span className="text-cyan-700 dark:text-cyan-300 font-mono">
+                          R$ {tot.toFixed(2)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-text/50">
+                        Turnos ({records.length}):{' '}
+                        <span className="font-semibold text-text/80">{tNames}</span>
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Botões do Modal */}
+          <div className="flex gap-2 pt-2 border-t border-primary/10">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={salvando}
+              className="flex-1 rounded-xl border border-primary/20 bg-primary/5 py-2.5 text-xs font-bold text-text/70 hover:bg-primary/10 transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleSalvarUnificacaoEmLote}
+              disabled={salvando || selectedPdvs.length === 0}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 py-2.5 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-50 active:scale-[0.97]"
+            >
+              {salvando ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Unificando{' '}
+                  {selectedPdvs.length} PDVs...
+                </>
+              ) : (
+                <>
+                  <Layers className="h-3.5 w-3.5" /> Concluir Unificação ({selectedPdvs.length}{' '}
+                  PDVs)
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={confirmDialog.handleCancel}
+        onConfirm={confirmDialog.handleConfirm}
+        title={confirmDialog.options.title}
+        message={confirmDialog.options.message}
+        confirmText={confirmDialog.options.confirmText}
+        cancelText={confirmDialog.options.cancelText}
+        variant={confirmDialog.options.variant}
+      />
+    </>
+  );
+}
+
 // ─── Modal Fechamento Unificado PDV ─────────────────────────────────────────
 
 function FechamentoUnificadoPDVModal({
@@ -2879,6 +3434,7 @@ export function PDVKanbanView({
     local: LocalPDV;
     records: RemessaKanban[];
   } | null>(null);
+  const [modalUnificarTodos, setModalUnificarTodos] = useState(false);
   const [modalNovoEnvio, setModalNovoEnvio] = useState(false);
   const [modalRomaneio, setModalRomaneio] = useState<RemessaKanban | null>(null);
   const [modalAuditoriaPDV, setModalAuditoriaPDV] = useState<{
@@ -3029,6 +3585,7 @@ export function PDVKanbanView({
     setModalSobras(null);
     setModalPixCartao(null);
     setModalUnificarPDV(null);
+    setModalUnificarTodos(false);
     setModalAuditoriaPDV(null);
     setModalAuditarTodos(false);
     setModalNovoEnvio(false);
@@ -3094,6 +3651,19 @@ export function PDVKanbanView({
 
         {/* Mini KPIs & Ações Rápidas */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botão Unificar Todos os PDVs (Sobras e Caixa) no Topo */}
+          {pdvsPendentesAgrupados.length >= 1 && (
+            <button
+              type="button"
+              onClick={() => setModalUnificarTodos(true)}
+              className="flex items-center gap-1.5 rounded-xl border-2 border-cyan-400 bg-cyan-600 px-3.5 py-1.5 text-[11px] font-extrabold text-white hover:bg-cyan-700 shadow-sm transition-all active:scale-[0.97]"
+              title="Unificar turnos e fechar todos os PDVs em Sobras e Caixa"
+            >
+              <Layers className="h-4 w-4" /> ⚡ Unificar Todos ({pdvsPendentesAgrupados.length}{' '}
+              PDVs)
+            </button>
+          )}
+
           {/* Botão Auditar Todos os PDVs no Topo */}
           {agrupadosAguardandoAuditoria.length >= 1 && (
             <button
@@ -3243,6 +3813,20 @@ export function PDVKanbanView({
             bgClass="bg-cyan-100/50 dark:bg-cyan-900/30"
             borderClass="border-cyan-300 dark:border-cyan-700"
           />
+
+          {/* BOTÃO FIXO NO TOPO DA COLUNA 3 */}
+          {pdvsPendentesAgrupados.length >= 1 && (
+            <div className="p-3 pb-0">
+              <button
+                type="button"
+                onClick={() => setModalUnificarTodos(true)}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-extrabold text-xs py-2.5 shadow-sm transition-all active:scale-[0.97]"
+              >
+                <Layers className="h-4 w-4" /> ⚡ Unificar Todos os PDVs (
+                {pdvsPendentesAgrupados.length} PDVs)
+              </button>
+            </div>
+          )}
           <div className="p-3 space-y-3 flex-1 overflow-y-auto">
             {/* Banner Unificar Turnos por PDV */}
             {pdvsPendentesAgrupados.map(({ local, records }) => {
@@ -3436,6 +4020,14 @@ export function PDVKanbanView({
           records={modalUnificarPDV.records}
           produtosBase={produtosBase}
           onClose={() => setModalUnificarPDV(null)}
+          onSave={handleRegistroUpdated}
+        />
+      )}
+      {modalUnificarTodos && pdvsPendentesAgrupados.length > 0 && (
+        <UnificarTodosPDVsModal
+          allPdvs={pdvsPendentesAgrupados}
+          produtosBase={produtosBase}
+          onClose={() => setModalUnificarTodos(false)}
           onSave={handleRegistroUpdated}
         />
       )}

@@ -686,7 +686,7 @@ export default function FechamentoDiarioPage() {
       profile?.organization_name ||
       profile?.empresa_nome ||
       profile?.nome_empresa ||
-      'Larissa Saba - Doces Gourmet';
+      'FabriSys';
     const dataAtual = new Date().toLocaleDateString('pt-BR');
 
     const rawLogoUrl =
@@ -694,7 +694,7 @@ export default function FechamentoDiarioPage() {
       profile?.organizations?.logo_url ||
       theme?.company_logo_url ||
       theme?.logo_url ||
-      '/logolarissa.png';
+      '/logo.png';
 
     const logoSrc = rawLogoUrl.startsWith('http')
       ? rawLogoUrl
@@ -805,7 +805,7 @@ export default function FechamentoDiarioPage() {
           </table>
 
           <div class="footer">
-            <p>FabriSys — Larissa Saba Doces Gourmet | Documento gerado automaticamente para conferência financeira.</p>
+            <p>FabriSys — ${nomeEmpresa} | Documento gerado automaticamente para conferência financeira.</p>
           </div>
           <script>
             window.onload = function() { window.print(); }

@@ -87,16 +87,33 @@ export function useOrganization() {
             nome: String(orgData.nome ?? ''),
             plano: String(orgData.plano ?? ''),
             setup_concluido: (orgData.setup_concluido as boolean) ?? true,
+            logo_url: orgData.logo_url ?? undefined,
           };
 
           setOrg(normalized);
         } else if (profile?.organization_id) {
-          setOrg({
-            id: String(profile.organization_id),
-            nome: 'Sua Organização',
-            plano: 'Pro',
-            setup_concluido: true,
-          });
+          const { data: orgRow } = await supabase
+            .from('organizations')
+            .select('id, nome, plano, setup_concluido, logo_url')
+            .eq('id', profile.organization_id)
+            .maybeSingle();
+
+          if (orgRow) {
+            setOrg({
+              id: String(orgRow.id),
+              nome: String(orgRow.nome ?? 'Sua Organização'),
+              plano: String(orgRow.plano ?? 'Pro'),
+              setup_concluido: (orgRow.setup_concluido as boolean) ?? true,
+              logo_url: orgRow.logo_url ?? undefined,
+            });
+          } else {
+            setOrg({
+              id: String(profile.organization_id),
+              nome: 'Sua Organização',
+              plano: 'Pro',
+              setup_concluido: true,
+            });
+          }
         } else {
           setOrg(null);
         }

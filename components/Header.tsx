@@ -140,7 +140,7 @@ export default function Header({ onMenuClick }: Props) {
                     maxHeight: '160px',
                   }}
                   onError={(e) => {
-                    const systemName = theme?.name || 'Larissa Saba - Doces Gourmet';
+                    const systemName = orgName || theme?.name || 'FabriSys';
                     const initials = systemName
                       .split(' ')
                       .map((word) => word[0])
@@ -169,7 +169,7 @@ export default function Header({ onMenuClick }: Props) {
                   minWidth: `${32 * (theme.logo_scale || 1)}px`,
                 }}
               >
-                {(theme?.name || 'LS')
+                {(orgName || theme?.name || 'FabriSys')
                   .split(' ')
                   .map((word) => word[0])
                   .join('')
@@ -183,7 +183,7 @@ export default function Header({ onMenuClick }: Props) {
               theme.logo_url.trim() === '' ||
               theme.logo_url === '/logo.png') && (
               <Text variant="h4" weight="medium">
-                {(orgName ? `${orgName} - ` : '') + (theme?.name || 'Larissa Saba - Doces Gourmet')}
+                {orgName || theme?.name || 'FabriSys'}
               </Text>
             )}
           </div>
@@ -213,18 +213,16 @@ export default function Header({ onMenuClick }: Props) {
           {profile ? (
             <>
               {/* Avatar do usuário (com fallback para iniciais) */}
-              {profile.avatar_url || (profile as any).foto || (profile as any).picture ? (
+              {profile.avatar_url || profile.foto || profile.picture ? (
                 <div className="relative w-9 h-9 rounded-full overflow-hidden bg-slate-100">
                   <Image
                     src={
-                      getImageUrl(
-                        profile.avatar_url || (profile as any).foto || (profile as any).picture
-                      ) ||
+                      getImageUrl(profile.avatar_url || profile.foto || profile.picture) ||
                       profile.avatar_url ||
-                      (profile as any).foto ||
-                      (profile as any).picture
+                      profile.foto ||
+                      profile.picture
                     }
-                    alt={(profile as any).name || profile.email || 'Usuário'}
+                    alt={profile.name || profile.email || 'Usuário'}
                     width={36}
                     height={36}
                     className="object-cover"
@@ -233,7 +231,7 @@ export default function Header({ onMenuClick }: Props) {
                     onError={(e) => {
                       const parent = e.currentTarget.parentElement;
                       if (parent) {
-                        const name = (profile as any).name || profile.email || 'U';
+                        const name = profile.name || profile.email || 'U';
                         const initials = name
                           .split(' ')
                           .map((w: string) => w[0])
@@ -247,7 +245,7 @@ export default function Header({ onMenuClick }: Props) {
                 </div>
               ) : (
                 <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-medium">
-                  {(((profile as any).name || profile.email || 'U') as string)
+                  {((profile.name || profile.email || 'U') as string)
                     .split(' ')
                     .map((w: string) => w[0])
                     .join('')
@@ -258,7 +256,7 @@ export default function Header({ onMenuClick }: Props) {
 
               <div className="hidden sm:flex flex-col text-right">
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                  {(profile as any).name || profile.email}
+                  {profile.name || profile.email}
                 </span>
                 {profile.role && <span className="text-xs text-slate-400">{profile.role}</span>}
               </div>

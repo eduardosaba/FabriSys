@@ -493,7 +493,7 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
     } else if (theme?.logo_url) {
       url = getImageUrl(theme.logo_url);
     } else {
-      url = '/logolarissa.png';
+      url = '/logo.png';
     }
 
     const isCompany = url ? !url.toLowerCase().endsWith('/logo.png') && url !== '/logo.png' : false;

@@ -32,7 +32,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const defaultTheme: ThemeSettings = {
-  name: 'Larissa Saba - Doces Gourmet',
+  name: 'FabriSys - Gestão Comercial e Industrial',
   logo_url: '/logo.png',
   logo_scale: 1.0,
   company_logo_url: undefined,
@@ -41,7 +41,7 @@ const defaultTheme: ThemeSettings = {
   border_radius: '0.5rem',
   theme_mode: 'light' as const,
   density: 'comfortable' as const,
-  footer_company_name: 'Larissa Saba - Doces Gourmet',
+  footer_company_name: 'FabriSys',
   footer_system_version: '1.0.0',
   sidebar_bg: '#e9c4c2',
   sidebar_hover_bg: '#88544c',

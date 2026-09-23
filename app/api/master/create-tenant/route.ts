@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       throw new Error('Usuário criado no auth sem id retornado');
     }
 
-    // 3. Criar o Perfil do Colaborador vinculado à Empresa
+    // 3. Criar o Perfil do Colaborador e o Perfil Principal vinculados à Empresa
     type _ColabRow = { id: string };
     const { error: profileError } = await supabaseAdmin.from('colaboradores').upsert({
       id: userId,
@@ -83,6 +83,24 @@ export async function POST(request: Request) {
       ativo: true,
       status_conta: 'ativo',
     });
+
+    if (!profileError) {
+      try {
+        await supabaseAdmin.from('profiles').upsert({
+          id: userId,
+          nome: adminNome ?? '',
+          full_name: adminNome ?? '',
+          email: adminEmail,
+          role: 'admin',
+          organization_id: org.id,
+          ativo: true,
+          status_conta: 'ativo',
+          updated_at: new Date().toISOString(),
+        });
+      } catch (profErr) {
+        console.warn('Aviso ao sincronizar tabela profiles:', profErr);
+      }
+    }
 
     if (profileError) {
       // Se for duplicidade no email, devolve mensagem clara e faz cleanup

@@ -184,16 +184,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               status_conta: prof.status_conta ?? baseProfile?.status_conta ?? undefined,
             } as Profile & { organizations?: any };
 
-            // Se o perfil não possuir organization_id vinculado, resgata a organização principal
-            if (!profileData.organization_id) {
+            // Se o perfil não possuir organization_id vinculado no profiles, tenta resgatar via colaboradores
+            if (!profileData.organization_id && (profileData.email || userEmail)) {
               try {
-                const { data: mainOrg } = await supabase
-                  .from('organizations')
-                  .select('id')
-                  .limit(1)
+                const emailToSearch = profileData.email || userEmail;
+                const { data: colabOrg } = await supabase
+                  .from('colaboradores')
+                  .select('organization_id')
+                  .eq('email', emailToSearch)
                   .maybeSingle();
-                if (mainOrg?.id) {
-                  profileData.organization_id = mainOrg.id;
+                if (colabOrg?.organization_id) {
+                  profileData.organization_id = colabOrg.organization_id;
                 }
               } catch (e) {
                 void e;

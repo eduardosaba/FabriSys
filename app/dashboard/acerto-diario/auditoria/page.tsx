@@ -141,7 +141,9 @@ export default function AuditoriaPDVPage() {
   const [tipoPeriodo, setTipoPeriodo] = useState<
     'dia' | 'mes' | 'trimestre' | 'semestre' | 'personalizado'
   >('dia');
-  const [presetAtivo, setPresetAtivo] = useState<'hoje' | 'ontem' | '7dias' | 'mes' | 'custom'>('hoje');
+  const [presetAtivo, setPresetAtivo] = useState<'hoje' | 'ontem' | '7dias' | 'mes' | 'custom'>(
+    'hoje'
+  );
   const [filtroPDV, setFiltroPDV] = useState<string>('todos');
   const [graficoModo, setGraficoModo] = useState<'evolucao' | 'pdv'>('evolucao');
   const [tipoGraficoVisual, setTipoGraficoVisual] = useState<'barras' | 'linhas' | 'area'>(
@@ -524,7 +526,7 @@ export default function AuditoriaPDVPage() {
       profile?.organization_name ||
       profile?.empresa_nome ||
       profile?.nome_empresa ||
-      'Larissa Saba - Confeitaria Gourmet';
+      'FabriSys';
     const dataAtual = new Date().toLocaleDateString('pt-BR');
 
     const rawLogoUrl =
@@ -532,7 +534,7 @@ export default function AuditoriaPDVPage() {
       profile?.organizations?.logo_url ||
       theme?.company_logo_url ||
       theme?.logo_url ||
-      '/logolarissa.png';
+      '/logo.png';
 
     const logoSrc = rawLogoUrl.startsWith('http')
       ? rawLogoUrl
@@ -757,8 +759,10 @@ export default function AuditoriaPDVPage() {
   // Meios de pagamento em porcentagem
   const totalFormasCalculadas = faturamentoTotalLiquido > 0 ? faturamentoTotalLiquido : 1;
   const pctDinheiro = (totalDinheiroGaveta / totalFormasCalculadas) * 100;
-  const pctPix = ((totalPixDeclarado || totalPixCartaoEsperado * 0.45) / totalFormasCalculadas) * 100;
-  const pctCartao = ((totalCartaoDeclarado || totalPixCartaoEsperado * 0.55) / totalFormasCalculadas) * 100;
+  const pctPix =
+    ((totalPixDeclarado || totalPixCartaoEsperado * 0.45) / totalFormasCalculadas) * 100;
+  const pctCartao =
+    ((totalCartaoDeclarado || totalPixCartaoEsperado * 0.55) / totalFormasCalculadas) * 100;
 
   // --- PREPARAÇÃO DE DADOS PARA GRÁFICOS ---
 
@@ -882,11 +886,13 @@ export default function AuditoriaPDVPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-black text-text/90 tracking-tight flex items-center gap-2">
-              <Sparkles className="h-6 w-6 text-primary" /> Cockpit Estratégico de Auditoria & Sobras
+              <Sparkles className="h-6 w-6 text-primary" /> Cockpit Estratégico de Auditoria &
+              Sobras
             </h1>
           </div>
           <p className="text-sm font-medium text-text/50 mt-1">
-            Gestão inteligente da confeitaria: faturamento, raio-x financeiro, giro de produção e comparativo por PDV.
+            Gestão inteligente da confeitaria: faturamento, raio-x financeiro, giro de produção e
+            comparativo por PDV.
           </p>
         </div>
 
@@ -1135,7 +1141,8 @@ export default function AuditoriaPDVPage() {
             <span className="text-sm font-bold text-purple-800/60">un</span>
           </p>
           <p className="text-[11px] font-semibold text-purple-800/70 dark:text-purple-400/80">
-            Giro médio: <strong className="font-mono">{taxaGiroPercentual.toFixed(1)}%</strong> da carga
+            Giro médio: <strong className="font-mono">{taxaGiroPercentual.toFixed(1)}%</strong> da
+            carga
           </p>
         </div>
 
@@ -1154,7 +1161,8 @@ export default function AuditoriaPDVPage() {
             <span className="text-sm font-bold text-amber-800/60">un</span>
           </p>
           <p className="text-[11px] font-semibold text-amber-800/70 dark:text-amber-400/80">
-            Taxa de Devolução: <strong className="font-mono">{taxaSobraPercentual.toFixed(1)}%</strong>
+            Taxa de Devolução:{' '}
+            <strong className="font-mono">{taxaSobraPercentual.toFixed(1)}%</strong>
           </p>
         </div>
 
@@ -1169,7 +1177,9 @@ export default function AuditoriaPDVPage() {
           <div className="flex items-center justify-between">
             <span
               className={`text-xs font-extrabold uppercase tracking-wider ${
-                totalFurosDeCaixa !== 0 ? 'text-rose-800 dark:text-rose-300' : 'text-emerald-800 dark:text-emerald-300'
+                totalFurosDeCaixa !== 0
+                  ? 'text-rose-800 dark:text-rose-300'
+                  : 'text-emerald-800 dark:text-emerald-300'
               }`}
             >
               Furo / Divergência
@@ -1186,7 +1196,11 @@ export default function AuditoriaPDVPage() {
           </div>
           <p
             className={`font-mono text-3xl font-black ${
-              totalFurosDeCaixa < 0 ? 'text-rose-600' : totalFurosDeCaixa > 0 ? 'text-emerald-600' : 'text-emerald-600'
+              totalFurosDeCaixa < 0
+                ? 'text-rose-600'
+                : totalFurosDeCaixa > 0
+                  ? 'text-emerald-600'
+                  : 'text-emerald-600'
             }`}
           >
             R${' '}
@@ -1196,7 +1210,9 @@ export default function AuditoriaPDVPage() {
             })}
           </p>
           <p className="text-[11px] font-semibold text-text/50">
-            {totalFurosDeCaixa === 0 ? '✅ Caixas 100% batidos' : 'Diferença apurada nas auditorias'}
+            {totalFurosDeCaixa === 0
+              ? '✅ Caixas 100% batidos'
+              : 'Diferença apurada nas auditorias'}
           </p>
         </div>
       </div>
@@ -1256,7 +1272,8 @@ export default function AuditoriaPDVPage() {
         <div className="space-y-3 lg:col-span-2 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-primary/10 pb-3">
             <h3 className="text-xs font-extrabold uppercase tracking-wider text-text/80 flex items-center gap-2">
-              <Banknote className="h-4 w-4 text-emerald-600" /> Conciliação de Recebimentos em Espécie e Digital
+              <Banknote className="h-4 w-4 text-emerald-600" /> Conciliação de Recebimentos em
+              Espécie e Digital
             </h3>
             <span className="text-xs font-mono font-bold text-text/50">
               Total: R$ {faturamentoTotalLiquido.toFixed(2)}
@@ -1293,7 +1310,11 @@ export default function AuditoriaPDVPage() {
                 </span>
               </div>
               <p className="font-mono text-xl font-black text-purple-700 dark:text-purple-300">
-                R$ {(totalPixDeclarado > 0 ? totalPixDeclarado : totalPixCartaoEsperado * 0.45).toFixed(2)}
+                R${' '}
+                {(totalPixDeclarado > 0
+                  ? totalPixDeclarado
+                  : totalPixCartaoEsperado * 0.45
+                ).toFixed(2)}
               </p>
               <p className="text-[10px] text-purple-800/70 dark:text-purple-400">
                 Verificado em extratos bancários
@@ -1311,7 +1332,11 @@ export default function AuditoriaPDVPage() {
                 </span>
               </div>
               <p className="font-mono text-xl font-black text-cyan-700 dark:text-cyan-300">
-                R$ {(totalCartaoDeclarado > 0 ? totalCartaoDeclarado : totalPixCartaoEsperado * 0.55).toFixed(2)}
+                R${' '}
+                {(totalCartaoDeclarado > 0
+                  ? totalCartaoDeclarado
+                  : totalPixCartaoEsperado * 0.55
+                ).toFixed(2)}
               </p>
               <p className="text-[10px] text-cyan-800/70 dark:text-cyan-400">
                 Transacionado nas maquininhas POS
@@ -1326,7 +1351,8 @@ export default function AuditoriaPDVPage() {
                 <ShieldCheck className="h-4 w-4 text-emerald-400" /> Conciliação Bancária dos Turnos
               </span>
               <span className="font-mono font-bold text-emerald-400">
-                {percentualAuditado.toFixed(0)}% Auditado ({turnosAuditados} de {totalTurnos} turnos)
+                {percentualAuditado.toFixed(0)}% Auditado ({turnosAuditados} de {totalTurnos}{' '}
+                turnos)
               </span>
             </div>
             <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
@@ -1416,11 +1442,10 @@ export default function AuditoriaPDVPage() {
                 <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">
                   Alta Devolução ({produtosAlertaSobra[0].sobraRate.toFixed(1)}% sobra)
                 </span>
-                <h4 className="text-base font-black text-text/90">
-                  {produtosAlertaSobra[0].nome}
-                </h4>
+                <h4 className="text-base font-black text-text/90">{produtosAlertaSobra[0].nome}</h4>
                 <p className="font-mono text-sm font-bold text-rose-600">
-                  {produtosAlertaSobra[0].qtdEnviada - produtosAlertaSobra[0].qtdVendida} un sobraram de {produtosAlertaSobra[0].qtdEnviada} enviadas
+                  {produtosAlertaSobra[0].qtdEnviada - produtosAlertaSobra[0].qtdVendida} un
+                  sobraram de {produtosAlertaSobra[0].qtdEnviada} enviadas
                 </p>
               </div>
 
@@ -1429,13 +1454,16 @@ export default function AuditoriaPDVPage() {
                   💡 Ação Gerencial Recomendada:
                 </p>
                 <p>
-                  Sinalizar para a cozinha <strong>reduzir a fornada de {produtosAlertaSobra[0].nome}</strong> ou remanejar a carga para um quiosque com maior demanda.
+                  Sinalizar para a cozinha{' '}
+                  <strong>reduzir a fornada de {produtosAlertaSobra[0].nome}</strong> ou remanejar a
+                  carga para um quiosque com maior demanda.
                 </p>
               </div>
             </div>
           ) : (
             <div className="flex h-40 items-center justify-center text-center text-xs text-emerald-800 dark:text-emerald-300 font-semibold p-4">
-              ✅ Nenhuma sobra excessiva registrada no período! Giro de estoque 100% eficiente na produção.
+              ✅ Nenhuma sobra excessiva registrada no período! Giro de estoque 100% eficiente na
+              produção.
             </div>
           )}
         </div>
@@ -1557,7 +1585,13 @@ export default function AuditoriaPDVPage() {
                       margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                     >
                       <defs>
-                        <linearGradient id="colorFaturamentoAreaAuditoria" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient
+                          id="colorFaturamentoAreaAuditoria"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
                           <stop offset="5%" stopColor="#2563eb" stopOpacity={0.8} />
                           <stop offset="95%" stopColor="#2563eb" stopOpacity={0.05} />
                         </linearGradient>
@@ -1606,12 +1640,7 @@ export default function AuditoriaPDVPage() {
                   margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
                 >
                   <XAxis type="number" hide />
-                  <YAxis
-                    dataKey="nome"
-                    type="category"
-                    tick={{ fontSize: 10 }}
-                    width={100}
-                  />
+                  <YAxis dataKey="nome" type="category" tick={{ fontSize: 10 }} width={100} />
                   <Tooltip
                     formatter={(value: any) => [`${value} un`, 'Quantidade Vendida']}
                     contentStyle={{ borderRadius: '12px', fontSize: '12px' }}
@@ -1628,7 +1657,8 @@ export default function AuditoriaPDVPage() {
       <div className="space-y-4 rounded-2xl border border-primary/10 bg-background p-5 shadow-sm">
         <div className="flex items-center justify-between border-b border-primary/10 pb-3">
           <h2 className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-text/80">
-            <Store className="h-4 w-4 text-primary" /> Comparativo de Desempenho por Ponto de Venda (PDVs)
+            <Store className="h-4 w-4 text-primary" /> Comparativo de Desempenho por Ponto de Venda
+            (PDVs)
           </h2>
           <span className="text-xs font-bold text-primary">
             {resumoPDVs.length} ponto(s) comparado(s)
@@ -1701,9 +1731,7 @@ export default function AuditoriaPDVPage() {
                   </div>
                   <div className="flex justify-between">
                     <span>Ticket Médio / Peça:</span>
-                    <span className="font-mono font-semibold">
-                      R$ {ticketPdv.toFixed(2)}
-                    </span>
+                    <span className="font-mono font-semibold">R$ {ticketPdv.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Diferença Acumulada:</span>
@@ -1818,13 +1846,19 @@ export default function AuditoriaPDVPage() {
                         </span>
                       </td>
                       <td className="p-3 text-text/70">
-                        <span className="block font-bold capitalize">{reg.turno || 'Integral'}</span>
-                        <span className="block text-[10px] text-text/50">{reg.vendedor_nome || '—'}</span>
+                        <span className="block font-bold capitalize">
+                          {reg.turno || 'Integral'}
+                        </span>
+                        <span className="block text-[10px] text-text/50">
+                          {reg.vendedor_nome || '—'}
+                        </span>
                       </td>
                       <td className="p-3 text-center font-mono">
                         <span className="text-text/50">{reg.qtd_total_enviada || 0}</span> /{' '}
-                        <span className="text-amber-600 font-bold">{reg.qtd_total_retorno || 0}</span> /{' '}
-                        <span className="font-bold text-primary">{vend}</span>
+                        <span className="text-amber-600 font-bold">
+                          {reg.qtd_total_retorno || 0}
+                        </span>{' '}
+                        / <span className="font-bold text-primary">{vend}</span>
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-text/90">
                         R$ {Number(reg.faturamento_liquido_esperado || 0).toFixed(2)}
@@ -1837,7 +1871,9 @@ export default function AuditoriaPDVPage() {
                       </td>
                       <td
                         className={`p-3 text-right font-mono font-bold ${
-                          Number(reg.diferenca_auditoria || 0) < 0 ? 'text-rose-600' : 'text-emerald-600'
+                          Number(reg.diferenca_auditoria || 0) < 0
+                            ? 'text-rose-600'
+                            : 'text-emerald-600'
                         }`}
                       >
                         R$ {Number(reg.diferenca_auditoria || 0).toFixed(2)}

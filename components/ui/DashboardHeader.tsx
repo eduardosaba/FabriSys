@@ -95,7 +95,7 @@ export default function DashboardHeader({
     ) {
       url = getImageUrl(theme.logo_url) || theme.logo_url;
     } else {
-      url = '/logolarissa.png';
+      url = '/logo.png';
     }
 
     const isCompany = url ? !url.toLowerCase().endsWith('/logo.png') && url !== '/logo.png' : false;

@@ -2376,6 +2376,30 @@ function UnificarTodosPDVsModal({
   const [sobrasZeradas, setSobrasZeradas] = useState(false);
   const [mostrarDetalhesPdvs, setMostrarDetalhesPdvs] = useState(false);
 
+  // Modo de preenchimento: 'global' (Padrão para extrato único) ou 'individual' (Por PDV)
+  const [modoPreenchimento, setModoPreenchimento] = useState<'global' | 'individual'>('global');
+  const [modoDinheiro, setModoDinheiro] = useState<'por_pdv' | 'global'>('por_pdv');
+
+  // Inicialização de Totais Globais
+  const initialPixSum = allPdvs.reduce(
+    (acc, p) => acc + p.records.reduce((rAcc, r) => rAcc + (Number(r.valor_pix_declarado) || 0), 0),
+    0
+  );
+  const initialCartaoSum = allPdvs.reduce(
+    (acc, p) =>
+      acc + p.records.reduce((rAcc, r) => rAcc + (Number(r.valor_cartao_declarado) || 0), 0),
+    0
+  );
+  const initialDinheiroSum = allPdvs.reduce(
+    (acc, p) =>
+      acc + p.records.reduce((rAcc, r) => rAcc + (Number(r.valor_dinheiro_gaveta) || 0), 0),
+    0
+  );
+
+  const [globalPix, setGlobalPix] = useState<number>(initialPixSum);
+  const [globalCartao, setGlobalCartao] = useState<number>(initialCartaoSum);
+  const [globalDinheiro, setGlobalDinheiro] = useState<number>(initialDinheiroSum);
+
   // Todos os PDVs começam selecionados
   const [selectedPdvIds, setSelectedPdvIds] = useState<Set<string>>(
     () => new Set(allPdvs.map((p) => p.local.id))
@@ -2428,6 +2452,93 @@ function UnificarTodosPDVsModal({
       },
     }));
   };
+
+  // Funções para estimativa de faturamento por PDV
+  const getPdvEstRevenue = useCallback(
+    (p: { local: LocalPDV; records: RemessaKanban[] }) => {
+      let total = 0;
+      p.records.forEach((r) => {
+        if (Array.isArray(r.itens_grade) && r.itens_grade.length > 0) {
+          r.itens_grade.forEach((it) => {
+            const env = Number(it.qtd_sobra_anterior || 0) + Number(it.qtd_enviada || 0);
+            const ret = sobrasZeradas ? 0 : Number(it.qtd_retorno || 0);
+            const vend = Math.max(0, env - ret);
+            const pr = Number(it.preco_unitario || 0);
+            total += vend * pr;
+          });
+        } else {
+          const env = Number(r.qtd_total_enviada || 0);
+          const ret = sobrasZeradas ? 0 : Number(r.qtd_total_retorno || 0);
+          const vend = Math.max(0, env - ret);
+          const pr = Number(r.preco_medio_rapido || 0);
+          total += vend * pr;
+        }
+      });
+      return total;
+    },
+    [sobrasZeradas]
+  );
+
+  // Efeito de Rateio Proporcional Automático no Modo Global
+  useEffect(() => {
+    if (modoPreenchimento !== 'global' || selectedPdvs.length === 0) return;
+
+    // Faturamento estimado total dos PDVs selecionados
+    const pdvRevenues = selectedPdvs.map((p) => ({
+      localId: p.local.id,
+      est: getPdvEstRevenue(p),
+    }));
+
+    const totalRevenueSum = pdvRevenues.reduce((acc, x) => acc + x.est, 0);
+
+    const newFinancials: Record<string, { dinheiro: number; pix: number; cartao: number }> = {};
+
+    let accumulatedPix = 0;
+    let accumulatedCartao = 0;
+    let accumulatedDinheiro = 0;
+
+    pdvRevenues.forEach(({ localId, est }, index) => {
+      const isLast = index === pdvRevenues.length - 1;
+      const ratio = totalRevenueSum > 0 ? est / totalRevenueSum : 1 / pdvRevenues.length;
+
+      let pPix = Math.floor(globalPix * ratio * 100) / 100;
+      let pCartao = Math.floor(globalCartao * ratio * 100) / 100;
+      let pDin =
+        modoDinheiro === 'global'
+          ? Math.floor(globalDinheiro * ratio * 100) / 100
+          : pdvFinancials[localId]?.dinheiro || 0;
+
+      if (isLast) {
+        pPix = Math.max(0, Math.round((globalPix - accumulatedPix) * 100) / 100);
+        pCartao = Math.max(0, Math.round((globalCartao - accumulatedCartao) * 100) / 100);
+        if (modoDinheiro === 'global') {
+          pDin = Math.max(0, Math.round((globalDinheiro - accumulatedDinheiro) * 100) / 100);
+        }
+      } else {
+        accumulatedPix += pPix;
+        accumulatedCartao += pCartao;
+        if (modoDinheiro === 'global') {
+          accumulatedDinheiro += pDin;
+        }
+      }
+
+      newFinancials[localId] = { dinheiro: pDin, pix: pPix, cartao: pCartao };
+    });
+
+    setPdvFinancials((prev) => ({
+      ...prev,
+      ...newFinancials,
+    }));
+  }, [
+    modoPreenchimento,
+    globalPix,
+    globalCartao,
+    globalDinheiro,
+    modoDinheiro,
+    selectedPdvIds,
+    sobrasZeradas,
+    getPdvEstRevenue,
+  ]);
 
   const selectionKey = Array.from(selectedPdvIds).sort().join('|');
 
@@ -2520,6 +2631,7 @@ function UnificarTodosPDVsModal({
       title: `Unificar ${selectedPdvs.length} PDV(s) em Sobras & Caixa`,
       message:
         `Confirma o fechamento unificado de ${selectedPdvs.length} PDV(s) (${selectedRecords.length} turnos)?\n\n` +
+        `- Modo: ${modoPreenchimento === 'global' ? 'Lote Unificado Global (Extrato Único)' : 'Detalhado Por PDV'}\n` +
         `- Sobras Totais: ${totalRetorno} un\n` +
         `- Dinheiro Gaveta: R$ ${dinheiroTotal.toFixed(2)}\n` +
         `- Pix Declarado: R$ ${pixTotal.toFixed(2)}\n` +
@@ -2585,7 +2697,7 @@ function UnificarTodosPDVsModal({
           faturamento_liquido_esperado: pdvFat,
           pix_cartao_esperado: pdvPixCartaoEsperado,
           tipo_fechamento: 'unificado',
-          observacoes: `Fechamento Unificado em Lote (${records.length} turnos: ${turnosLabel})`,
+          observacoes: `Fechamento Unificado em Lote (${records.length} turnos: ${turnosLabel}) - Modo ${modoPreenchimento.toUpperCase()}`,
           status: 'encerrado',
           updated_at: new Date().toISOString(),
         };
@@ -2632,7 +2744,7 @@ function UnificarTodosPDVsModal({
 
       toast({
         title: '⚡ Unificação em Lote Concluída!',
-        description: `${selectedPdvs.length} PDV(s) unificados com sucesso. Foram avançados para Aguardando Auditoria.`,
+        description: `${selectedPdvs.length} PDV(s) unificados com sucesso no modo ${modoPreenchimento === 'global' ? 'Global' : 'Individual'}. Avançados para Aguardando Auditoria.`,
         variant: 'success',
       });
 
@@ -2643,6 +2755,9 @@ function UnificarTodosPDVsModal({
       setSalvando(false);
     }
   };
+
+  // Faturamento estimado acumulado para calculo da % de cada PDV
+  const totalEstSalesAllSelected = selectedPdvs.reduce((acc, p) => acc + getPdvEstRevenue(p), 0);
 
   return (
     <>
@@ -2655,7 +2770,7 @@ function UnificarTodosPDVsModal({
                 <Layers className="h-5 w-5 text-cyan-600" /> Unificação em Lote de PDVs
               </h3>
               <p className="text-[11px] font-medium text-text/50 mt-0.5">
-                Preenchimento de caixa e fechamento simultâneo de {allPdvs.length} PDV(s)
+                Fechamento simultâneo de {allPdvs.length} PDV(s) em Sobras & Caixa
               </p>
             </div>
             <button
@@ -2667,35 +2782,148 @@ function UnificarTodosPDVsModal({
             </button>
           </div>
 
-          {/* Banner de Ajuda */}
-          <div className="flex items-center justify-between gap-3 text-xs text-cyan-900 dark:text-cyan-100 bg-cyan-100/60 dark:bg-cyan-950/50 p-3 rounded-xl border border-cyan-300 dark:border-cyan-800">
-            <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-cyan-600 shrink-0" />
-              <span>
-                Informe os valores de <strong>Dinheiro</strong>, <strong>Pix</strong> e{' '}
-                <strong>Cartão</strong> para cada PDV e selecione os que deseja fechar para
-                enviá-los para <strong>Aguardando Auditoria</strong>.
-              </span>
-            </div>
+          {/* Seletor de Modo de Preenchimento */}
+          <div className="bg-cyan-50 dark:bg-cyan-950/60 p-1.5 rounded-xl border border-cyan-200 dark:border-cyan-800 flex items-center gap-2">
             <button
               type="button"
-              onClick={toggleAll}
-              className="shrink-0 text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300 underline hover:text-cyan-900 dark:hover:text-cyan-100"
+              onClick={() => setModoPreenchimento('global')}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-black uppercase tracking-wide transition-all flex items-center justify-center gap-2 ${
+                modoPreenchimento === 'global'
+                  ? 'bg-cyan-600 text-white shadow-sm'
+                  : 'text-cyan-900 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/50'
+              }`}
             >
-              {selectedPdvIds.size === allPdvs.length ? 'Desmarcar Todos' : 'Marcar Todos'}
+              <Layers className="h-4 w-4" /> ⚡ Modo Global Unificado (Extrato Único)
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoPreenchimento('individual')}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-black uppercase tracking-wide transition-all flex items-center justify-center gap-2 ${
+                modoPreenchimento === 'individual'
+                  ? 'bg-cyan-600 text-white shadow-sm'
+                  : 'text-cyan-900 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/50'
+              }`}
+            >
+              <Store className="h-4 w-4" /> 📋 Modo Detalhado por PDV
             </button>
           </div>
 
-          {/* Seleção e Preenchimento Financeiro por PDV */}
+          {/* Banner Informativo por Modo */}
+          {modoPreenchimento === 'global' ? (
+            <div className="space-y-3 bg-cyan-100/70 dark:bg-cyan-950/70 p-3.5 rounded-xl border border-cyan-300 dark:border-cyan-800 text-xs">
+              <div className="flex items-start gap-2 text-cyan-950 dark:text-cyan-100 font-semibold">
+                <Layers className="h-4 w-4 text-cyan-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Valores Consolidados do Extrato do Dia:</strong> Digite os totais gerais
+                  de <strong>Pix</strong> e <strong>Cartão</strong> do seu extrato/maquininha. O
+                  sistema fará o rateio inteligente entre os {selectedPdvs.length} PDVs selecionados
+                  com base no volume de vendas estimado de cada um.
+                </span>
+              </div>
+
+              {/* Inputs Globais */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="bg-background/90 p-2.5 rounded-xl border border-cyan-200 dark:border-cyan-800 shadow-2xs">
+                  <label className="text-[10px] font-extrabold uppercase text-cyan-800 dark:text-cyan-300 flex items-center gap-1 mb-1">
+                    <Smartphone className="h-3.5 w-3.5 text-cyan-600" /> Pix Total (Todos PDVs)
+                  </label>
+                  <BRLCurrencyInput
+                    value={globalPix}
+                    onChange={(val) => setGlobalPix(val)}
+                    className="w-full text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div className="bg-background/90 p-2.5 rounded-xl border border-cyan-200 dark:border-cyan-800 shadow-2xs">
+                  <label className="text-[10px] font-extrabold uppercase text-indigo-800 dark:text-indigo-300 flex items-center gap-1 mb-1">
+                    <CreditCard className="h-3.5 w-3.5 text-indigo-600" /> Cartão Total (Todos PDVs)
+                  </label>
+                  <BRLCurrencyInput
+                    value={globalCartao}
+                    onChange={(val) => setGlobalCartao(val)}
+                    className="w-full text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div className="bg-background/90 p-2.5 rounded-xl border border-cyan-200 dark:border-cyan-800 shadow-2xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-extrabold uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                      <Banknote className="h-3.5 w-3.5 text-emerald-600" /> Dinheiro Gaveta
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setModoDinheiro((prev) => (prev === 'global' ? 'por_pdv' : 'global'))
+                      }
+                      className="text-[9px] font-bold text-cyan-700 dark:text-cyan-300 underline hover:text-cyan-900"
+                    >
+                      {modoDinheiro === 'global' ? 'Informar por PDV' : 'Usar Total Global'}
+                    </button>
+                  </div>
+
+                  {modoDinheiro === 'global' ? (
+                    <BRLCurrencyInput
+                      value={globalDinheiro}
+                      onChange={(val) => setGlobalDinheiro(val)}
+                      className="w-full text-xs font-mono font-bold"
+                    />
+                  ) : (
+                    <div className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 pt-1.5">
+                      💵 Preencher gaveta física por PDV abaixo
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3 text-xs text-cyan-900 dark:text-cyan-100 bg-cyan-100/60 dark:bg-cyan-950/50 p-3 rounded-xl border border-cyan-300 dark:border-cyan-800">
+              <div className="flex items-center gap-2">
+                <Store className="h-4 w-4 text-cyan-600 shrink-0" />
+                <span>
+                  <strong>Modo Detalhado:</strong> Informe manualmente os valores de Dinheiro, Pix e
+                  Cartão individualmente para cada PDV.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="shrink-0 text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300 underline hover:text-cyan-900 dark:hover:text-cyan-100"
+              >
+                {selectedPdvIds.size === allPdvs.length ? 'Desmarcar Todos' : 'Marcar Todos'}
+              </button>
+            </div>
+          )}
+
+          {/* Lista e Seleção de PDVs */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold text-text/70 uppercase tracking-wide">
-              PDVs Pendentes ({selectedPdvs.length} de {allPdvs.length} selecionados):
-            </h4>
-            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-              {allPdvs.map(({ local, records }) => {
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-text/70 uppercase tracking-wide">
+                PDVs Incluídos na Unificação ({selectedPdvs.length} de {allPdvs.length}{' '}
+                selecionados):
+              </h4>
+              {modoPreenchimento === 'global' && (
+                <button
+                  type="button"
+                  onClick={toggleAll}
+                  className="text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300 underline hover:text-cyan-900"
+                >
+                  {selectedPdvIds.size === allPdvs.length ? 'Desmarcar Todos' : 'Marcar Todos'}
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+              {allPdvs.map((pdvObj) => {
+                const { local, records } = pdvObj;
                 const isSelected = selectedPdvIds.has(local.id);
                 const fin = pdvFinancials[local.id] || { dinheiro: 0, pix: 0, cartao: 0 };
                 const totPdv = fin.dinheiro + fin.pix + fin.cartao;
+
+                const estRevenue = getPdvEstRevenue(pdvObj);
+                const pctShare =
+                  totalEstSalesAllSelected > 0
+                    ? (estRevenue / totalEstSalesAllSelected) * 100
+                    : 100 / selectedPdvs.length;
 
                 return (
                   <div
@@ -2706,8 +2934,8 @@ function UnificarTodosPDVsModal({
                         : 'border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 opacity-70'
                     }`}
                   >
-                    {/* Header do Card do PDV com Checkbox */}
-                    <div className="flex items-center justify-between mb-2">
+                    {/* Header do Card com Checkbox */}
+                    <div className="flex items-center justify-between mb-1">
                       <label className="flex items-center gap-2.5 cursor-pointer select-none">
                         <input
                           type="checkbox"
@@ -2723,49 +2951,103 @@ function UnificarTodosPDVsModal({
                         </span>
                       </label>
 
-                      <div className="text-xs font-mono font-bold text-cyan-900 dark:text-cyan-100">
-                        Total PDV:{' '}
-                        <span className="text-emerald-700 dark:text-emerald-300">
-                          R$ {totPdv.toFixed(2)}
+                      <div className="flex items-center gap-3 text-xs">
+                        {modoPreenchimento === 'global' && isSelected && (
+                          <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-100 dark:bg-cyan-900/80 px-2 py-0.5 rounded-md">
+                            Rateio: {pctShare.toFixed(1)}%
+                          </span>
+                        )}
+                        <span className="font-mono font-black text-emerald-700 dark:text-emerald-300">
+                          Total PDV: R$ {totPdv.toFixed(2)}
                         </span>
                       </div>
                     </div>
 
-                    {/* Inputs de Dinheiro, Pix e Cartão (Preenchimento direto) */}
+                    {/* Exibição / Preenchimento no Modo Global vs Individual */}
                     {isSelected && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 pt-2 border-t border-cyan-200/60 dark:border-cyan-800/60 animate-fade-in">
-                        <div>
-                          <label className="text-[10px] font-extrabold uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1 mb-1">
-                            <Banknote className="h-3.5 w-3.5 text-emerald-600" /> Dinheiro Gaveta
-                          </label>
-                          <BRLCurrencyInput
-                            value={fin.dinheiro}
-                            onChange={(val) => updatePdvFinancial(local.id, 'dinheiro', val)}
-                            className="w-full text-xs font-mono py-1.5"
-                          />
-                        </div>
+                      <div className="mt-2 pt-2 border-t border-cyan-200/60 dark:border-cyan-800/60">
+                        {modoPreenchimento === 'global' ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                            {/* Se dinheiro for por PDV, mostra input físico no card */}
+                            {modoDinheiro === 'por_pdv' ? (
+                              <div>
+                                <label className="text-[10px] font-extrabold uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1 mb-1">
+                                  <Banknote className="h-3.5 w-3.5 text-emerald-600" /> Dinheiro
+                                  Gaveta
+                                </label>
+                                <BRLCurrencyInput
+                                  value={fin.dinheiro}
+                                  onChange={(val) => updatePdvFinancial(local.id, 'dinheiro', val)}
+                                  className="w-full text-xs font-mono py-1"
+                                />
+                              </div>
+                            ) : (
+                              <div className="bg-background/80 rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
+                                <span className="text-[10px] text-text/50 font-bold block">
+                                  Dinheiro Gaveta (Rateado)
+                                </span>
+                                <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                                  R$ {fin.dinheiro.toFixed(2)}
+                                </span>
+                              </div>
+                            )}
 
-                        <div>
-                          <label className="text-[10px] font-extrabold uppercase text-cyan-800 dark:text-cyan-300 flex items-center gap-1 mb-1">
-                            <Smartphone className="h-3.5 w-3.5 text-cyan-600" /> Pix Declarado
-                          </label>
-                          <BRLCurrencyInput
-                            value={fin.pix}
-                            onChange={(val) => updatePdvFinancial(local.id, 'pix', val)}
-                            className="w-full text-xs font-mono py-1.5"
-                          />
-                        </div>
+                            <div className="bg-background/80 rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
+                              <span className="text-[10px] text-text/50 font-bold block">
+                                Pix Rateado ({pctShare.toFixed(1)}%)
+                              </span>
+                              <span className="font-mono font-bold text-cyan-700 dark:text-cyan-300">
+                                R$ {fin.pix.toFixed(2)}
+                              </span>
+                            </div>
 
-                        <div>
-                          <label className="text-[10px] font-extrabold uppercase text-indigo-800 dark:text-indigo-300 flex items-center gap-1 mb-1">
-                            <CreditCard className="h-3.5 w-3.5 text-indigo-600" /> Cartão Declarado
-                          </label>
-                          <BRLCurrencyInput
-                            value={fin.cartao}
-                            onChange={(val) => updatePdvFinancial(local.id, 'cartao', val)}
-                            className="w-full text-xs font-mono py-1.5"
-                          />
-                        </div>
+                            <div className="bg-background/80 rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
+                              <span className="text-[10px] text-text/50 font-bold block">
+                                Cartão Rateado ({pctShare.toFixed(1)}%)
+                              </span>
+                              <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
+                                R$ {fin.cartao.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 animate-fade-in">
+                            <div>
+                              <label className="text-[10px] font-extrabold uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1 mb-1">
+                                <Banknote className="h-3.5 w-3.5 text-emerald-600" /> Dinheiro
+                                Gaveta
+                              </label>
+                              <BRLCurrencyInput
+                                value={fin.dinheiro}
+                                onChange={(val) => updatePdvFinancial(local.id, 'dinheiro', val)}
+                                className="w-full text-xs font-mono py-1.5"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-extrabold uppercase text-cyan-800 dark:text-cyan-300 flex items-center gap-1 mb-1">
+                                <Smartphone className="h-3.5 w-3.5 text-cyan-600" /> Pix Declarado
+                              </label>
+                              <BRLCurrencyInput
+                                value={fin.pix}
+                                onChange={(val) => updatePdvFinancial(local.id, 'pix', val)}
+                                className="w-full text-xs font-mono py-1.5"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-extrabold uppercase text-indigo-800 dark:text-indigo-300 flex items-center gap-1 mb-1">
+                                <CreditCard className="h-3.5 w-3.5 text-indigo-600" /> Cartão
+                                Declarado
+                              </label>
+                              <BRLCurrencyInput
+                                value={fin.cartao}
+                                onChange={(val) => updatePdvFinancial(local.id, 'cartao', val)}
+                                className="w-full text-xs font-mono py-1.5"
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2820,6 +3102,7 @@ function UnificarTodosPDVsModal({
           <div className="rounded-xl border border-cyan-300 dark:border-cyan-800 bg-cyan-100/40 dark:bg-cyan-950/60 p-3 space-y-2">
             <h4 className="text-xs font-extrabold uppercase tracking-wider text-cyan-900 dark:text-cyan-100 flex items-center gap-1.5">
               <DollarSign className="h-4 w-4 text-cyan-600" /> Totais Financeiros Declarados
+              (Fechamento Unificado)
             </h4>
 
             <div className="grid grid-cols-3 gap-2 text-xs">

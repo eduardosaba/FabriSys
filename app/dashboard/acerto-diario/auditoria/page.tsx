@@ -769,6 +769,15 @@ export default function AuditoriaPDVPage() {
   // 1. Ranking dos Produtos Mais Vendidos & Análise de Giro
   const rankingMap: Record<string, RankingItem> = {};
   registros.forEach((reg) => {
+    // Ignora registros secundários de fechamento unificado para não duplicar somas
+    const isSecundarioUnificado =
+      reg.observacoes?.includes('Unificado no registro principal') ||
+      (reg.tipo_fechamento === 'unificado' &&
+        Number(reg.faturamento_bruto_teorico || 0) === 0 &&
+        Number(reg.qtd_total_enviada || 0) === 0);
+
+    if (isSecundarioUnificado) return;
+
     if (reg.itens_grade && Array.isArray(reg.itens_grade)) {
       reg.itens_grade.forEach((item) => {
         const env = (item.qtd_sobra_anterior || 0) + (item.qtd_enviada || 0);
@@ -808,6 +817,14 @@ export default function AuditoriaPDVPage() {
   // 2. Resumo por PDV
   const resumoPDVMap: Record<string, ResumoPDV> = {};
   registros.forEach((reg) => {
+    const isSecundarioUnificado =
+      reg.observacoes?.includes('Unificado no registro principal') ||
+      (reg.tipo_fechamento === 'unificado' &&
+        Number(reg.faturamento_bruto_teorico || 0) === 0 &&
+        Number(reg.qtd_total_enviada || 0) === 0);
+
+    if (isSecundarioUnificado) return;
+
     const localId = reg.locais?.id || 'geral';
     const localNome = reg.locais?.nome || 'PDV Geral';
     const vend = Math.max(0, (reg.qtd_total_enviada || 0) - (reg.qtd_total_retorno || 0));

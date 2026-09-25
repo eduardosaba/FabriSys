@@ -54,6 +54,8 @@ interface RomaneioRegistro {
   valor_dinheiro_gaveta: number;
   valor_pix_declarado: number;
   valor_cartao_declarado: number;
+  taxa_cartao_reais?: number;
+  taxa_cartao_percentual?: number;
   faturamento_liquido_esperado: number;
   pix_cartao_esperado: number;
   diferenca_auditoria: number;
@@ -1859,7 +1861,7 @@ export default function FechamentoDiarioPage() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-text/70">Cartão Declarado</label>
+                <label className="text-xs font-semibold text-text/70">Cartão Bruto (R$)</label>
                 <BRLCurrencyInput
                   value={editingRecord.valor_cartao_declarado || 0}
                   onChange={(val) =>
@@ -1867,6 +1869,36 @@ export default function FechamentoDiarioPage() {
                   }
                   placeholder="R$ 0,00"
                   className="mt-1 w-full rounded-xl border border-primary/20 bg-background px-3 py-2 text-sm font-mono outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center justify-between">
+                  <span>Desconto Taxa Cartão (R$)</span>
+                  {Number(editingRecord.valor_cartao_declarado || 0) > 0 && (
+                    <span className="text-[10px] font-mono text-amber-600 bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 rounded-full font-bold">
+                      {(
+                        ((editingRecord.taxa_cartao_reais || 0) /
+                          Number(editingRecord.valor_cartao_declarado || 1)) *
+                        100
+                      ).toFixed(2)}
+                      %
+                    </span>
+                  )}
+                </label>
+                <BRLCurrencyInput
+                  value={editingRecord.taxa_cartao_reais || 0}
+                  onChange={(val) => {
+                    const cartao = Number(editingRecord.valor_cartao_declarado || 0);
+                    const pct = cartao > 0 ? Number(((val / cartao) * 100).toFixed(2)) : 0;
+                    setEditingRecord({
+                      ...editingRecord,
+                      taxa_cartao_reais: val,
+                      taxa_cartao_percentual: pct,
+                    });
+                  }}
+                  placeholder="R$ 0,00"
+                  className="mt-1 w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm font-mono font-bold text-amber-900 dark:text-amber-100 outline-none focus:border-amber-500"
                 />
               </div>
 

@@ -34,6 +34,7 @@ export default function AjudaPage() {
     { id: 'ferramentas-pdv', label: '9. Ferramentas PDV', icon: MessageSquare },
     { id: 'notificacoes', label: '10. Notificações', icon: Bell },
     { id: 'ajuda-geral', label: '11. Ajuda Geral', icon: BookOpen },
+    { id: 'fechamento-conciliacao', label: '12. Fechamento & Taxa de Cartão', icon: Calculator },
   ];
 
   return (
@@ -418,6 +419,108 @@ export default function AjudaPage() {
                   <strong>Configurações → Notificações</strong>.
                 </li>
               </ul>
+            </div>
+          )}
+
+          {activeTab === 'fechamento-conciliacao' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="border-b pb-3">
+                <h2 className="text-2xl font-bold text-slate-800">
+                  Manual de Fechamento de Caixa, Taxa de Cartão & Recibos
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Guia passo a passo para encerramento de turno, conciliação de maquininhas e
+                  emissão de cupons não-fiscais.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-xl bg-pink-50 border border-pink-200">
+                  <h4 className="font-bold text-pink-800 text-sm flex items-center gap-1.5">
+                    <CheckCircle className="h-4 w-4 text-pink-600" /> Vendido Real Balcão
+                  </h4>
+                  <p className="text-xs text-pink-700 mt-1">
+                    Faturamento e ranking baseados estritamente na diferença entre enviados e sobras
+                    físicas.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-purple-50 border border-purple-200">
+                  <h4 className="font-bold text-purple-800 text-sm flex items-center gap-1.5">
+                    <Calculator className="h-4 w-4 text-purple-600" /> Desconto de Taxa Cartão
+                  </h4>
+                  <p className="text-xs text-purple-700 mt-1">
+                    Cálculo automático do percentual efetivo (%) e faturamento líquido real
+                    depositado no banco.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <h4 className="font-bold text-emerald-800 text-sm flex items-center gap-1.5">
+                    <BookOpen className="h-4 w-4 text-emerald-600" /> Raio-X & Impressão Real
+                  </h4>
+                  <p className="text-xs text-emerald-700 mt-1">
+                    Visualização do borderô completo e emissão de recibo para impressora térmica
+                    (80mm) ou A4.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 text-sm text-slate-700">
+                <div className="rounded-xl border p-4 bg-slate-50 space-y-2">
+                  <h3 className="font-bold text-slate-900 text-base">
+                    1. Como Fazer o Fechamento no Controle de PDV
+                  </h3>
+                  <ol className="list-decimal list-inside space-y-1 text-slate-600 text-xs leading-relaxed">
+                    <li>
+                      Acesse o menu <strong>Acerto Diário ➔ Controle de PDV</strong>.
+                    </li>
+                    <li>
+                      Clique em <strong>[ 📦 Contar Sobras do Balcão ]</strong> e informe o que
+                      sobrou na vitrine (ou clique em <strong>Vendeu Tudo</strong>).
+                    </li>
+                    <li>
+                      Clique em <strong>[ 💳 Lançar Dinheiro / Pix / Cartão ]</strong>.
+                    </li>
+                    <li>
+                      Preencha o Dinheiro em Espécie, Pix, Cartão Bruto e o valor da{' '}
+                      <strong>Taxa/Maquininha (R$)</strong>.
+                    </li>
+                    <li>
+                      Confira o selo da <strong>Taxa Efetiva (%)</strong> e o{' '}
+                      <strong>Líquido Estimado a Receber</strong>.
+                    </li>
+                    <li>
+                      Clique em <strong>[ Salvar e Encerrar Turno ]</strong>.
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="rounded-xl border p-4 bg-slate-50 space-y-2">
+                  <h3 className="font-bold text-slate-900 text-base">
+                    2. Fechamento Unificado (Manhã + Tarde)
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Quando a loja funciona em múltiplos turnos e a gestora fecha o caixa no fim do
+                    dia, utilize o botão <strong>[ ⚡ Unificar Turnos e Fechar PDV ]</strong>. O
+                    FabriSys consolidará as sobras e os valores em um único registro principal,
+                    evitando duplicações nos relatórios.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border p-4 bg-slate-50 space-y-2">
+                  <h3 className="font-bold text-slate-900 text-base">
+                    3. Visualizar Raio-X e Imprimir Recibo
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Em qualquer card de PDV encerrado ou auditado, clique em{' '}
+                    <strong>[ 👁️ Ver Detalhes / Recibo ]</strong>. O sistema abrirá a tela com a
+                    tabela de produtos vendidos, borderô financeiro e o botão{' '}
+                    <strong>[ 🖨️ Imprimir Recibo ]</strong> pronto para cupom térmico ou A4 com
+                    campo para assinaturas.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 

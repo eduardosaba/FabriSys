@@ -298,57 +298,121 @@ export default function DashboardPage() {
       const startIso = `${dataInicial}T00:00:00`;
       const endIso = `${dataFinal}T23:59:59`;
 
-      // 1. Ordens de Produção
-      const { data: ordensRaw, error: errOrdens } = await supabase
-        .from('ordens_producao')
-        .select('quantidade_prevista, produto_final_id, created_at')
-        .gte('created_at', startIso)
-        .lte('created_at', endIso);
+      // 1. Vendas Reais do PDV (remessas_cargas_pdv)
+      let queryRemessas = supabase
+        .from('remessas_cargas_pdv')
+        .select('*')
+        .gte('data', dataInicial)
+        .lte('data', dataFinal);
 
-      if (errOrdens) throw errOrdens;
+      if (profile?.organization_id) {
+        queryRemessas = queryRemessas.eq('organization_id', profile.organization_id);
+      }
 
-      const ordens = ordensRaw || [];
+      const { data: remessasData, error: errRemessas } = await queryRemessas;
+      let remessas = remessasData;
 
-      // Buscar dados dos produtos referenciados
-      const produtoIds = Array.from(
-        new Set(ordens.map((o: any) => String(o.produto_final_id)).filter(Boolean))
-      );
-      const produtoMap: Record<string, { nome: string; preco_venda: number }> = {};
-      if (produtoIds.length > 0) {
-        const chunkSize = 50;
-        for (let i = 0; i < produtoIds.length; i += chunkSize) {
-          const chunk = produtoIds.slice(i, i + chunkSize);
-          const { data: produtos, error: prodErr } = await supabase
-            .from('produtos_finais')
-            .select('id, nome, preco_venda')
-            .in('id', (chunk || []).filter(Boolean));
-          if (prodErr) throw prodErr;
-          (produtos || []).forEach((p: any) => {
-            produtoMap[String(p.id)] = {
-              nome: p.nome || 'Desconhecido',
-              preco_venda: Number(p.preco_venda || 0),
-            };
-          });
+      // Fallback por created_at se data não retornar registros
+      if ((!remessas || remessas.length === 0) && !errRemessas) {
+        let queryAlt = supabase
+          .from('remessas_cargas_pdv')
+          .select('*')
+          .gte('created_at', startIso)
+          .lte('created_at', endIso);
+        if (profile?.organization_id) {
+          queryAlt = queryAlt.eq('organization_id', profile.organization_id);
+        }
+        const resAlt = await queryAlt;
+        if (resAlt.data && resAlt.data.length > 0) {
+          remessas = resAlt.data;
         }
       }
 
-      // Processamento Ranking
       let totalFat = 0;
       const mapaProdutos: Record<string, ProdutoRanking> = {};
 
-      (ordens || []).forEach((item: any) => {
-        const qtd = Number(item.quantidade_prevista || 0);
-        const prodInfo = produtoMap[String(item.produto_final_id)];
-        const preco = Number(prodInfo?.preco_venda || 0);
-        const nome = prodInfo?.nome || 'Desconhecido';
-        const total = qtd * preco;
+      if (remessas && remessas.length > 0) {
+        remessas.forEach((reg: any) => {
+          // Ignora registros secundários de fechamento unificado para evitar dupla contagem
+          const isSecundarioUnificado =
+            reg.observacoes?.includes('Unificado no registro principal') ||
+            (reg.tipo_fechamento === 'unificado' &&
+              Number(reg.faturamento_bruto_teorico || 0) === 0 &&
+              Number(reg.qtd_total_enviada || 0) === 0);
 
-        totalFat += total;
+          if (isSecundarioUnificado) return;
 
-        if (!mapaProdutos[nome]) mapaProdutos[nome] = { nome, quantidade: 0, faturamento: 0 };
-        mapaProdutos[nome].quantidade += qtd;
-        mapaProdutos[nome].faturamento += total;
-      });
+          // Se tiver grade de itens detalhada
+          if (Array.isArray(reg.itens_grade) && reg.itens_grade.length > 0) {
+            reg.itens_grade.forEach((item: any) => {
+              const env = Number(item.qtd_sobra_anterior || 0) + Number(item.qtd_enviada || 0);
+              const ret = Number(item.qtd_retorno || 0);
+              const vend = Math.max(0, env - ret);
+              const preco = Number(item.preco_unitario || item.preco_venda || 0);
+              const subtotal = vend * preco;
+
+              totalFat += subtotal;
+
+              const nome = item.nome_produto || item.nome || item.produto_nome || 'Desconhecido';
+              if (!mapaProdutos[nome]) mapaProdutos[nome] = { nome, quantidade: 0, faturamento: 0 };
+              mapaProdutos[nome].quantidade += vend;
+              mapaProdutos[nome].faturamento += subtotal;
+            });
+          } else {
+            // Se for um fechamento rápido/geral sem itens_grade
+            const fatReg =
+              Number(reg.faturamento_bruto_teorico || 0) ||
+              Number(reg.faturamento_liquido_esperado || 0) ||
+              Number(reg.valor_dinheiro_gaveta || 0) +
+                Number(reg.valor_pix_declarado || 0) +
+                Number(reg.valor_cartao_declarado || 0);
+            totalFat += fatReg;
+          }
+        });
+      } else {
+        // Fallback secundário para ordens de produção caso não haja fechamentos no período
+        const { data: ordensRaw } = await supabase
+          .from('ordens_producao')
+          .select('quantidade_prevista, produto_final_id, created_at')
+          .gte('created_at', startIso)
+          .lte('created_at', endIso);
+
+        const ordens = ordensRaw || [];
+        const produtoIds = Array.from(
+          new Set(ordens.map((o: any) => String(o.produto_final_id)).filter(Boolean))
+        );
+        const produtoMap: Record<string, { nome: string; preco_venda: number }> = {};
+        if (produtoIds.length > 0) {
+          const chunkSize = 50;
+          for (let i = 0; i < produtoIds.length; i += chunkSize) {
+            const chunk = produtoIds.slice(i, i + chunkSize);
+            const { data: produtos } = await supabase
+              .from('produtos_finais')
+              .select('id, nome, preco_venda')
+              .in('id', (chunk || []).filter(Boolean));
+            (produtos || []).forEach((p: any) => {
+              produtoMap[String(p.id)] = {
+                nome: p.nome || 'Desconhecido',
+                preco_venda: Number(p.preco_venda || 0),
+              };
+            });
+          }
+        }
+
+        (ordens || []).forEach((item: any) => {
+          const qtd = Number(item.quantidade_prevista || 0);
+          const prodInfo = produtoMap[String(item.produto_final_id)];
+          const preco = Number(prodInfo?.preco_venda || 0);
+          const nome = prodInfo?.nome || 'Desconhecido';
+          const total = qtd * preco;
+
+          totalFat += total;
+
+          if (!mapaProdutos[nome]) mapaProdutos[nome] = { nome, quantidade: 0, faturamento: 0 };
+          mapaProdutos[nome].quantidade += qtd;
+          mapaProdutos[nome].faturamento += total;
+        });
+      }
 
       const lista = Object.values(mapaProdutos);
       setRankingQtd([...lista].sort((a, b) => b.quantidade - a.quantidade).slice(0, 5));

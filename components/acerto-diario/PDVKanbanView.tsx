@@ -34,6 +34,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  Eye,
 } from 'lucide-react';
 import BRLCurrencyInput from '@/components/ui/shared/BRLCurrencyInput';
 import { supabase } from '@/lib/supabase-client';
@@ -41,6 +42,7 @@ import { useToast } from '@/hooks/useToast';
 import { useConfirm } from '@/hooks/useConfirm';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import confetti from 'canvas-confetti';
+import ReciboEModaDetalhamentoModal, { ReciboRegistroData } from './ReciboEModaDetalhamentoModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -87,6 +89,8 @@ interface RemessaKanban {
   pix_cartao_esperado: number;
   valor_pix_declarado: number;
   valor_cartao_declarado: number;
+  taxa_cartao_reais?: number;
+  taxa_cartao_percentual?: number;
   diferenca_auditoria: number;
   observacoes?: string | null;
   status: string;
@@ -735,10 +739,14 @@ function LancarPixCartaoModal({
   const [salvando, setSalvando] = useState(false);
   const [valorPix, setValorPix] = useState(Number(registro.valor_pix_declarado) || 0);
   const [valorCartao, setValorCartao] = useState(Number(registro.valor_cartao_declarado) || 0);
+  const [taxaCartaoReais, setTaxaCartaoReais] = useState(Number(registro.taxa_cartao_reais) || 0);
   const dinheiroInicial = Number(registro.valor_dinheiro_gaveta) || 0;
   const [valorDinheiro, setValorDinheiro] = useState(dinheiroInicial);
   const precisaInformarDinheiro = dinheiroInicial === 0;
   const [justificativa, setJustificativa] = useState('');
+
+  const taxaCartaoPercentual = valorCartao > 0 ? (taxaCartaoReais / valorCartao) * 100 : 0;
+  const cartaoLiquido = Math.max(0, valorCartao - taxaCartaoReais);
 
   const faturamento =
     Number(registro.faturamento_liquido_esperado) ||
@@ -754,7 +762,12 @@ function LancarPixCartaoModal({
     const partes = [];
     if (precisaInformarDinheiro) partes.push(`Dinheiro R$ ${valorDinheiro.toFixed(2)}`);
     partes.push(`Pix R$ ${valorPix.toFixed(2)}`);
-    partes.push(`Cartão R$ ${valorCartao.toFixed(2)}`);
+    partes.push(`Cartão Bruto R$ ${valorCartao.toFixed(2)}`);
+    if (taxaCartaoReais > 0) {
+      partes.push(
+        `Taxa Cartão -R$ ${taxaCartaoReais.toFixed(2)} (${taxaCartaoPercentual.toFixed(2)}%)`
+      );
+    }
     const confirmou = await confirmDialog.confirm({
       title: `Encerrar Turno — ${pdvNome}`,
       message: `Confirma o lançamento de ${partes.join(' + ')} e o encerramento do turno para "${pdvNome}" (${formatTurno(registro.turno)})?`,
@@ -770,6 +783,8 @@ function LancarPixCartaoModal({
         valor_dinheiro_gaveta: valorDinheiro,
         valor_pix_declarado: valorPix,
         valor_cartao_declarado: valorCartao,
+        taxa_cartao_reais: taxaCartaoReais,
+        taxa_cartao_percentual: Number(taxaCartaoPercentual.toFixed(2)),
         pix_cartao_esperado: pixCartaoEsperado,
         diferenca_auditoria: diferencaCaixa,
         observacoes: justificativa
@@ -872,12 +887,31 @@ function LancarPixCartaoModal({
 
             <div>
               <label className="text-xs font-bold text-cyan-700 dark:text-cyan-400 flex items-center gap-1.5 mb-1.5">
-                <CreditCard className="h-4 w-4" /> Cartão Declarado (R$)
+                <CreditCard className="h-4 w-4" /> Cartão Bruto (R$)
               </label>
               <BRLCurrencyInput
                 value={valorCartao}
                 onChange={(val) => setValorCartao(val)}
                 className="w-full rounded-xl border border-cyan-300 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 px-4 py-2.5 font-mono text-lg font-bold text-cyan-800 dark:text-cyan-200 outline-none focus:ring-2 focus:ring-cyan-400"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center justify-between mb-1.5">
+                <span className="flex items-center gap-1.5">
+                  <DollarSign className="h-4 w-4" /> Taxa/Maquininha (R$)
+                </span>
+                {valorCartao > 0 && (
+                  <span className="text-[11px] font-mono text-amber-600 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-full font-extrabold">
+                    {taxaCartaoPercentual.toFixed(2)}%
+                  </span>
+                )}
+              </label>
+              <BRLCurrencyInput
+                value={taxaCartaoReais}
+                onChange={(val) => setTaxaCartaoReais(val)}
+                placeholder="R$ 0,00"
+                className="w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5 font-mono text-lg font-bold text-amber-900 dark:text-amber-100 outline-none focus:ring-2 focus:ring-amber-400"
               />
             </div>
           </div>
@@ -887,6 +921,20 @@ function LancarPixCartaoModal({
               <span>Digital Declarado (Pix + Cartão):</span>
               <span className="font-mono font-bold text-cyan-200">
                 R$ {totalDigital.toFixed(2)}
+              </span>
+            </div>
+            {taxaCartaoReais > 0 && (
+              <div className="flex justify-between text-amber-300 font-bold border-t border-slate-800 pt-1">
+                <span>Taxa Cartão Aplicada:</span>
+                <span className="font-mono">
+                  -R$ {taxaCartaoReais.toFixed(2)} ({taxaCartaoPercentual.toFixed(2)}%)
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between text-emerald-300 font-extrabold border-t border-slate-800 pt-1">
+              <span>Líquido Estimado (Gaveta + Pix + Cartão Líq.):</span>
+              <span className="font-mono">
+                R$ {(valorDinheiro + valorPix + cartaoLiquido).toFixed(2)}
               </span>
             </div>
             <div
@@ -1379,6 +1427,7 @@ function PDVGroupCard({
   actionIcon: ActionIcon,
   actionColor,
   onAction,
+  onOpenRecibo,
 }: {
   local: LocalPDV;
   records: RemessaKanban[];
@@ -1386,6 +1435,7 @@ function PDVGroupCard({
   actionIcon?: any;
   actionColor?: string;
   onAction?: () => void;
+  onOpenRecibo?: (data: ReciboRegistroData) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const pdvNome = local.nome || 'PDV';
@@ -1395,6 +1445,7 @@ function PDVGroupCard({
   const dinheiro = records.reduce((acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0), 0);
   const pix = records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
   const cartao = records.reduce((acc, r) => acc + (Number(r.valor_cartao_declarado) || 0), 0);
+  const taxaReais = records.reduce((acc, r) => acc + (Number(r.taxa_cartao_reais) || 0), 0);
   const faturamento = records.reduce(
     (acc, r) =>
       acc + (Number(r.faturamento_liquido_esperado) || Number(r.faturamento_bruto_teorico) || 0),
@@ -1403,6 +1454,31 @@ function PDVGroupCard({
 
   const dif = records.reduce((acc, r) => acc + (Number(r.diferenca_auditoria) || 0), 0);
   const isAuditado = records.some((r) => r.status === 'auditado' || r.status === 'conferido');
+
+  const handleOpenReciboData = () => {
+    if (!onOpenRecibo) return;
+    const primaryRecord = records[records.length - 1] || records[0];
+    const gradeItensConsolidada = primaryRecord?.itens_grade || [];
+    const reciboData: ReciboRegistroData = {
+      id: primaryRecord?.id || 'recibo',
+      data: primaryRecord?.data || '',
+      turno: records.map((r) => r.turno).join(' + '),
+      vendedor_nome: primaryRecord?.vendedor_nome || undefined,
+      pdvNome: pdvNome,
+      status: primaryRecord?.status || 'encerrado',
+      tipo_fechamento: primaryRecord?.tipo_fechamento,
+      valor_dinheiro_gaveta: dinheiro,
+      valor_pix_declarado: pix,
+      valor_cartao_declarado: cartao,
+      taxa_cartao_reais: taxaReais,
+      faturamento_bruto_teorico: faturamento,
+      faturamento_liquido_esperado: faturamento,
+      diferenca_auditoria: dif,
+      observacoes: primaryRecord?.observacoes || undefined,
+      itens_grade: gradeItensConsolidada,
+    };
+    onOpenRecibo(reciboData);
+  };
 
   return (
     <div className="group rounded-2xl border border-primary/15 bg-background shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
@@ -1449,6 +1525,12 @@ function PDVGroupCard({
             </span>
             <span className="font-mono font-bold text-cyan-400">R$ {cartao.toFixed(2)}</span>
           </div>
+          {taxaReais > 0 && (
+            <div className="flex justify-between text-amber-300 font-bold border-t border-slate-800 pt-1">
+              <span>Taxa Cartão:</span>
+              <span className="font-mono">-R$ {taxaReais.toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex justify-between border-t border-slate-700 pt-1.5 text-white">
             <span className="font-bold">Faturamento Total</span>
             <span className="font-mono font-black text-primary">R$ {faturamento.toFixed(2)}</span>
@@ -1519,8 +1601,8 @@ function PDVGroupCard({
         )}
       </div>
 
-      {actionLabel && onAction && !isAuditado && (
-        <div className="px-3 pb-3">
+      <div className="px-3 pb-3 space-y-1.5">
+        {actionLabel && onAction && !isAuditado && (
           <button
             type="button"
             onClick={onAction}
@@ -1531,23 +1613,17 @@ function PDVGroupCard({
             {ActionIcon && <ActionIcon className="h-4 w-4 shrink-0" />}
             {actionLabel}
           </button>
-        </div>
-      )}
+        )}
 
-      {isAuditado && (
-        <div className="px-3 pb-3">
-          <button
-            type="button"
-            onClick={() => {
-              alert(`Gerando recibo para ${pdvNome}...`);
-            }}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 transition-all active:scale-[0.97]"
-          >
-            <Printer className="h-4 w-4 shrink-0" />
-            Imprimir Recibo
-          </button>
-        </div>
-      )}
+        <button
+          type="button"
+          onClick={handleOpenReciboData}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 transition-all active:scale-[0.97]"
+        >
+          <Eye className="h-3.5 w-3.5 text-primary shrink-0" />
+          Ver Detalhes / Recibo
+        </button>
+      </div>
     </div>
   );
 }
@@ -3500,7 +3576,12 @@ function FechamentoUnificadoPDVModal({
   const [valorDinheiro, setValorDinheiro] = useState<number>(initialDinheiro);
   const [valorPix, setValorPix] = useState<number>(initialPix);
   const [valorCartao, setValorCartao] = useState<number>(initialCartao);
+  const initialTaxaCartao = records.reduce((acc, r) => acc + (Number(r.taxa_cartao_reais) || 0), 0);
+  const [taxaCartaoReais, setTaxaCartaoReais] = useState<number>(initialTaxaCartao);
   const [mostrarDetalhesTurnos, setMostrarDetalhesTurnos] = useState(false);
+
+  const taxaCartaoPercentual = valorCartao > 0 ? (taxaCartaoReais / valorCartao) * 100 : 0;
+  const cartaoLiquido = Math.max(0, valorCartao - taxaCartaoReais);
 
   const turnosLabel = records.map((r) => formatTurno(r.turno)).join(' + ');
 
@@ -3573,7 +3654,7 @@ function FechamentoUnificadoPDVModal({
   const handleSalvarFechamentoUnificado = async () => {
     const confirmou = await confirmDialog.confirm({
       title: `Fechamento Unificado — ${pdvNome}`,
-      message: `Confirma a unificação de ${records.length} turno(s) (${turnosLabel}) do PDV "${pdvNome}"?\n\n- Sobras Totais: ${totalRetorno} un\n- Dinheiro: R$ ${valorDinheiro.toFixed(2)}\n- Pix: R$ ${valorPix.toFixed(2)}\n- Cartão: R$ ${valorCartao.toFixed(2)}\n- Total Declarado: R$ ${totalDeclarado.toFixed(2)}`,
+      message: `Confirma a unificação de ${records.length} turno(s) (${turnosLabel}) do PDV "${pdvNome}"?\n\n- Sobras Totais: ${totalRetorno} un\n- Dinheiro: R$ ${valorDinheiro.toFixed(2)}\n- Pix: R$ ${valorPix.toFixed(2)}\n- Cartão Bruto: R$ ${valorCartao.toFixed(2)}${taxaCartaoReais > 0 ? `\n- Taxa Cartão: -R$ ${taxaCartaoReais.toFixed(2)} (${taxaCartaoPercentual.toFixed(2)}%)` : ''}\n- Total Declarado: R$ ${totalDeclarado.toFixed(2)}`,
       confirmText: 'Confirmar e Encerrar Turnos Unificados',
       cancelText: 'Revisar',
       variant: 'info',
@@ -3596,6 +3677,8 @@ function FechamentoUnificadoPDVModal({
         valor_dinheiro_gaveta: valorDinheiro,
         valor_pix_declarado: valorPix,
         valor_cartao_declarado: valorCartao,
+        taxa_cartao_reais: taxaCartaoReais,
+        taxa_cartao_percentual: Number(taxaCartaoPercentual.toFixed(2)),
         faturamento_bruto_teorico: faturamentoBrutoTeorico,
         faturamento_liquido_esperado: faturamentoBrutoTeorico,
         pix_cartao_esperado: pixCartaoEsperado,
@@ -3871,7 +3954,7 @@ function FechamentoUnificadoPDVModal({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <div>
                 <label className="text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1.5 mb-1">
                   <Smartphone className="h-3.5 w-3.5" /> Pix (R$)
@@ -3884,12 +3967,30 @@ function FechamentoUnificadoPDVModal({
               </div>
               <div>
                 <label className="text-xs font-bold text-cyan-700 dark:text-cyan-400 flex items-center gap-1.5 mb-1">
-                  <CreditCard className="h-3.5 w-3.5" /> Cartão (R$)
+                  <CreditCard className="h-3.5 w-3.5" /> Cartão Bruto (R$)
                 </label>
                 <BRLCurrencyInput
                   value={valorCartao}
                   onChange={(val) => setValorCartao(val)}
                   className="w-full rounded-xl border border-cyan-300 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 px-3 py-2 font-mono text-sm font-bold text-cyan-800 dark:text-cyan-200 outline-none focus:ring-2 focus:ring-cyan-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center justify-between mb-1">
+                  <span className="flex items-center gap-1">
+                    <DollarSign className="h-3.5 w-3.5" /> Taxa (R$)
+                  </span>
+                  {valorCartao > 0 && (
+                    <span className="text-[10px] font-mono text-amber-600 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 rounded-full font-extrabold">
+                      {taxaCartaoPercentual.toFixed(2)}%
+                    </span>
+                  )}
+                </label>
+                <BRLCurrencyInput
+                  value={taxaCartaoReais}
+                  onChange={(val) => setTaxaCartaoReais(val)}
+                  placeholder="R$ 0,00"
+                  className="w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 font-mono text-sm font-bold text-amber-900 dark:text-amber-100 outline-none focus:ring-2 focus:ring-amber-400"
                 />
               </div>
             </div>
@@ -3908,9 +4009,23 @@ function FechamentoUnificadoPDVModal({
                 R$ {pixCartaoEsperado.toFixed(2)}
               </span>
             </div>
+            {taxaCartaoReais > 0 && (
+              <div className="flex justify-between text-amber-300 font-bold border-t border-slate-800 pt-1">
+                <span>Taxa de Cartão Aplicada:</span>
+                <span className="font-mono">
+                  -R$ {taxaCartaoReais.toFixed(2)} ({taxaCartaoPercentual.toFixed(2)}%)
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between text-emerald-300 font-extrabold border-t border-slate-800 pt-1">
+              <span>Líquido a Receber (Gaveta + Pix + Cartão Líq.):</span>
+              <span className="font-mono font-extrabold text-emerald-300">
+                R$ {(valorDinheiro + valorPix + cartaoLiquido).toFixed(2)}
+              </span>
+            </div>
             <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
               <span className="font-bold text-white">
-                Total Declarado (Dinheiro + Pix + Cartão):
+                Total Bruto Declarado (Dinheiro + Pix + Cartão):
               </span>
               <span
                 className={`font-mono font-extrabold ${
@@ -3997,6 +4112,7 @@ export function PDVKanbanView({
     records: RemessaKanban[];
   } | null>(null);
   const [modalAuditarTodos, setModalAuditarTodos] = useState(false);
+  const [modalReciboData, setModalReciboData] = useState<ReciboRegistroData | null>(null);
 
   // Fetch registros for the selected date
   const carregarRegistros = useCallback(async () => {
@@ -4510,6 +4626,7 @@ export function PDVKanbanView({
                   local={local}
                   records={records}
                   onAction={() => setModalAuditoriaPDV({ local, records })}
+                  onOpenRecibo={(reciboData) => setModalReciboData(reciboData)}
                   actionLabel="Auditar PDV"
                   actionColor="bg-purple-600 text-white hover:bg-purple-700"
                   actionIcon={ShieldCheck}
@@ -4544,7 +4661,12 @@ export function PDVKanbanView({
               </div>
             ) : (
               agrupadosAuditados.map(({ local, records }) => (
-                <PDVGroupCard key={local.id} local={local} records={records} />
+                <PDVGroupCard
+                  key={local.id}
+                  local={local}
+                  records={records}
+                  onOpenRecibo={(reciboData) => setModalReciboData(reciboData)}
+                />
               ))
             )}
           </div>
@@ -4615,6 +4737,12 @@ export function PDVKanbanView({
       )}
       {modalRomaneio && (
         <VerRomaneioModal registro={modalRomaneio} onClose={() => setModalRomaneio(null)} />
+      )}
+      {modalReciboData && (
+        <ReciboEModaDetalhamentoModal
+          data={modalReciboData}
+          onClose={() => setModalReciboData(null)}
+        />
       )}
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}

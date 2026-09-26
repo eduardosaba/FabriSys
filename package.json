@@ -93,6 +93,15 @@
     "typescript-eslint": "^8.46.0",
     "vitest": "^4.0.6"
   },
+  "overrides": {
+    "jpeg-js": "0.4.4",
+    "minimist": "0.2.4",
+    "form-data": "2.5.4",
+    "glob": "10.5.0",
+    "js-yaml": "4.1.1",
+    "url-regex": "5.0.0",
+    "baseline-browser-mapping": "^2.8.24"
+  },
   "pnpm": {
     "overrides": {
       "jpeg-js": "0.4.4",

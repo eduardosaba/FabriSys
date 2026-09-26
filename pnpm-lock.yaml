@@ -3,6 +3,14 @@ lockfileVersion: '9.0'
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
+  overrides:
+    baseline-browser-mapping: ^2.8.24
+    form-data: 2.5.4
+    glob: 10.5.0
+    jpeg-js: 0.4.4
+    js-yaml: 4.1.1
+    minimist: 0.2.4
+    url-regex: 5.0.0
 
 importers:
 

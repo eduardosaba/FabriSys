@@ -145,7 +145,7 @@ export async function gerarPedidoCompraPDF(itens: ItemPedido[]): Promise<Buffer>
     const page = await browser.newPage();
 
     // Carrega o HTML
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });
 
     const pdfBuffer = await page.pdf({
       format: 'A4',

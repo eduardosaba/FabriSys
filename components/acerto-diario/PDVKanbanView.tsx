@@ -934,7 +934,7 @@ function LancarPixCartaoModal({
             )}
             <div className="flex justify-between items-center border-t border-slate-700 pt-1.5 text-white font-extrabold">
               <span>Total Apurado:</span>
-              <span className="font-mono text-primary text-sm">R$ {totalDeclarado.toFixed(2)}</span>
+              <span className="font-mono text-primary text-sm">R$ {totalRecebido.toFixed(2)}</span>
             </div>
           </div>
 

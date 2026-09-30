@@ -128,6 +128,11 @@ export default function DashboardPage() {
     gastoCompras: 0,
     ordensAtivas: 0,
     itensCriticos: 0,
+    mercadoriasCirculacao: 0,
+    recebimentoBruto: 0,
+    taxasOperacionais: 0,
+    recebimentoLiquido: 0,
+    diferencaCaixa: 0,
   });
 
   // KPI Meta
@@ -329,24 +334,50 @@ export default function DashboardPage() {
       }
 
       let totalFat = 0;
+      let totalMercadoriasCirculacao = 0;
+      let totalDinheiroRecebido = 0;
+      let totalPixRecebido = 0;
+      let totalCartaoRecebido = 0;
+      let totalTaxasFinanceiras = 0;
       const mapaProdutos: Record<string, ProdutoRanking> = {};
 
       if (remessas && remessas.length > 0) {
         remessas.forEach((reg: any) => {
-          // Ignora registros secundários de fechamento unificado para evitar dupla contagem
-          const isSecundarioUnificado =
-            reg.observacoes?.includes('Unificado no registro principal') ||
-            (reg.tipo_fechamento === 'unificado' &&
-              Number(reg.faturamento_bruto_teorico || 0) === 0 &&
-              Number(reg.qtd_total_enviada || 0) === 0);
+          // Registros históricos legados: 36 registros (17 principais com totais consolidados e 19 secundários com faturamento zerado).
+          // As grades de itens (itens_grade) são individuais por turno e somam exatamente o faturamento apurado.
+          // Os valores financeiros digitais dos secundários já estão zerados no banco, garantindo ausência de duplicidade.
 
-          if (isSecundarioUnificado) return;
+          // Remessas abertas ou parciais representam mercadorias em circulação (não faturamento realizado)
+          const isAbertoOuParcial =
+            reg.status === 'aberto' ||
+            reg.status === 'dinheiro_informado' ||
+            reg.status === 'sobras_informadas';
 
-          // Se tiver grade de itens detalhada
+          if (isAbertoOuParcial) {
+            if (Array.isArray(reg.itens_grade) && reg.itens_grade.length > 0) {
+              reg.itens_grade.forEach((item: any) => {
+                const env = Number(item.qtd_sobra_anterior || 0) + Number(item.qtd_enviada || 0);
+                const preco = Number(item.preco_unitario || item.preco_venda || 0);
+                totalMercadoriasCirculacao += env * preco;
+              });
+            } else {
+              totalMercadoriasCirculacao += Number(reg.faturamento_bruto_teorico || 0);
+            }
+            return;
+          }
+
+          // Apenas registros com fechamento confirmado geram faturamento realizado
+          const isConfirmado =
+            reg.status === 'encerrado' || reg.status === 'auditado' || reg.status === 'conferido';
+
+          if (!isConfirmado) return;
+
+          // Se tiver grade de itens detalhada e conferida
           if (Array.isArray(reg.itens_grade) && reg.itens_grade.length > 0) {
             reg.itens_grade.forEach((item: any) => {
               const env = Number(item.qtd_sobra_anterior || 0) + Number(item.qtd_enviada || 0);
-              const ret = Number(item.qtd_retorno || 0);
+              const temSobra = item.qtd_retorno !== null && item.qtd_retorno !== undefined;
+              const ret = temSobra ? Number(item.qtd_retorno) : 0;
               const vend = Math.max(0, env - ret);
               const preco = Number(item.preco_unitario || item.preco_venda || 0);
               const subtotal = vend * preco;
@@ -359,14 +390,24 @@ export default function DashboardPage() {
               mapaProdutos[nome].faturamento += subtotal;
             });
           } else {
-            // Se for um fechamento rápido/geral sem itens_grade
+            // Se for um fechamento geral consolidado
             const fatReg =
-              Number(reg.faturamento_bruto_teorico || 0) ||
               Number(reg.faturamento_liquido_esperado || 0) ||
+              Number(reg.faturamento_bruto_teorico || 0) ||
               Number(reg.valor_dinheiro_gaveta || 0) +
                 Number(reg.valor_pix_declarado || 0) +
                 Number(reg.valor_cartao_declarado || 0);
             totalFat += fatReg;
+          }
+
+          // Acumula valores financeiros confirmados
+          totalDinheiroRecebido += Number(reg.valor_dinheiro_gaveta || 0);
+
+          // Se a remessa pertence a um fechamento unificado moderno, os digitais estão consolidados em fechamentos_unificados_pdv
+          if (!reg.fechamento_unificado_id) {
+            totalPixRecebido += Number(reg.valor_pix_declarado || 0);
+            totalCartaoRecebido += Number(reg.valor_cartao_declarado || 0);
+            totalTaxasFinanceiras += Number(reg.taxa_cartao_reais || 0);
           }
         });
       } else {
@@ -414,6 +455,41 @@ export default function DashboardPage() {
         });
       }
 
+      // Consulta complementar a fechamentos unificados para consolidação dos recebimentos digitais e taxas operacionais
+      try {
+        let queryFech = supabase
+          .from('fechamentos_unificados_pdv')
+          .select(
+            'total_taxas_operacionais, total_pix_declarado, total_cartao_debito_declarado, total_cartao_credito_declarado, total_outros_declarado'
+          )
+          .gte('data', dataInicial)
+          .lte('data', dataFinal);
+        if (profile?.organization_id) {
+          queryFech = queryFech.eq('organization_id', profile.organization_id);
+        }
+        const { data: fechData } = await queryFech;
+        if (fechData && fechData.length > 0) {
+          fechData.forEach((fu: any) => {
+            totalPixRecebido += Number(fu.total_pix_declarado || 0);
+            totalCartaoRecebido +=
+              Number(fu.total_cartao_debito_declarado || 0) +
+              Number(fu.total_cartao_credito_declarado || 0) +
+              Number(fu.total_outros_declarado || 0);
+            totalTaxasFinanceiras += Number(fu.total_taxas_operacionais || 0);
+          });
+        }
+      } catch (errFech) {
+        console.warn('Consulta a fechamentos unificados:', errFech);
+      }
+
+      const totalRecebidoBruto =
+        Math.round((totalDinheiroRecebido + totalPixRecebido + totalCartaoRecebido) * 100) / 100;
+      const totalRecebidoLiquido = Math.max(
+        0,
+        Math.round((totalRecebidoBruto - totalTaxasFinanceiras) * 100) / 100
+      );
+      const diferencaCaixa = Math.round((totalRecebidoBruto - totalFat) * 100) / 100;
+
       const lista = Object.values(mapaProdutos);
       setRankingQtd([...lista].sort((a, b) => b.quantidade - a.quantidade).slice(0, 5));
       setRankingFat([...lista].sort((a, b) => b.faturamento - a.faturamento).slice(0, 5));
@@ -446,6 +522,11 @@ export default function DashboardPage() {
         gastoCompras: totalCompras,
         ordensAtivas: countOrdens || 0,
         itensCriticos: countCriticos || 0,
+        mercadoriasCirculacao: totalMercadoriasCirculacao,
+        recebimentoBruto: totalRecebidoBruto,
+        taxasOperacionais: totalTaxasFinanceiras,
+        recebimentoLiquido: totalRecebidoLiquido,
+        diferencaCaixa: diferencaCaixa,
       });
 
       // Carregar Meta
@@ -769,6 +850,109 @@ export default function DashboardPage() {
               className="bg-slate-50 text-sm p-1.5 rounded-lg border border-slate-200 w-20"
             />
           )}
+        </div>
+      </div>
+
+      {/* Painel Financeiro e Operacional Unificado (Larissa Saba Confeitaria) */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-100 dark:border-slate-800 pb-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-cyan-600" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+              Conciliação Financeira & Movimentação de PDVs
+            </h3>
+          </div>
+          <span className="text-[11px] text-slate-500 font-medium">
+            Período:{' '}
+            <strong className="text-slate-700 dark:text-slate-300">{filtros.dataInicial}</strong>{' '}
+            até <strong className="text-slate-700 dark:text-slate-300">{filtros.dataFinal}</strong>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+          {/* 1. Faturamento Vendas */}
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block">
+              Vendas Confirmadas
+            </span>
+            <span className="font-mono font-black text-base text-slate-900 dark:text-slate-100">
+              R$ {kpis.faturamentoEstimado.toFixed(2)}
+            </span>
+            <span className="text-[9px] text-slate-400 block mt-0.5">Turnos encerrados</span>
+          </div>
+
+          {/* 2. Mercadorias em Circulação */}
+          <div className="bg-amber-50/50 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-200 dark:border-amber-800/60">
+            <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase block">
+              Em Circulação
+            </span>
+            <span className="font-mono font-black text-base text-amber-800 dark:text-amber-300">
+              R$ {kpis.mercadoriasCirculacao.toFixed(2)}
+            </span>
+            <span className="text-[9px] text-amber-600/70 block mt-0.5">Aguardando fechamento</span>
+          </div>
+
+          {/* 3. Recebimentos Brutos */}
+          <div className="bg-cyan-50/50 dark:bg-cyan-950/20 p-3 rounded-xl border border-cyan-200 dark:border-cyan-800/60">
+            <span className="text-[10px] text-cyan-700 dark:text-cyan-400 font-bold uppercase block">
+              Recebido Bruto
+            </span>
+            <span className="font-mono font-black text-base text-cyan-800 dark:text-cyan-300">
+              R$ {kpis.recebimentoBruto.toFixed(2)}
+            </span>
+            <span className="text-[9px] text-cyan-600/70 block mt-0.5">
+              Dinheiro + Pix + Cartões
+            </span>
+          </div>
+
+          {/* 4. Taxas Financeiras */}
+          <div className="bg-rose-50/50 dark:bg-rose-950/20 p-3 rounded-xl border border-rose-200 dark:border-rose-800/60">
+            <span className="text-[10px] text-rose-700 dark:text-rose-400 font-bold uppercase block">
+              Taxas Financeiras
+            </span>
+            <span className="font-mono font-black text-base text-rose-800 dark:text-rose-300">
+              -R$ {kpis.taxasOperacionais.toFixed(2)}
+            </span>
+            <span className="text-[9px] text-rose-600/70 block mt-0.5">
+              Encargos de maquininhas
+            </span>
+          </div>
+
+          {/* 5. Recebimento Líquido */}
+          <div className="bg-emerald-50/50 dark:bg-emerald-950/20 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800/60">
+            <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase block">
+              Líquido em Conta
+            </span>
+            <span className="font-mono font-black text-base text-emerald-800 dark:text-emerald-300">
+              R$ {kpis.recebimentoLiquido.toFixed(2)}
+            </span>
+            <span className="text-[9px] text-emerald-600/70 block mt-0.5">Bruto − Taxas</span>
+          </div>
+
+          {/* 6. Diferença de Caixa */}
+          <div
+            className={`p-3 rounded-xl border ${
+              Math.abs(kpis.diferencaCaixa) > 0.05
+                ? kpis.diferencaCaixa < 0
+                  ? 'bg-rose-100/60 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+                  : 'bg-emerald-100/60 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+            }`}
+          >
+            <span className="text-[10px] font-bold uppercase block opacity-80">
+              Diferença Caixa
+            </span>
+            <span className="font-mono font-black text-base">
+              {kpis.diferencaCaixa < 0
+                ? `-R$ ${Math.abs(kpis.diferencaCaixa).toFixed(2)}`
+                : kpis.diferencaCaixa > 0
+                  ? `+R$ ${kpis.diferencaCaixa.toFixed(2)}`
+                  : 'R$ 0,00'}
+            </span>
+            <span className="text-[9px] opacity-70 block mt-0.5">
+              {Math.abs(kpis.diferencaCaixa) <= 0.05 ? 'Caixa batido' : 'Diferença comercial'}
+            </span>
+          </div>
         </div>
       </div>
 

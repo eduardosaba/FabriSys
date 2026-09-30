@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -43,6 +43,12 @@ import { useConfirm } from '@/hooks/useConfirm';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import confetti from 'canvas-confetti';
 import ReciboEModaDetalhamentoModal, { ReciboRegistroData } from './ReciboEModaDetalhamentoModal';
+import {
+  apurarFechamentoUnificado,
+  calcularItemIndividual,
+  ItemMovimentacaoPDV,
+  TurnoFechamentoInput,
+} from '@/lib/services/fechamento-pdv-calc';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -63,9 +69,13 @@ interface ItemGradeKanban {
   produto_id: string;
   nome: string;
   preco_unitario: number;
-  qtd_sobra_anterior: number;
+  qtd_sobra_anterior?: number;
   qtd_enviada: number;
-  qtd_retorno: number;
+  qtd_retorno: number | null;
+  qtd_transferencia_recebida?: number;
+  qtd_transferencia_enviada?: number;
+  qtd_devolucao_fabrica?: number;
+  qtd_perda?: number;
 }
 
 interface RemessaKanban {
@@ -77,6 +87,8 @@ interface RemessaKanban {
   vendedor_nome: string | null;
   modo_lancamento: string;
   tipo_fechamento?: string;
+  fechamento_unificado_id?: string | null;
+  legado_inconsistente?: boolean;
   qtd_total_enviada: number;
   qtd_total_retorno: number;
   preco_medio_rapido: number;
@@ -432,7 +444,8 @@ function RegistrarSobrasModal({
     if (Array.isArray(registro.itens_grade) && registro.itens_grade.length > 0) {
       return registro.itens_grade.map((it) => ({
         ...it,
-        qtd_retorno: Number(it.qtd_retorno) || 0,
+        qtd_retorno:
+          it.qtd_retorno !== undefined && it.qtd_retorno !== null ? Number(it.qtd_retorno) : null,
       }));
     }
     return produtosBase.map((p) => ({
@@ -441,24 +454,52 @@ function RegistrarSobrasModal({
       preco_unitario: p.preco,
       qtd_sobra_anterior: 0,
       qtd_enviada: 0,
-      qtd_retorno: 0,
+      qtd_retorno: null,
     }));
   });
 
-  const totalRetorno = gradeItens.reduce((acc, it) => acc + (Number(it.qtd_retorno) || 0), 0);
+  const itensCalculados = gradeItens.map((it) =>
+    calcularItemIndividual({
+      produto_id: it.produto_id,
+      nome: it.nome,
+      preco_unitario: it.preco_unitario,
+      qtd_estoque_inicial: it.qtd_sobra_anterior,
+      qtd_enviada: it.qtd_enviada,
+      qtd_transferencia_recebida: it.qtd_transferencia_recebida,
+      qtd_transferencia_enviada: it.qtd_transferencia_enviada,
+      qtd_devolucao_fabrica: it.qtd_devolucao_fabrica,
+      qtd_perda: it.qtd_perda,
+      qtd_retorno: it.qtd_retorno,
+    })
+  );
+
+  const temPendenciaSobras = itensCalculados.some(
+    (it) => it.tem_pendencia_sobra && (it.qtd_disponivel || 0) > 0
+  );
+  const totalRetorno = gradeItens.reduce(
+    (acc, it) =>
+      acc + (it.qtd_retorno !== null && it.qtd_retorno !== undefined ? Number(it.qtd_retorno) : 0),
+    0
+  );
   const totalEnviado = gradeItens.reduce(
     (acc, it) => acc + (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0),
     0
   );
-  const totalVendido = Math.max(0, totalEnviado - totalRetorno);
-  const faturamentoBruto = gradeItens.reduce((acc, it) => {
-    const disp = (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0);
-    const vend = Math.max(0, disp - (Number(it.qtd_retorno) || 0));
-    return acc + vend * (Number(it.preco_unitario) || 0);
-  }, 0);
+  const totalVendido = itensCalculados.reduce((acc, it) => acc + it.qtd_vendida, 0);
+  const faturamentoBruto = itensCalculados.reduce((acc, it) => acc + it.faturamento_bruto, 0);
   const pixCartaoEsperado = Math.max(0, faturamentoBruto - valorDinheiro);
 
   const handleSalvar = async () => {
+    if (temPendenciaSobras) {
+      toast({
+        title: 'Sobras Pendentes',
+        description:
+          'Existem produtos sem conferência de sobra física. Preencha todos ou clique em "Vendeu Tudo".',
+        variant: 'warning',
+      });
+      return;
+    }
+
     const confirmou = await confirmDialog.confirm({
       title: `Registrar Sobras — ${pdvNome}`,
       message: `Confirma o registro de ${totalRetorno} itens de sobra e R$ ${valorDinheiro.toFixed(2)} em dinheiro para o PDV "${pdvNome}" (${formatTurno(registro.turno)})?`,
@@ -586,19 +627,27 @@ function RegistrarSobrasModal({
                         type="number"
                         min={0}
                         max={disponivel}
-                        value={item.qtd_retorno}
+                        placeholder="Pend."
+                        value={
+                          item.qtd_retorno === null || item.qtd_retorno === undefined
+                            ? ''
+                            : item.qtd_retorno
+                        }
                         onChange={(e) => {
-                          const val = Math.max(
-                            0,
-                            Math.min(disponivel, Number(e.target.value) || 0)
-                          );
+                          const raw = e.target.value;
+                          const val =
+                            raw === '' ? null : Math.max(0, Math.min(disponivel, Number(raw)));
                           setGradeItens((prev) =>
                             prev.map((it) =>
                               it.produto_id === item.produto_id ? { ...it, qtd_retorno: val } : it
                             )
                           );
                         }}
-                        className="w-16 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 text-center text-sm font-mono font-bold text-amber-800 dark:text-amber-200 outline-none focus:ring-2 focus:ring-amber-400"
+                        className={`w-18 rounded-lg border px-2 py-1 text-center text-sm font-mono font-bold outline-none focus:ring-2 ${
+                          item.qtd_retorno === null || item.qtd_retorno === undefined
+                            ? 'border-amber-400 bg-amber-100/50 text-amber-900 placeholder:text-amber-500 focus:ring-amber-400'
+                            : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 focus:ring-emerald-400'
+                        }`}
                       />
                     </div>
                   </div>
@@ -2491,7 +2540,7 @@ function AuditarTodosPDVsModal({
   );
 }
 
-// ─── Modal Unificar Todos os PDVs (Sobras e Caixa em Lote) ──────────────────
+// ─── Modal Unificar Todos os PDVs (Sobras e Caixa Centralizado) ──────────────
 
 function UnificarTodosPDVsModal({
   allPdvs,
@@ -2507,55 +2556,60 @@ function UnificarTodosPDVsModal({
   const { toast } = useToast();
   const confirmDialog = useConfirm();
   const [salvando, setSalvando] = useState(false);
-  const [sobrasZeradas, setSobrasZeradas] = useState(false);
-  const [mostrarDetalhesPdvs, setMostrarDetalhesPdvs] = useState(false);
+  const [mostrarDetalhesTurnos, setMostrarDetalhesTurnos] = useState(false);
   const [justificativa, setJustificativa] = useState('');
-
-  // Modo de preenchimento: 'global' (Padrão para extrato único) ou 'individual' (Por PDV)
-  const [modoPreenchimento, setModoPreenchimento] = useState<'global' | 'individual'>('global');
-  const [modoDinheiro, setModoDinheiro] = useState<'por_pdv' | 'global'>('por_pdv');
-
-  // Inicialização de Totais Globais
-  const initialPixSum = allPdvs.reduce(
-    (acc, p) => acc + p.records.reduce((rAcc, r) => rAcc + (Number(r.valor_pix_declarado) || 0), 0),
-    0
-  );
-  const initialCartaoSum = allPdvs.reduce(
-    (acc, p) =>
-      acc + p.records.reduce((rAcc, r) => rAcc + (Number(r.valor_cartao_declarado) || 0), 0),
-    0
-  );
-  const initialDinheiroSum = allPdvs.reduce(
-    (acc, p) =>
-      acc + p.records.reduce((rAcc, r) => rAcc + (Number(r.valor_dinheiro_gaveta) || 0), 0),
-    0
-  );
-
-  const [globalPix, setGlobalPix] = useState<number>(initialPixSum);
-  const [globalCartao, setGlobalCartao] = useState<number>(initialCartaoSum);
-  const [globalDinheiro, setGlobalDinheiro] = useState<number>(initialDinheiroSum);
 
   // Todos os PDVs começam selecionados
   const [selectedPdvIds, setSelectedPdvIds] = useState<Set<string>>(
     () => new Set(allPdvs.map((p) => p.local.id))
   );
 
-  // Valoração financeira individual por PDV ID: { [localId]: { dinheiro: number, pix: number, cartao: number } }
-  const [pdvFinancials, setPdvFinancials] = useState<
-    Record<string, { dinheiro: number; pix: number; cartao: number }>
-  >(() => {
-    const initial: Record<string, { dinheiro: number; pix: number; cartao: number }> = {};
-    allPdvs.forEach(({ local, records }) => {
-      const din = records.reduce((acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0), 0);
-      const px = records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
-      const car = records.reduce((acc, r) => acc + (Number(r.valor_cartao_declarado) || 0), 0);
-      initial[local.id] = { dinheiro: din, pix: px, cartao: car };
-    });
-    return initial;
-  });
-
   const selectedPdvs = allPdvs.filter((p) => selectedPdvIds.has(p.local.id));
   const selectedRecords = selectedPdvs.flatMap((p) => p.records);
+
+  // Recebimentos Digitais Consolidados (Extrato bancário / maquininhas)
+  const initialPixSum = selectedRecords.reduce(
+    (acc, r) => acc + (Number(r.valor_pix_declarado) || 0),
+    0
+  );
+  const initialCartaoSum = selectedRecords.reduce(
+    (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
+    0
+  );
+
+  const [globalPix, setGlobalPix] = useState<number>(initialPixSum);
+  const [globalDebito, setGlobalDebito] = useState<number>(0);
+  const [globalCredito, setGlobalCredito] = useState<number>(initialCartaoSum);
+  const [globalOutros, setGlobalOutros] = useState<number>(0);
+
+  // Taxa Financeira Única em Reais (R$) consolidada do dia
+  const initialTaxaSum = selectedRecords.reduce(
+    (acc, r) => acc + (Number(r.taxa_cartao_reais) || 0),
+    0
+  );
+  const [globalTaxas, setGlobalTaxas] = useState<number>(initialTaxaSum);
+
+  // Mapeamento de Sobras por Produto: Record<produto_id, number | null>
+  // null = Não informado (Pendente) | >= 0 = Conferido
+  const [sobrasPorProduto, setSobrasPorProduto] = useState<Record<string, number | null>>(() => {
+    const map: Record<string, number | null> = {};
+    selectedRecords.forEach((r) => {
+      if (Array.isArray(r.itens_grade)) {
+        r.itens_grade.forEach((it) => {
+          if (
+            it.qtd_retorno !== null &&
+            it.qtd_retorno !== undefined &&
+            !isNaN(Number(it.qtd_retorno))
+          ) {
+            map[it.produto_id] = (map[it.produto_id] ?? 0) + Number(it.qtd_retorno);
+          } else if (map[it.produto_id] === undefined) {
+            map[it.produto_id] = null;
+          }
+        });
+      }
+    });
+    return map;
+  });
 
   const togglePdv = (id: string) => {
     setSelectedPdvIds((prev) => {
@@ -2574,189 +2628,95 @@ function UnificarTodosPDVsModal({
     }
   };
 
-  const updatePdvFinancial = (
-    localId: string,
-    field: 'dinheiro' | 'pix' | 'cartao',
-    val: number
-  ) => {
-    setPdvFinancials((prev) => ({
-      ...prev,
-      [localId]: {
-        ...(prev[localId] || { dinheiro: 0, pix: 0, cartao: 0 }),
-        [field]: val,
-      },
-    }));
-  };
-
-  // Funções para estimativa de faturamento por PDV
-  const getPdvEstRevenue = useCallback(
-    (p: { local: LocalPDV; records: RemessaKanban[] }) => {
-      let total = 0;
-      p.records.forEach((r) => {
-        if (Array.isArray(r.itens_grade) && r.itens_grade.length > 0) {
-          r.itens_grade.forEach((it) => {
-            const env = Number(it.qtd_sobra_anterior || 0) + Number(it.qtd_enviada || 0);
-            const ret = sobrasZeradas ? 0 : Number(it.qtd_retorno || 0);
-            const vend = Math.max(0, env - ret);
-            const pr = Number(it.preco_unitario || 0);
-            total += vend * pr;
-          });
-        } else {
-          const env = Number(r.qtd_total_enviada || 0);
-          const ret = sobrasZeradas ? 0 : Number(r.qtd_total_retorno || 0);
-          const vend = Math.max(0, env - ret);
-          const pr = Number(r.preco_medio_rapido || 0);
-          total += vend * pr;
-        }
+  const handleZerarTodasSobras = () => {
+    setSobrasPorProduto((prev) => {
+      const next: Record<string, number | null> = {};
+      Object.keys(prev).forEach((k) => {
+        next[k] = 0;
       });
-      return total;
-    },
-    [sobrasZeradas]
-  );
-
-  // Efeito de Rateio Proporcional Automático no Modo Global
-  useEffect(() => {
-    if (modoPreenchimento !== 'global' || selectedPdvs.length === 0) return;
-
-    // Faturamento estimado total dos PDVs selecionados
-    const pdvRevenues = selectedPdvs.map((p) => ({
-      localId: p.local.id,
-      est: getPdvEstRevenue(p),
-    }));
-
-    const totalRevenueSum = pdvRevenues.reduce((acc, x) => acc + x.est, 0);
-
-    const newFinancials: Record<string, { dinheiro: number; pix: number; cartao: number }> = {};
-
-    let accumulatedPix = 0;
-    let accumulatedCartao = 0;
-    let accumulatedDinheiro = 0;
-
-    pdvRevenues.forEach(({ localId, est }, index) => {
-      const isLast = index === pdvRevenues.length - 1;
-      const ratio = totalRevenueSum > 0 ? est / totalRevenueSum : 1 / pdvRevenues.length;
-
-      let pPix = Math.floor(globalPix * ratio * 100) / 100;
-      let pCartao = Math.floor(globalCartao * ratio * 100) / 100;
-      let pDin =
-        modoDinheiro === 'global'
-          ? Math.floor(globalDinheiro * ratio * 100) / 100
-          : pdvFinancials[localId]?.dinheiro || 0;
-
-      if (isLast) {
-        pPix = Math.max(0, Math.round((globalPix - accumulatedPix) * 100) / 100);
-        pCartao = Math.max(0, Math.round((globalCartao - accumulatedCartao) * 100) / 100);
-        if (modoDinheiro === 'global') {
-          pDin = Math.max(0, Math.round((globalDinheiro - accumulatedDinheiro) * 100) / 100);
-        }
-      } else {
-        accumulatedPix += pPix;
-        accumulatedCartao += pCartao;
-        if (modoDinheiro === 'global') {
-          accumulatedDinheiro += pDin;
-        }
-      }
-
-      newFinancials[localId] = { dinheiro: pDin, pix: pPix, cartao: pCartao };
-    });
-
-    setPdvFinancials((prev) => ({
-      ...prev,
-      ...newFinancials,
-    }));
-  }, [
-    modoPreenchimento,
-    globalPix,
-    globalCartao,
-    globalDinheiro,
-    modoDinheiro,
-    selectedPdvIds,
-    sobrasZeradas,
-    getPdvEstRevenue,
-  ]);
-
-  const selectionKey = Array.from(selectedPdvIds).sort().join('|');
-
-  const [gradeConsolidada, setGradeConsolidada] = useState<ItemGradeKanban[]>([]);
-
-  useEffect(() => {
-    const map = new Map<string, ItemGradeKanban>();
-
-    produtosBase.forEach((p) => {
-      map.set(p.id, {
-        produto_id: p.id,
-        nome: p.nome,
-        preco_unitario: p.preco,
-        qtd_sobra_anterior: 0,
-        qtd_enviada: 0,
-        qtd_retorno: 0,
+      // Também adiciona os produtos base caso algum não estivesse no mapa
+      produtosBase.forEach((p) => {
+        next[p.id] = 0;
       });
+      return next;
     });
-
-    selectedRecords.forEach((rec) => {
-      if (Array.isArray(rec.itens_grade) && rec.itens_grade.length > 0) {
-        rec.itens_grade.forEach((it) => {
-          const existing = map.get(it.produto_id) || {
-            produto_id: it.produto_id,
-            nome: it.nome,
-            preco_unitario: Number(it.preco_unitario) || 0,
-            qtd_sobra_anterior: 0,
-            qtd_enviada: 0,
-            qtd_retorno: 0,
-          };
-          map.set(it.produto_id, {
-            ...existing,
-            nome: it.nome || existing.nome,
-            preco_unitario: Number(it.preco_unitario) || existing.preco_unitario,
-            qtd_sobra_anterior:
-              (Number(existing.qtd_sobra_anterior) || 0) + (Number(it.qtd_sobra_anterior) || 0),
-            qtd_enviada: (Number(existing.qtd_enviada) || 0) + (Number(it.qtd_enviada) || 0),
-            qtd_retorno: sobrasZeradas
-              ? 0
-              : (Number(existing.qtd_retorno) || 0) + (Number(it.qtd_retorno) || 0),
-          });
-        });
-      }
-    });
-
-    setGradeConsolidada(Array.from(map.values()));
-  }, [selectionKey, selectedRecords.length, produtosBase, sobrasZeradas]);
-
-  const dinheiroTotal = selectedPdvs.reduce(
-    (acc, p) => acc + (pdvFinancials[p.local.id]?.dinheiro || 0),
-    0
-  );
-  const pixTotal = selectedPdvs.reduce((acc, p) => acc + (pdvFinancials[p.local.id]?.pix || 0), 0);
-  const cartaoTotal = selectedPdvs.reduce(
-    (acc, p) => acc + (pdvFinancials[p.local.id]?.cartao || 0),
-    0
-  );
-
-  const totalEnviado = gradeConsolidada.reduce(
-    (acc, it) => acc + (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0),
-    0
-  );
-  const totalRetorno = sobrasZeradas
-    ? 0
-    : gradeConsolidada.reduce((acc, it) => acc + (Number(it.qtd_retorno) || 0), 0);
-  const totalVendido = Math.max(0, totalEnviado - totalRetorno);
-
-  const totalDeclarado = dinheiroTotal + pixTotal + cartaoTotal;
-  const totalEstSalesAllSelected = selectedPdvs.reduce((acc, p) => acc + getPdvEstRevenue(p), 0);
-  const faturamentoEsperadoTotal = totalEstSalesAllSelected;
-  const diferencaGeral = totalDeclarado - faturamentoEsperadoTotal;
-  const temDiferenca = Math.abs(diferencaGeral) > 0.05;
-
-  const handleZerarSobras = () => {
-    setSobrasZeradas(true);
     toast({
       title: 'Vendeu tudo nos PDVs!',
-      description: 'Todas as sobras foram zeradas para os PDVs selecionados.',
+      description: 'Todas as sobras foram confirmadas como zero (0 un).',
       variant: 'info',
     });
   };
 
-  const handleSalvarUnificacaoEmLote = async () => {
+  // Monta a estrutura TurnoFechamentoInput[] para o motor centralizado fechamento-pdv-calc
+  const turnosInput: TurnoFechamentoInput[] = useMemo(() => {
+    // Agrupa por PDV para saber qual é o último turno cronológico
+    const porPdv = new Map<string, RemessaKanban[]>();
+    selectedRecords.forEach((r) => {
+      const list = porPdv.get(r.local_id) || [];
+      list.push(r);
+      porPdv.set(r.local_id, list);
+    });
+
+    const result: TurnoFechamentoInput[] = [];
+
+    porPdv.forEach((recordsDoPdv, localId) => {
+      const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
+      recordsDoPdv.sort((a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99));
+
+      recordsDoPdv.forEach((r, idx) => {
+        const isUltimoDoPdv = idx === recordsDoPdv.length - 1;
+        const itensInput: ItemMovimentacaoPDV[] = [];
+
+        if (Array.isArray(r.itens_grade) && r.itens_grade.length > 0) {
+          r.itens_grade.forEach((it) => {
+            const sobraGlobal = sobrasPorProduto[it.produto_id];
+            // No último turno do PDV, atribui a sobra física; nos turnos anteriores, foi transferida (0)
+            const sobraTurno = isUltimoDoPdv ? sobraGlobal : 0;
+
+            itensInput.push({
+              produto_id: it.produto_id,
+              nome: it.nome,
+              preco_unitario: Number(it.preco_unitario || 0),
+              qtd_estoque_inicial: Number(it.qtd_sobra_anterior || 0),
+              qtd_enviada: Number(it.qtd_enviada || 0),
+              qtd_retorno: sobraTurno,
+            });
+          });
+        }
+
+        result.push({
+          id: r.id,
+          local_id: localId,
+          data: r.data,
+          turno: r.turno,
+          status: r.status,
+          valor_dinheiro_gaveta:
+            r.valor_dinheiro_gaveta !== null && r.valor_dinheiro_gaveta !== undefined
+              ? Number(r.valor_dinheiro_gaveta)
+              : null,
+          itens_grade: itensInput,
+        });
+      });
+    });
+
+    return result;
+  }, [selectedRecords, sobrasPorProduto]);
+
+  // Executa o cálculo oficial unificado compartilhado
+  const apuracao = useMemo(() => {
+    return apurarFechamentoUnificado(turnosInput, {
+      pix: globalPix,
+      cartao_debito: globalDebito,
+      cartao_credito: globalCredito,
+      outros: globalOutros,
+      taxas_operacionais: globalTaxas,
+    });
+  }, [turnosInput, globalPix, globalDebito, globalCredito, globalOutros, globalTaxas]);
+
+  const temDiferenca = Math.abs(apuracao.diferenca_caixa) > 0.05;
+
+  // Salvar Fechamento Unificado Atômico via RPC PostgreSQL
+  const handleSalvarUnificacao = async () => {
     if (selectedPdvs.length === 0 || selectedRecords.length === 0) {
       toast({
         title: 'Selecione ao menos 1 PDV',
@@ -2766,145 +2726,146 @@ function UnificarTodosPDVsModal({
       return;
     }
 
+    if (apuracao.tem_pendencias) {
+      toast({
+        title: 'Sobras Pendentes de Conferência',
+        description:
+          'Existem produtos sem conferência de sobras. Preencha as sobras físicas ou clique em "Confirmar Vendeu Tudo".',
+        variant: 'warning',
+      });
+      return;
+    }
+
     if (temDiferenca && justificativa.trim() === '') {
       toast({
         title: 'Informe a Justificativa',
-        description: `Existe uma diferença de R$ ${Math.abs(diferencaGeral).toFixed(2)} no fechamento. Por favor, escreva o motivo (ex: perda, doação, consumo, erro de troco) para prosseguir.`,
+        description: `Existe uma diferença de R$ ${Math.abs(apuracao.diferenca_caixa).toFixed(2)} no fechamento. Por favor, escreva o motivo (ex: perda, doação, consumo, erro de troco) para prosseguir.`,
         variant: 'warning',
       });
       return;
     }
 
     const confirmou = await confirmDialog.confirm({
-      title: `Unificar ${selectedPdvs.length} PDV(s) em Sobras & Caixa`,
+      title: `Confirmar Fechamento Unificado (${selectedPdvs.length} PDVs)`,
       message:
         `Confirma o fechamento unificado de ${selectedPdvs.length} PDV(s) (${selectedRecords.length} turnos)?\n\n` +
-        `- Modo: ${modoPreenchimento === 'global' ? 'Lote Unificado Global (Extrato Único)' : 'Detalhado Por PDV'}\n` +
-        `- Sobras Totais: ${totalRetorno} un\n` +
-        `- Faturamento Esperado: R$ ${faturamentoEsperadoTotal.toFixed(2)}\n` +
-        `- Total Declarado: R$ ${totalDeclarado.toFixed(2)}\n` +
-        `- Diferença Apurada: ${diferencaGeral < 0 ? `-R$ ${Math.abs(diferencaGeral).toFixed(2)}` : diferencaGeral > 0 ? `+R$ ${diferencaGeral.toFixed(2)}` : 'R$ 0.00 (Exato)'}\n` +
-        (justificativa.trim() ? `- Justificativa: "${justificativa.trim()}"` : ''),
-      confirmText: 'Confirmar e Unificar Todos',
+        `• Vendas Líquidas Apuradas: R$ ${apuracao.faturamento_liquido_esperado.toFixed(2)}\n` +
+        `• Dinheiro Somado dos Turnos: R$ ${apuracao.total_dinheiro_turnos.toFixed(2)}\n` +
+        `• Pix Declarado: R$ ${globalPix.toFixed(2)}\n` +
+        `• Cartão Débito: R$ ${globalDebito.toFixed(2)}\n` +
+        `• Cartão Crédito: R$ ${globalCredito.toFixed(2)}\n` +
+        `• Total Bruto Recebido: R$ ${apuracao.total_bruto_recebido.toFixed(2)}\n` +
+        `• Taxas das Operações: -R$ ${apuracao.total_taxas_operacionais.toFixed(2)}\n` +
+        `• Total Líquido após Taxas: R$ ${apuracao.total_liquido_apos_taxas.toFixed(2)}\n` +
+        `• Diferença Comercial de Caixa: ${apuracao.diferenca_caixa < 0 ? `-R$ ${Math.abs(apuracao.diferenca_caixa).toFixed(2)}` : apuracao.diferenca_caixa > 0 ? `+R$ ${apuracao.diferenca_caixa.toFixed(2)}` : 'R$ 0,00 (Caixa Batido)'}\n` +
+        (justificativa.trim() ? `• Justificativa: "${justificativa.trim()}"` : ''),
+      confirmText: 'Confirmar Fechamento Geral',
       cancelText: 'Revisar',
-      variant: temDiferenca && diferencaGeral < 0 ? 'danger' : 'info',
+      variant: temDiferenca && apuracao.diferenca_caixa < 0 ? 'danger' : 'info',
     });
 
     if (!confirmou) return;
 
     setSalvando(true);
-    const allUpdatedRecords: RemessaKanban[] = [];
 
     try {
-      for (const { local, records } of selectedPdvs) {
-        const primaryRecord = records[records.length - 1];
+      const organizationId = selectedRecords[0]?.organization_id;
+      const dataFechamento = selectedRecords[0]?.data;
 
-        const pdvGrade = (primaryRecord.itens_grade || []).map((it) => ({
-          ...it,
-          qtd_retorno: sobrasZeradas ? 0 : Number(it.qtd_retorno) || 0,
-        }));
+      if (!organizationId || !dataFechamento) {
+        throw new Error('Organização ou data não identificada nos registros selecionados.');
+      }
 
-        const pdvTotalRetorno = sobrasZeradas
-          ? 0
-          : records.reduce((acc, r) => acc + (Number(r.qtd_total_retorno) || 0), 0);
+      // Prepara o array de atualização atômica das remessas sem zerar dinheiro nem registros secundários
+      const remessasUpdates = selectedRecords.map((r) => {
+        const itensAtualizados = (r.itens_grade || []).map((it) => {
+          const sobra = sobrasPorProduto[it.produto_id];
+          const env = Number(it.qtd_sobra_anterior || 0) + Number(it.qtd_enviada || 0);
+          const ret = sobra !== null && sobra !== undefined ? Math.max(0, Number(sobra)) : 0;
+          return {
+            ...it,
+            qtd_retorno: ret,
+          };
+        });
 
-        const fin = pdvFinancials[local.id] || { dinheiro: 0, pix: 0, cartao: 0 };
-        const pdvDinheiro = fin.dinheiro;
-        const pdvPix = fin.pix;
-        const pdvCartao = fin.cartao;
-
-        const pdvFat = records.reduce((acc, r) => {
-          const env = Number(r.qtd_total_enviada) || 0;
-          const ret = sobrasZeradas ? 0 : Number(r.qtd_total_retorno) || 0;
-          const vend = Math.max(0, env - ret);
-          const pr = Number(r.preco_medio_rapido) || 0;
-          const fat =
-            Number(r.faturamento_liquido_esperado) ||
-            Number(r.faturamento_bruto_teorico) ||
-            (pr > 0 ? vend * pr : pdvDinheiro + pdvPix + pdvCartao);
-          return acc + fat;
-        }, 0);
-
-        const pdvPixCartaoEsperado = Math.max(0, pdvFat - pdvDinheiro);
-        const pdvDiferenca = pdvDinheiro + pdvPix + pdvCartao - pdvFat;
-        const turnosLabel = records.map((r) => formatTurno(r.turno)).join(' + ');
-
-        const totalEnviadaNum = records.reduce(
-          (acc, r) => acc + (Number(r.qtd_total_enviada) || 0),
+        const totalRetorno = itensAtualizados.reduce(
+          (acc, it) => acc + Number(it.qtd_retorno || 0),
           0
         );
+        const fatCalculado = itensAtualizados.reduce((acc, it) => {
+          const env = Number(it.qtd_sobra_anterior || 0) + Number(it.qtd_enviada || 0);
+          const ret = Number(it.qtd_retorno || 0);
+          const vend = Math.max(0, env - ret);
+          return acc + vend * (Number(it.preco_unitario) || 0);
+        }, 0);
 
-        const obsFinal = `Fechamento Unificado em Lote (${records.length} turnos: ${turnosLabel}) - Modo ${modoPreenchimento.toUpperCase()}${
-          justificativa.trim() ? ` | Motivo: ${justificativa.trim()}` : ''
-        }`;
-
-        const payloadPrimary = {
-          qtd_total_retorno: pdvTotalRetorno,
-          qtd_total_enviada: totalEnviadaNum,
-          itens_grade: pdvGrade,
-          valor_dinheiro_gaveta: pdvDinheiro,
-          valor_pix_declarado: pdvPix,
-          valor_cartao_declarado: pdvCartao,
-          faturamento_bruto_teorico: pdvFat,
-          faturamento_liquido_esperado: pdvFat,
-          pix_cartao_esperado: pdvPixCartaoEsperado,
-          diferenca_auditoria: pdvDiferenca,
-          tipo_fechamento: 'unificado',
-          observacoes: obsFinal,
-          status: 'encerrado',
-          updated_at: new Date().toISOString(),
+        return {
+          id: r.id,
+          itens_grade: itensAtualizados,
+          qtd_total_retorno: totalRetorno,
+          faturamento_bruto_teorico: fatCalculado,
+          faturamento_liquido_esperado: fatCalculado,
         };
+      });
 
-        const payloadSecondary = {
-          qtd_total_retorno: 0,
-          valor_dinheiro_gaveta: 0,
-          valor_pix_declarado: 0,
-          valor_cartao_declarado: 0,
-          faturamento_bruto_teorico: 0,
-          faturamento_liquido_esperado: 0,
-          pix_cartao_esperado: 0,
-          diferenca_auditoria: 0,
-          tipo_fechamento: 'unificado',
-          observacoes: `Unificado no registro principal (${primaryRecord.id})`,
-          status: 'encerrado',
-          updated_at: new Date().toISOString(),
-        };
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('fechar_pdvs_unificado', {
+        p_organization_id: organizationId,
+        p_data: dataFechamento,
+        p_remessa_ids: selectedRecords.map((r) => r.id),
+        p_pix_declarado: globalPix,
+        p_cartao_debito_declarado: globalDebito,
+        p_cartao_credito_declarado: globalCredito,
+        p_outros_declarado: globalOutros,
+        p_justificativa: justificativa.trim() || null,
+        p_remessas_updates: remessasUpdates,
+        p_taxas_operacionais: globalTaxas,
+      });
 
-        const { error: errPrimary } = await supabase
-          .from('remessas_cargas_pdv')
-          .update(payloadPrimary)
-          .eq('id', primaryRecord.id);
+      if (rpcError) throw rpcError;
 
-        if (errPrimary) throw errPrimary;
-
-        for (const rec of records) {
-          if (rec.id !== primaryRecord.id) {
-            const { error: errSec } = await supabase
-              .from('remessas_cargas_pdv')
-              .update(payloadSecondary)
-              .eq('id', rec.id);
-            if (errSec) console.warn('Erro ao atualizar turno secundário:', errSec);
-          }
+      // Persistência das taxas operacionais no registro do fechamento geral
+      if (rpcResult?.fechamento_id && globalTaxas > 0) {
+        try {
+          await supabase
+            .from('fechamentos_unificados_pdv')
+            .update({
+              total_taxas_operacionais: globalTaxas,
+              total_liquido_apos_taxas: apuracao.total_liquido_apos_taxas,
+            })
+            .eq('id', rpcResult.fechamento_id);
+        } catch (e) {
+          console.warn('Aguardando migração de total_taxas_operacionais:', e);
         }
-
-        records.forEach((rec) => {
-          if (rec.id === primaryRecord.id) {
-            allUpdatedRecords.push({ ...rec, ...payloadPrimary });
-          } else {
-            allUpdatedRecords.push({ ...rec, ...payloadSecondary });
-          }
-        });
       }
 
       toast({
-        title: '⚡ Unificação em Lote Concluída!',
-        description: `${selectedPdvs.length} PDV(s) unificados com sucesso. Avançados para Aguardando Auditoria.`,
+        title: '⚡ Fechamento Unificado Concluído!',
+        description: `${selectedPdvs.length} PDV(s) (${selectedRecords.length} turnos) fechados com sucesso. Registros preservados integralmente.`,
         variant: 'success',
       });
 
-      onSave(allUpdatedRecords);
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.7 } });
+
+      const updatedRecords: RemessaKanban[] = selectedRecords.map((r) => {
+        const updateData = remessasUpdates.find((u) => u.id === r.id);
+        return {
+          ...r,
+          itens_grade: updateData?.itens_grade || r.itens_grade,
+          qtd_total_retorno: updateData?.qtd_total_retorno ?? r.qtd_total_retorno,
+          faturamento_bruto_teorico:
+            updateData?.faturamento_bruto_teorico ?? r.faturamento_bruto_teorico,
+          faturamento_liquido_esperado:
+            updateData?.faturamento_liquido_esperado ?? r.faturamento_liquido_esperado,
+          fechamento_unificado_id: rpcResult?.fechamento_id,
+          tipo_fechamento: 'unificado',
+          status: 'encerrado',
+        };
+      });
+
+      onSave(updatedRecords);
     } catch (err: any) {
-      toast({ title: 'Erro na Unificação em Lote', description: err.message, variant: 'error' });
+      console.error('Erro no Fechamento Unificado:', err);
+      toast({ title: 'Erro ao Salvar Fechamento', description: err.message, variant: 'error' });
     } finally {
       setSalvando(false);
     }
@@ -2913,15 +2874,16 @@ function UnificarTodosPDVsModal({
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-        <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-cyan-300 dark:border-cyan-800 bg-background p-5 shadow-xl space-y-4 animate-scale-up">
+        <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl border border-cyan-300 dark:border-cyan-800 bg-background p-5 shadow-2xl space-y-4 animate-scale-up">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-cyan-200 dark:border-cyan-800 pb-3">
             <div>
-              <h3 className="text-sm font-extrabold uppercase tracking-wider text-cyan-700 dark:text-cyan-300 flex items-center gap-2">
-                <Layers className="h-5 w-5 text-cyan-600" /> Unificação em Lote de PDVs
+              <h3 className="text-base font-extrabold uppercase tracking-wider text-cyan-700 dark:text-cyan-300 flex items-center gap-2">
+                <Layers className="h-5 w-5 text-cyan-600" /> Fechamento Unificado de PDVs
               </h3>
-              <p className="text-[11px] font-medium text-text/50 mt-0.5">
-                Fechamento simultâneo de {allPdvs.length} PDV(s) em Sobras & Caixa
+              <p className="text-xs font-medium text-text/60 mt-0.5">
+                Apuração física de mercadorias e conciliação financeira de {allPdvs.length} PDVs (
+                {selectedRecords.length} turnos)
               </p>
             </div>
             <button
@@ -2933,50 +2895,266 @@ function UnificarTodosPDVsModal({
             </button>
           </div>
 
-          {/* Seletor de Modo de Preenchimento */}
-          <div className="bg-cyan-50 dark:bg-cyan-950/60 p-1.5 rounded-xl border border-cyan-200 dark:border-cyan-800 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setModoPreenchimento('global')}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-black uppercase tracking-wide transition-all flex items-center justify-center gap-2 ${
-                modoPreenchimento === 'global'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'text-cyan-900 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/50'
-              }`}
-            >
-              <Layers className="h-4 w-4" /> ⚡ Modo Global Unificado (Extrato Único)
-            </button>
-            <button
-              type="button"
-              onClick={() => setModoPreenchimento('individual')}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-black uppercase tracking-wide transition-all flex items-center justify-center gap-2 ${
-                modoPreenchimento === 'individual'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'text-cyan-900 dark:text-cyan-200 hover:bg-cyan-100 dark:hover:bg-cyan-900/50'
-              }`}
-            >
-              <Store className="h-4 w-4" /> 📋 Modo Detalhado por PDV
-            </button>
+          {/* Seleção de PDVs */}
+          <div className="rounded-xl border border-cyan-200 dark:border-cyan-800 bg-cyan-50/40 dark:bg-cyan-950/30 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-extrabold text-cyan-950 dark:text-cyan-200 uppercase tracking-wide flex items-center gap-1.5">
+                <Store className="h-4 w-4 text-cyan-600" /> PDVs Incluídos no Fechamento (
+                {selectedPdvs.length} de {allPdvs.length}):
+              </h4>
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300 underline hover:text-cyan-900 cursor-pointer"
+              >
+                {selectedPdvIds.size === allPdvs.length ? 'Desmarcar Todos' : 'Marcar Todos'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {allPdvs.map(({ local, records }) => {
+                const isSelected = selectedPdvIds.has(local.id);
+                const dinPdv = records.reduce(
+                  (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+                  0
+                );
+
+                return (
+                  <label
+                    key={local.id}
+                    className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer select-none transition-all ${
+                      isSelected
+                        ? 'border-cyan-400 bg-white dark:bg-slate-900 shadow-xs'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => togglePdv(local.id)}
+                        className="h-4 w-4 rounded-md border-cyan-400 text-cyan-600 focus:ring-cyan-500 accent-cyan-600 cursor-pointer shrink-0"
+                      />
+                      <div className="truncate">
+                        <span className="text-xs font-black uppercase text-cyan-950 dark:text-cyan-100 block truncate">
+                          {local.nome}
+                        </span>
+                        <span className="text-[10px] text-text/50">
+                          {records.length} {records.length === 1 ? 'turno' : 'turnos'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-400 shrink-0">
+                      💵 R$ {dinPdv.toFixed(2)}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Banner Informativo por Modo */}
-          {modoPreenchimento === 'global' ? (
-            <div className="space-y-3 bg-cyan-100/70 dark:bg-cyan-950/70 p-3.5 rounded-xl border border-cyan-300 dark:border-cyan-800 text-xs">
-              <div className="flex items-start gap-2 text-cyan-950 dark:text-cyan-100 font-semibold">
-                <Layers className="h-4 w-4 text-cyan-600 shrink-0 mt-0.5" />
+          {/* Área A: Apuração Operacional de Mercadorias (Estoque & Vendas) */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-background p-4 space-y-3 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+              <div>
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-text/80 flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-cyan-600" /> Área A: Apuração Operacional de
+                  Mercadorias
+                </h4>
+                <p className="text-[11px] text-text/50 mt-0.5">
+                  Conferência física das sobras dos PDVs selecionados. Zero é aceito como venda
+                  total confirmada.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleZerarTodasSobras}
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3 py-1.5 shadow-xs transition-all active:scale-[0.97] cursor-pointer"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> ⚡ Confirmar Vendeu Tudo (Sobras = 0)
+              </button>
+            </div>
+
+            {/* Alerta de Pendências de Sobra */}
+            {apuracao.tem_pendencias && (
+              <div className="p-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs font-bold flex items-center gap-2 animate-fade-in">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
                 <span>
-                  <strong>Valores Consolidados do Extrato do Dia:</strong> Digite os totais gerais
-                  de <strong>Pix</strong> e <strong>Cartão</strong> do seu extrato/maquininha. O
-                  sistema fará o rateio inteligente entre os {selectedPdvs.length} PDVs selecionados
-                  com base no volume de vendas estimado de cada um.
+                  Existem produtos com conferência de sobras pendente. Digite a quantidade de sobra
+                  ou clique no botão &quot;Confirmar Vendeu Tudo&quot; acima.
+                </span>
+              </div>
+            )}
+
+            {/* Tabela de Produtos */}
+            <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-100 dark:bg-slate-800/80 text-[10px] uppercase font-black text-text/70 sticky top-0 z-10">
+                  <tr>
+                    <th className="p-2.5">Produto</th>
+                    <th className="p-2.5 text-center">Preço</th>
+                    <th className="p-2.5 text-center">Enviado</th>
+                    <th className="p-2.5 text-center bg-amber-50/80 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200">
+                      Sobra Fís.
+                    </th>
+                    <th className="p-2.5 text-center">Vendido</th>
+                    <th className="p-2.5 text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
+                  {apuracao.itens_consolidados.map((item) => {
+                    const sobraAtual = sobrasPorProduto[item.produto_id];
+                    const isPendente = sobraAtual === null || sobraAtual === undefined;
+
+                    return (
+                      <tr
+                        key={item.produto_id}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-900/50"
+                      >
+                        <td className="p-2.5 font-sans font-bold text-text/90">{item.nome}</td>
+                        <td className="p-2.5 text-center text-text/60">
+                          R$ {item.preco_unitario.toFixed(2)}
+                        </td>
+                        <td className="p-2.5 text-center font-bold text-text/80">
+                          {item.qtd_disponivel} un
+                        </td>
+                        <td className="p-2.5 text-center bg-amber-50/40 dark:bg-amber-950/20">
+                          <input
+                            type="number"
+                            min={0}
+                            max={item.qtd_disponivel}
+                            value={sobraAtual ?? ''}
+                            placeholder="Pend."
+                            onChange={(e) => {
+                              const val =
+                                e.target.value === '' ? null : Math.max(0, Number(e.target.value));
+                              setSobrasPorProduto((prev) => ({
+                                ...prev,
+                                [item.produto_id]: val,
+                              }));
+                            }}
+                            className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none transition-all ${
+                              isPendente
+                                ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
+                                : 'border-slate-300 dark:border-slate-700 bg-background text-text focus:border-cyan-500'
+                            }`}
+                          />
+                        </td>
+                        <td className="p-2.5 text-center font-extrabold text-emerald-600 dark:text-emerald-400">
+                          {isPendente ? '—' : `${item.qtd_vendida} un`}
+                        </td>
+                        <td className="p-2.5 text-right font-extrabold text-text/90">
+                          {isPendente ? '—' : `R$ ${item.faturamento_bruto.toFixed(2)}`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Totais do Estoque */}
+            <div className="grid grid-cols-3 gap-2 text-center text-xs pt-1">
+              <div className="bg-slate-50 dark:bg-slate-900/60 rounded-xl p-2 border border-slate-200 dark:border-slate-800">
+                <span className="text-[10px] text-text/50 font-bold block uppercase">
+                  Enviado Fábrica
+                </span>
+                <span className="font-mono font-black text-sm text-text/90">
+                  {apuracao.total_enviado_fabrica} un
+                </span>
+              </div>
+              <div className="bg-amber-50 dark:bg-amber-950/40 rounded-xl p-2 border border-amber-200 dark:border-amber-800">
+                <span className="text-[10px] text-amber-700 dark:text-amber-300 font-bold block uppercase">
+                  Sobras Físicas
+                </span>
+                <span className="font-mono font-black text-sm text-amber-700 dark:text-amber-300">
+                  {apuracao.tem_pendencias
+                    ? 'Pendências'
+                    : `${apuracao.total_sobras_conferidas} un`}
+                </span>
+              </div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 rounded-xl p-2 border border-emerald-200 dark:border-emerald-800">
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold block uppercase">
+                  Vendido Estimado
+                </span>
+                <span className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-300">
+                  {apuracao.tem_pendencias ? 'Aguardando Sobras' : `${apuracao.total_vendido} un`}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Área B: Conciliação Financeira Centralizada */}
+          <div className="rounded-xl border border-cyan-200 dark:border-cyan-800 bg-cyan-50/30 dark:bg-cyan-950/20 p-4 space-y-3">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-cyan-950 dark:text-cyan-200 flex items-center gap-1.5">
+              <DollarSign className="h-4 w-4 text-cyan-600" /> Área B: Conciliação Financeira dos
+              Pagamentos
+            </h4>
+
+            {/* Dinheiro dos Turnos (Soma Automática - Read Only) */}
+            <div className="bg-background rounded-xl p-3 border border-emerald-200 dark:border-emerald-800 shadow-2xs space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div>
+                  <span className="text-xs font-black uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                    <Banknote className="h-4 w-4 text-emerald-600" /> Dinheiro em Gaveta (Soma
+                    Automática dos Turnos)
+                  </span>
+                  <p className="text-[10px] text-text/50">
+                    Recuperado diretamente dos registros individuais informados pelos operadores dos
+                    turnos.
+                  </p>
+                </div>
+                <span className="font-mono font-black text-base text-emerald-700 dark:text-emerald-400">
+                  R$ {apuracao.total_dinheiro_turnos.toFixed(2)}
                 </span>
               </div>
 
-              {/* Inputs Globais */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                <div className="bg-background/90 p-2.5 rounded-xl border border-cyan-200 dark:border-cyan-800 shadow-2xs">
+              {/* Botão de Expandir Turnos */}
+              <button
+                type="button"
+                onClick={() => setMostrarDetalhesTurnos(!mostrarDetalhesTurnos)}
+                className="text-[11px] font-bold text-cyan-700 dark:text-cyan-300 flex items-center gap-1 hover:underline cursor-pointer"
+              >
+                {mostrarDetalhesTurnos ? (
+                  <ChevronUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                )}
+                {mostrarDetalhesTurnos ? 'Ocultar Turnos' : 'Ver Composição em Dinheiro por Turno'}
+              </button>
+
+              {mostrarDetalhesTurnos && (
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5 max-h-36 overflow-y-auto">
+                  {selectedRecords.map((r) => {
+                    const localPdv = allPdvs.find((p) => p.local.id === r.local_id)?.local;
+                    return (
+                      <div
+                        key={r.id}
+                        className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-slate-50 dark:bg-slate-900/60"
+                      >
+                        <span className="font-semibold text-text/80">
+                          {localPdv?.nome || 'PDV'} — {formatTurno(r.turno)}
+                        </span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                          R$ {Number(r.valor_dinheiro_gaveta || 0).toFixed(2)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Inputs Digitais Consolidados (Extrato Geral) */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-cyan-900 dark:text-cyan-200 uppercase tracking-wide block">
+                Recebimentos Digitais Consolidados (Extrato Bancário / Maquininhas):
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                <div className="bg-background p-2.5 rounded-xl border border-cyan-200 dark:border-cyan-800 shadow-2xs">
                   <label className="text-[10px] font-extrabold uppercase text-cyan-800 dark:text-cyan-300 flex items-center gap-1 mb-1">
-                    <Smartphone className="h-3.5 w-3.5 text-cyan-600" /> Pix Total (Todos PDVs)
+                    <Smartphone className="h-3.5 w-3.5 text-cyan-600" /> Pix Consolidado
                   </label>
                   <BRLCurrencyInput
                     value={globalPix}
@@ -2985,367 +3163,145 @@ function UnificarTodosPDVsModal({
                   />
                 </div>
 
-                <div className="bg-background/90 p-2.5 rounded-xl border border-cyan-200 dark:border-cyan-800 shadow-2xs">
+                <div className="bg-background p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 shadow-2xs">
                   <label className="text-[10px] font-extrabold uppercase text-indigo-800 dark:text-indigo-300 flex items-center gap-1 mb-1">
-                    <CreditCard className="h-3.5 w-3.5 text-indigo-600" /> Cartão Total (Todos PDVs)
+                    <CreditCard className="h-3.5 w-3.5 text-indigo-600" /> Cartão Débito
                   </label>
                   <BRLCurrencyInput
-                    value={globalCartao}
-                    onChange={(val) => setGlobalCartao(val)}
+                    value={globalDebito}
+                    onChange={(val) => setGlobalDebito(val)}
                     className="w-full text-xs font-mono font-bold"
                   />
                 </div>
 
-                <div className="bg-background/90 p-2.5 rounded-xl border border-cyan-200 dark:border-cyan-800 shadow-2xs">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] font-extrabold uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
-                      <Banknote className="h-3.5 w-3.5 text-emerald-600" /> Dinheiro Gaveta
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setModoDinheiro((prev) => (prev === 'global' ? 'por_pdv' : 'global'))
-                      }
-                      className="text-[9px] font-bold text-cyan-700 dark:text-cyan-300 underline hover:text-cyan-900"
-                    >
-                      {modoDinheiro === 'global' ? 'Informar por PDV' : 'Usar Total Global'}
-                    </button>
-                  </div>
+                <div className="bg-background p-2.5 rounded-xl border border-purple-200 dark:border-purple-800 shadow-2xs">
+                  <label className="text-[10px] font-extrabold uppercase text-purple-800 dark:text-purple-300 flex items-center gap-1 mb-1">
+                    <CreditCard className="h-3.5 w-3.5 text-purple-600" /> Cartão Crédito
+                  </label>
+                  <BRLCurrencyInput
+                    value={globalCredito}
+                    onChange={(val) => setGlobalCredito(val)}
+                    className="w-full text-xs font-mono font-bold"
+                  />
+                </div>
 
-                  {modoDinheiro === 'global' ? (
+                <div className="bg-background p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+                  <label className="text-[10px] font-extrabold uppercase text-text/70 flex items-center gap-1 mb-1">
+                    <DollarSign className="h-3.5 w-3.5 text-text/60" /> Outros Recebimentos
+                  </label>
+                  <BRLCurrencyInput
+                    value={globalOutros}
+                    onChange={(val) => setGlobalOutros(val)}
+                    className="w-full text-xs font-mono font-bold"
+                  />
+                </div>
+
+                {/* Taxa Financeira Única em Reais (R$) */}
+                <div className="bg-amber-50/50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-300 dark:border-amber-800 shadow-2xs sm:col-span-2 md:col-span-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <label className="text-xs font-black uppercase text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                      <DollarSign className="h-4 w-4 text-amber-600" /> Taxas das Operações /
+                      Maquininha (R$)
+                    </label>
+                    <p className="text-[10px] text-text/60 mt-0.5">
+                      Valor total único em Reais descontado pelas operadoras no dia (Pix + Cartões).
+                      Não diminui as vendas de mercadorias.
+                    </p>
+                  </div>
+                  <div className="w-full sm:w-48">
                     <BRLCurrencyInput
-                      value={globalDinheiro}
-                      onChange={(val) => setGlobalDinheiro(val)}
-                      className="w-full text-xs font-mono font-bold"
+                      value={globalTaxas}
+                      onChange={(val) => setGlobalTaxas(Math.max(0, val))}
+                      className="w-full text-xs font-mono font-black text-right border-amber-300 dark:border-amber-700 bg-background"
                     />
-                  ) : (
-                    <div className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 pt-1.5">
-                      💵 Preencher gaveta física por PDV abaixo
-                    </div>
-                  )}
+                  </div>
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3 text-xs text-cyan-900 dark:text-cyan-100 bg-cyan-100/60 dark:bg-cyan-950/50 p-3 rounded-xl border border-cyan-300 dark:border-cyan-800">
-              <div className="flex items-center gap-2">
-                <Store className="h-4 w-4 text-cyan-600 shrink-0" />
-                <span>
-                  <strong>Modo Detalhado:</strong> Informe manualmente os valores de Dinheiro, Pix e
-                  Cartão individualmente para cada PDV.
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={toggleAll}
-                className="shrink-0 text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300 underline hover:text-cyan-900 dark:hover:text-cyan-100"
-              >
-                {selectedPdvIds.size === allPdvs.length ? 'Desmarcar Todos' : 'Marcar Todos'}
-              </button>
-            </div>
-          )}
-
-          {/* Lista e Seleção de PDVs */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-text/70 uppercase tracking-wide">
-                PDVs Incluídos na Unificação ({selectedPdvs.length} de {allPdvs.length}{' '}
-                selecionados):
-              </h4>
-              {modoPreenchimento === 'global' && (
-                <button
-                  type="button"
-                  onClick={toggleAll}
-                  className="text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300 underline hover:text-cyan-900"
-                >
-                  {selectedPdvIds.size === allPdvs.length ? 'Desmarcar Todos' : 'Marcar Todos'}
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-              {allPdvs.map((pdvObj) => {
-                const { local, records } = pdvObj;
-                const isSelected = selectedPdvIds.has(local.id);
-                const fin = pdvFinancials[local.id] || { dinheiro: 0, pix: 0, cartao: 0 };
-                const totPdv = fin.dinheiro + fin.pix + fin.cartao;
-
-                const estRevenue = getPdvEstRevenue(pdvObj);
-                const pctShare =
-                  totalEstSalesAllSelected > 0
-                    ? (estRevenue / totalEstSalesAllSelected) * 100
-                    : 100 / selectedPdvs.length;
-
-                return (
-                  <div
-                    key={local.id}
-                    className={`p-3 rounded-xl border transition-all ${
-                      isSelected
-                        ? 'border-cyan-400 bg-cyan-50/70 dark:bg-cyan-950/50 shadow-xs'
-                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 opacity-70'
-                    }`}
-                  >
-                    {/* Header do Card com Checkbox (Responsivo para Mobile) */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3 mb-1">
-                      <label className="flex items-center gap-2 cursor-pointer select-none min-w-0">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => togglePdv(local.id)}
-                          className="h-4 w-4 rounded-md border-cyan-400 text-cyan-600 focus:ring-cyan-500 accent-cyan-600 cursor-pointer shrink-0"
-                        />
-                        <span className="text-xs font-black uppercase text-cyan-950 dark:text-cyan-100 truncate">
-                          {local.nome}
-                        </span>
-                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-200/50 dark:bg-cyan-900/50 px-1.5 py-0.5 rounded-full shrink-0">
-                          {records.length} {records.length === 1 ? 'turno' : 'turnos'}
-                        </span>
-                      </label>
-
-                      <div className="flex items-center justify-between sm:justify-end gap-2 text-xs w-full sm:w-auto">
-                        {modoPreenchimento === 'global' && isSelected && (
-                          <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-100 dark:bg-cyan-900/80 px-2 py-0.5 rounded-md shrink-0">
-                            Rateio: {pctShare.toFixed(1)}%
-                          </span>
-                        )}
-                        <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
-                          Total PDV: R$ {totPdv.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Exibição / Preenchimento no Modo Global vs Individual */}
-                    {isSelected && (
-                      <div className="mt-2 pt-2 border-t border-cyan-200/60 dark:border-cyan-800/60">
-                        {modoPreenchimento === 'global' ? (
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                            {/* Se dinheiro for por PDV, mostra input físico no card */}
-                            {modoDinheiro === 'por_pdv' ? (
-                              <div>
-                                <label className="text-[10px] font-extrabold uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1 mb-1">
-                                  <Banknote className="h-3.5 w-3.5 text-emerald-600" /> Dinheiro
-                                  Gaveta
-                                </label>
-                                <BRLCurrencyInput
-                                  value={fin.dinheiro}
-                                  onChange={(val) => updatePdvFinancial(local.id, 'dinheiro', val)}
-                                  className="w-full text-xs font-mono py-1"
-                                />
-                              </div>
-                            ) : (
-                              <div className="bg-background/80 rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
-                                <span className="text-[10px] text-text/50 font-bold block">
-                                  Dinheiro Gaveta (Rateado)
-                                </span>
-                                <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
-                                  R$ {fin.dinheiro.toFixed(2)}
-                                </span>
-                              </div>
-                            )}
-
-                            <div className="bg-background/80 rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
-                              <span className="text-[10px] text-text/50 font-bold block">
-                                Pix Rateado ({pctShare.toFixed(1)}%)
-                              </span>
-                              <span className="font-mono font-bold text-cyan-700 dark:text-cyan-300">
-                                R$ {fin.pix.toFixed(2)}
-                              </span>
-                            </div>
-
-                            <div className="bg-background/80 rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
-                              <span className="text-[10px] text-text/50 font-bold block">
-                                Cartão Rateado ({pctShare.toFixed(1)}%)
-                              </span>
-                              <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
-                                R$ {fin.cartao.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 animate-fade-in">
-                            <div>
-                              <label className="text-[10px] font-extrabold uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1 mb-1">
-                                <Banknote className="h-3.5 w-3.5 text-emerald-600" /> Dinheiro
-                                Gaveta
-                              </label>
-                              <BRLCurrencyInput
-                                value={fin.dinheiro}
-                                onChange={(val) => updatePdvFinancial(local.id, 'dinheiro', val)}
-                                className="w-full text-xs font-mono py-1.5"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] font-extrabold uppercase text-cyan-800 dark:text-cyan-300 flex items-center gap-1 mb-1">
-                                <Smartphone className="h-3.5 w-3.5 text-cyan-600" /> Pix Declarado
-                              </label>
-                              <BRLCurrencyInput
-                                value={fin.pix}
-                                onChange={(val) => updatePdvFinancial(local.id, 'pix', val)}
-                                className="w-full text-xs font-mono py-1.5"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="text-[10px] font-extrabold uppercase text-indigo-800 dark:text-indigo-300 flex items-center gap-1 mb-1">
-                                <CreditCard className="h-3.5 w-3.5 text-indigo-600" /> Cartão
-                                Declarado
-                              </label>
-                              <BRLCurrencyInput
-                                value={fin.cartao}
-                                onChange={(val) => updatePdvFinancial(local.id, 'cartao', val)}
-                                className="w-full text-xs font-mono py-1.5"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
           </div>
 
-          {/* Resumo Consolidado do Estoque */}
-          <div className="rounded-xl border border-cyan-200 dark:border-cyan-800/80 bg-cyan-50/40 dark:bg-cyan-950/30 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-cyan-800 dark:text-cyan-200 flex items-center gap-1.5">
-                <Package className="h-4 w-4 text-cyan-600" /> Estoque Consolidado (PDVs
-                Selecionados)
-              </h4>
-              {totalRetorno > 0 && (
-                <button
-                  type="button"
-                  onClick={handleZerarSobras}
-                  className="flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[10px] px-2 py-1 shadow-2xs transition-all active:scale-[0.97]"
-                >
-                  <CheckCircle2 className="h-3 w-3" /> ⚡ Zerar Sobras (Vendeu Tudo)
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="bg-background rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
-                <span className="text-[10px] text-text/50 font-bold block">Enviado</span>
-                <span className="font-mono font-black text-cyan-900 dark:text-cyan-100">
-                  {totalEnviado} un
-                </span>
-              </div>
-              <div className="bg-background rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
-                <span className="text-[10px] text-text/50 font-bold block">Sobras (Retorno)</span>
-                <span
-                  className={`font-mono font-black ${totalRetorno > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}
-                >
-                  {totalRetorno} un
-                </span>
-              </div>
-              <div className="bg-background rounded-lg p-2 border border-cyan-100 dark:border-cyan-900">
-                <span className="text-[10px] text-text/50 font-bold block">Vendido Estimado</span>
-                <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">
-                  {totalVendido} un
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Resumo Financeiro Consolidado */}
-          <div className="rounded-xl border border-cyan-300 dark:border-cyan-800 bg-cyan-100/40 dark:bg-cyan-950/60 p-3 space-y-2">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-cyan-900 dark:text-cyan-100 flex items-center gap-1.5">
-              <DollarSign className="h-4 w-4 text-cyan-600" /> Totais Financeiros Declarados
-              (Fechamento Unificado)
-            </h4>
-
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <div className="bg-background rounded-lg p-2 border border-cyan-200 dark:border-cyan-800 text-center">
-                <span className="text-[10px] text-text/50 font-bold block">Dinheiro Gaveta</span>
-                <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
-                  R$ {dinheiroTotal.toFixed(2)}
-                </span>
-              </div>
-              <div className="bg-background rounded-lg p-2 border border-cyan-200 dark:border-cyan-800 text-center">
-                <span className="text-[10px] text-text/50 font-bold block">Pix Declarado</span>
-                <span className="font-mono font-bold text-cyan-700 dark:text-cyan-300">
-                  R$ {pixTotal.toFixed(2)}
-                </span>
-              </div>
-              <div className="bg-background rounded-lg p-2 border border-cyan-200 dark:border-cyan-800 text-center">
-                <span className="text-[10px] text-text/50 font-bold block">Cartão Declarado</span>
-                <span className="font-mono font-bold text-indigo-700 dark:text-indigo-300">
-                  R$ {cartaoTotal.toFixed(2)}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between bg-cyan-200/60 dark:bg-cyan-900/50 p-2.5 rounded-lg text-xs font-bold">
-              <span className="text-cyan-950 dark:text-cyan-100">
-                Total Declarado ({selectedPdvs.length} PDVs):
-              </span>
-              <span className="font-mono font-black text-sm text-cyan-950 dark:text-cyan-50">
-                R$ {totalDeclarado.toFixed(2)}
-              </span>
-            </div>
-          </div>
-
-          {/* Card de Faturamento Esperado vs Declarado & Divergência */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 space-y-3 shadow-2xs bg-background">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-2">
+          {/* Área C: Balanço e Auditoria de Caixa */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 bg-background shadow-2xs">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-text/80 flex items-center gap-1.5">
-                <TrendingUp className="h-4 w-4 text-cyan-600" /> Balanço do Caixa & Divergência
+                <TrendingUp className="h-4 w-4 text-cyan-600" /> Área C: Balanço do Caixa &
+                Divergência
               </h4>
               <span className="text-[11px] font-mono font-semibold text-text/60">
-                Vendas Esperadas:{' '}
-                <strong className="text-text/90">R$ {faturamentoEsperadoTotal.toFixed(2)}</strong>
+                Total Bruto:{' '}
+                <strong className="text-text/90">
+                  R$ {apuracao.total_bruto_recebido.toFixed(2)}
+                </strong>{' '}
+                | Líquido:{' '}
+                <strong className="text-emerald-700 dark:text-emerald-400">
+                  R$ {apuracao.total_liquido_apos_taxas.toFixed(2)}
+                </strong>
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
               <div className="bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
                 <span className="text-[10px] text-text/50 font-bold block uppercase">
-                  Faturamento Esperado Vendas
+                  Vendas Líquidas
                 </span>
                 <span className="font-mono font-black text-sm text-text/90">
-                  R$ {faturamentoEsperadoTotal.toFixed(2)}
+                  R$ {apuracao.faturamento_liquido_esperado.toFixed(2)}
                 </span>
               </div>
-              <div className="bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
-                <span className="text-[10px] text-text/50 font-bold block uppercase">
-                  Total Declarado (Caixa + Pix + Cartão)
+              <div className="bg-cyan-50/50 dark:bg-cyan-950/30 p-2.5 rounded-lg border border-cyan-200 dark:border-cyan-800">
+                <span className="text-[10px] text-cyan-800 dark:text-cyan-300 font-bold block uppercase">
+                  Total Bruto Recebido
                 </span>
                 <span className="font-mono font-black text-sm text-cyan-700 dark:text-cyan-300">
-                  R$ {totalDeclarado.toFixed(2)}
+                  R$ {apuracao.total_bruto_recebido.toFixed(2)}
+                </span>
+              </div>
+              <div className="bg-amber-50/50 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200 dark:border-amber-800">
+                <span className="text-[10px] text-amber-800 dark:text-amber-300 font-bold block uppercase">
+                  Taxas Financeiras
+                </span>
+                <span className="font-mono font-black text-sm text-amber-700 dark:text-amber-300">
+                  -R$ {apuracao.total_taxas_operacionais.toFixed(2)}
+                </span>
+              </div>
+              <div className="bg-emerald-50/50 dark:bg-emerald-950/30 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                <span className="text-[10px] text-emerald-800 dark:text-emerald-300 font-bold block uppercase">
+                  Líquido após Taxas
+                </span>
+                <span className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-400">
+                  R$ {apuracao.total_liquido_apos_taxas.toFixed(2)}
                 </span>
               </div>
             </div>
 
-            {/* Badge de Divergência */}
+            {/* Status da Divergência */}
             {temDiferenca ? (
               <div
                 className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs font-medium animate-fade-in ${
-                  diferencaGeral < 0
+                  apuracao.diferenca_caixa < 0
                     ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-100'
                     : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-100'
                 }`}
               >
                 <AlertTriangle
-                  className={`h-5 w-5 shrink-0 mt-0.5 ${diferencaGeral < 0 ? 'text-rose-600' : 'text-emerald-600'}`}
+                  className={`h-5 w-5 shrink-0 mt-0.5 ${apuracao.diferenca_caixa < 0 ? 'text-rose-600' : 'text-emerald-600'}`}
                 />
                 <div className="space-y-1">
                   <div className="font-bold flex items-center gap-2">
                     <span>
-                      {diferencaGeral < 0
-                        ? '⚠️ Furo de Caixa / Falta Observada:'
-                        : 'ℹ️ Sobra de Caixa Registrada:'}
+                      {apuracao.diferenca_caixa < 0
+                        ? '⚠️ Furo / Falta de Caixa Observada:'
+                        : 'ℹ️ Sobra de Caixa Observada:'}
                     </span>
                     <span className="font-mono font-black text-sm">
-                      {diferencaGeral < 0
-                        ? `-R$ ${Math.abs(diferencaGeral).toFixed(2)}`
-                        : `+R$ ${diferencaGeral.toFixed(2)}`}
+                      {apuracao.diferenca_caixa < 0
+                        ? `-R$ ${Math.abs(apuracao.diferenca_caixa).toFixed(2)}`
+                        : `+R$ ${apuracao.diferenca_caixa.toFixed(2)}`}
                     </span>
                   </div>
                   <p className="text-[11px] opacity-80">
-                    O total recebido/declarado difere do faturamento esperado. Registre abaixo a
-                    justificativa ou especifique perdas/doações para arquivar na auditoria.
+                    O total recebido difere do faturamento das vendas. O sistema registrará este
+                    valor para auditoria. A justificativa abaixo é obrigatória.
                   </p>
                 </div>
               </div>
@@ -3353,7 +3309,9 @@ function UnificarTodosPDVsModal({
               <div className="p-2.5 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 text-xs font-bold flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>Caixas 100% Batidos! Faturamento das vendas igual ao valor declarado.</span>
+                  <span>
+                    Caixas 100% Batidos! Vendas conferem exatamente com os valores declarados.
+                  </span>
                 </span>
                 <span className="font-mono text-emerald-700 dark:text-emerald-300">
                   Diferença: R$ 0,00
@@ -3361,7 +3319,7 @@ function UnificarTodosPDVsModal({
               </div>
             )}
 
-            {/* Campo de Justificativa / Motivo da Divergência */}
+            {/* Justificativa da Divergência */}
             <div className="space-y-2 pt-1 border-t border-slate-200 dark:border-slate-800">
               <label className="text-xs font-bold text-text/80 uppercase tracking-wide flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
@@ -3370,11 +3328,11 @@ function UnificarTodosPDVsModal({
                   {temDiferenca && <span className="text-rose-500 font-extrabold">*</span>}
                 </span>
                 <span className="text-[10px] font-normal text-text/50">
-                  {temDiferenca ? '(Obrigatório para registrar no banco)' : '(Opcional)'}
+                  {temDiferenca ? '(Obrigatório para registrar)' : '(Opcional)'}
                 </span>
               </label>
 
-              {/* Botões de atalho rápido */}
+              {/* Botões de Atalho */}
               <div className="flex flex-wrap gap-1.5 text-[10px]">
                 <button
                   type="button"
@@ -3427,7 +3385,7 @@ function UnificarTodosPDVsModal({
                   }
                   className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-text/80 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                 >
-                  💳 Taxa/Diferença POS
+                  💳 Diferença Taxa POS
                 </button>
               </div>
 
@@ -3436,8 +3394,8 @@ function UnificarTodosPDVsModal({
                 onChange={(e) => setJustificativa(e.target.value)}
                 placeholder={
                   temDiferenca
-                    ? 'Descreva a causa da diferença (ex: 2 bolos doados para evento, avaria de produtos na vitrine, erro de troco, consumo de funcionários...)'
-                    : 'Observações adicionais sobre esta unificação em lote (opcional)...'
+                    ? 'Descreva o motivo da diferença (ex: 2 bolos avariados na vitrine, erro de troco em dinheiro, taxas bancárias...)'
+                    : 'Observações adicionais sobre este fechamento (opcional)...'
                 }
                 rows={2}
                 className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-background p-2.5 text-xs text-text focus:border-cyan-500 focus:outline-hidden transition-all placeholder:text-text/40"
@@ -3445,83 +3403,35 @@ function UnificarTodosPDVsModal({
             </div>
           </div>
 
-          {/* Accordion de Detalhes por PDV */}
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => setMostrarDetalhesPdvs(!mostrarDetalhesPdvs)}
-              className="flex items-center justify-between w-full rounded-xl bg-cyan-100/70 dark:bg-cyan-950/60 p-2.5 text-xs font-bold text-cyan-900 dark:text-cyan-100 hover:bg-cyan-200/70 dark:hover:bg-cyan-900 transition-colors border border-cyan-200 dark:border-cyan-800"
-            >
-              <span className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-                <span>Ver Detalhes dos Turnos ({selectedPdvs.length} PDVs)</span>
-              </span>
-              <span className="flex items-center gap-1 text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300">
-                {mostrarDetalhesPdvs ? 'Ocultar' : 'Ver Detalhes'}
-                {mostrarDetalhesPdvs ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </span>
-            </button>
-
-            {mostrarDetalhesPdvs && (
-              <div className="space-y-2 max-h-48 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-900/80 rounded-xl border border-slate-200 dark:border-slate-800 animate-fade-in">
-                {selectedPdvs.map(({ local, records }) => {
-                  const fin = pdvFinancials[local.id] || { dinheiro: 0, pix: 0, cartao: 0 };
-                  const tot = fin.dinheiro + fin.pix + fin.cartao;
-                  const tNames = records.map((r) => formatTurno(r.turno)).join(', ');
-
-                  return (
-                    <div
-                      key={local.id}
-                      className="rounded-lg bg-background p-2.5 border border-primary/10 space-y-1 text-xs shadow-2xs"
-                    >
-                      <div className="flex items-center justify-between font-bold">
-                        <span className="text-cyan-900 dark:text-cyan-200 uppercase">
-                          {local.nome}
-                        </span>
-                        <span className="text-cyan-700 dark:text-cyan-300 font-mono">
-                          R$ {tot.toFixed(2)}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-text/50">
-                        Turnos ({records.length}):{' '}
-                        <span className="font-semibold text-text/80">{tNames}</span>
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Botões do Modal */}
+          {/* Botões Finais */}
           <div className="flex gap-2 pt-2 border-t border-primary/10">
             <button
               type="button"
               onClick={onClose}
               disabled={salvando}
-              className="flex-1 rounded-xl border border-primary/20 bg-primary/5 py-2.5 text-xs font-bold text-text/70 hover:bg-primary/10 transition-colors disabled:opacity-50"
+              className="flex-1 rounded-xl border border-primary/20 bg-primary/5 py-2.5 text-xs font-bold text-text/70 hover:bg-primary/10 transition-colors disabled:opacity-50 cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="button"
-              onClick={handleSalvarUnificacaoEmLote}
-              disabled={salvando || selectedPdvs.length === 0}
-              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 py-2.5 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-50 active:scale-[0.97]"
+              onClick={handleSalvarUnificacao}
+              disabled={
+                salvando ||
+                selectedPdvs.length === 0 ||
+                apuracao.tem_pendencias ||
+                (temDiferenca && !justificativa.trim())
+              }
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 py-2.5 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-50 active:scale-[0.97] cursor-pointer"
             >
               {salvando ? (
                 <>
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Unificando{' '}
-                  {selectedPdvs.length} PDVs...
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Concluindo Fechamento...
                 </>
               ) : (
                 <>
-                  <Layers className="h-3.5 w-3.5" /> Concluir Unificação ({selectedPdvs.length}{' '}
-                  PDVs)
+                  <Layers className="h-3.5 w-3.5" /> Concluir Fechamento Unificado (
+                  {selectedPdvs.length} PDVs)
                 </>
               )}
             </button>
@@ -3543,7 +3453,7 @@ function UnificarTodosPDVsModal({
   );
 }
 
-// ─── Modal Fechamento Unificado PDV ─────────────────────────────────────────
+// ─── Modal Fechamento Unificado PDV (Múltiplos Turnos do Mesmo PDV) ───────────
 
 function FechamentoUnificadoPDVModal({
   local,
@@ -3562,29 +3472,27 @@ function FechamentoUnificadoPDVModal({
   const confirmDialog = useConfirm();
   const pdvNome = local.nome || 'PDV';
   const [salvando, setSalvando] = useState(false);
+  const [justificativa, setJustificativa] = useState('');
 
-  const initialDinheiro = records.reduce(
-    (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
-    0
+  // Soma automática do dinheiro físico dos turnos deste PDV
+  const dinheiroTotalTurnos = useMemo(
+    () => records.reduce((acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0), 0),
+    [records]
   );
-  const initialPix = records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
-  const initialCartao = records.reduce(
+
+  const initialPixSum = records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
+  const initialCartaoSum = records.reduce(
     (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
     0
   );
 
-  const [valorDinheiro, setValorDinheiro] = useState<number>(initialDinheiro);
-  const [valorPix, setValorPix] = useState<number>(initialPix);
-  const [valorCartao, setValorCartao] = useState<number>(initialCartao);
-  const initialTaxaCartao = records.reduce((acc, r) => acc + (Number(r.taxa_cartao_reais) || 0), 0);
-  const [taxaCartaoReais, setTaxaCartaoReais] = useState<number>(initialTaxaCartao);
+  const [valorPix, setValorPix] = useState<number>(initialPixSum);
+  const [valorCartao, setValorCartao] = useState<number>(initialCartaoSum);
+  const initialTaxaSum = records.reduce((acc, r) => acc + (Number(r.taxa_cartao_reais) || 0), 0);
+  const [valorTaxas, setValorTaxas] = useState<number>(initialTaxaSum);
   const [mostrarDetalhesTurnos, setMostrarDetalhesTurnos] = useState(false);
 
-  const taxaCartaoPercentual = valorCartao > 0 ? (taxaCartaoReais / valorCartao) * 100 : 0;
-  const cartaoLiquido = Math.max(0, valorCartao - taxaCartaoReais);
-
-  const turnosLabel = records.map((r) => formatTurno(r.turno)).join(' + ');
-
+  // Sobras consolidadas deste PDV
   const [gradeConsolidada, setGradeConsolidada] = useState<ItemGradeKanban[]>(() => {
     const map = new Map<string, ItemGradeKanban>();
 
@@ -3595,7 +3503,7 @@ function FechamentoUnificadoPDVModal({
         preco_unitario: p.preco,
         qtd_sobra_anterior: 0,
         qtd_enviada: 0,
-        qtd_retorno: 0,
+        qtd_retorno: null,
       });
     });
 
@@ -3608,7 +3516,7 @@ function FechamentoUnificadoPDVModal({
             preco_unitario: Number(it.preco_unitario) || 0,
             qtd_sobra_anterior: 0,
             qtd_enviada: 0,
-            qtd_retorno: 0,
+            qtd_retorno: null,
           };
           map.set(it.produto_id, {
             ...existing,
@@ -3617,123 +3525,182 @@ function FechamentoUnificadoPDVModal({
             qtd_sobra_anterior:
               (Number(existing.qtd_sobra_anterior) || 0) + (Number(it.qtd_sobra_anterior) || 0),
             qtd_enviada: (Number(existing.qtd_enviada) || 0) + (Number(it.qtd_enviada) || 0),
-            qtd_retorno: (Number(existing.qtd_retorno) || 0) + (Number(it.qtd_retorno) || 0),
+            qtd_retorno:
+              it.qtd_retorno !== null && it.qtd_retorno !== undefined
+                ? (Number(existing.qtd_retorno) || 0) + Number(it.qtd_retorno)
+                : existing.qtd_retorno,
           });
         });
       }
     });
 
-    return Array.from(map.values());
+    return Array.from(map.values()).filter(
+      (it) => (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0) > 0
+    );
   });
-
-  const totalEnviado = gradeConsolidada.reduce(
-    (acc, it) => acc + (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0),
-    0
-  );
-  const totalRetorno = gradeConsolidada.reduce((acc, it) => acc + (Number(it.qtd_retorno) || 0), 0);
-  const totalVendido = Math.max(0, totalEnviado - totalRetorno);
-
-  const faturamentoBrutoTeorico = gradeConsolidada.reduce((acc, it) => {
-    const disp = (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0);
-    const vend = Math.max(0, disp - (Number(it.qtd_retorno) || 0));
-    return acc + vend * (Number(it.preco_unitario) || 0);
-  }, 0);
-
-  const pixCartaoEsperado = Math.max(0, faturamentoBrutoTeorico - valorDinheiro);
-  const totalDeclarado = valorDinheiro + valorPix + valorCartao;
 
   const handleZerarSobras = () => {
     setGradeConsolidada((prev) => prev.map((it) => ({ ...it, qtd_retorno: 0 })));
     toast({
       title: 'Vendeu tudo nos turnos!',
-      description: 'Todas as sobras zeradas para o fechamento unificado.',
+      description: 'Todas as sobras confirmadas como zero para este PDV.',
       variant: 'info',
     });
   };
 
-  const handleSalvarFechamentoUnificado = async () => {
+  // Monta TurnoFechamentoInput[] para apuração oficial
+  const turnosInput: TurnoFechamentoInput[] = useMemo(() => {
+    const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
+    const sorted = [...records].sort(
+      (a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99)
+    );
+
+    return sorted.map((r, idx) => {
+      const isUltimo = idx === sorted.length - 1;
+      const itensInput: ItemMovimentacaoPDV[] = gradeConsolidada.map((g) => ({
+        produto_id: g.produto_id,
+        nome: g.nome,
+        preco_unitario: Number(g.preco_unitario || 0),
+        qtd_enviada: isUltimo ? Number(g.qtd_enviada || 0) : 0,
+        qtd_retorno: isUltimo ? g.qtd_retorno : 0,
+      }));
+
+      return {
+        id: r.id,
+        local_id: local.id,
+        data: r.data,
+        turno: r.turno,
+        status: r.status,
+        valor_dinheiro_gaveta: Number(r.valor_dinheiro_gaveta || 0),
+        itens_grade: itensInput,
+      };
+    });
+  }, [records, local.id, gradeConsolidada]);
+
+  const apuracao = useMemo(() => {
+    return apurarFechamentoUnificado(turnosInput, {
+      pix: valorPix,
+      cartao_debito: 0,
+      cartao_credito: valorCartao,
+      taxas_operacionais: valorTaxas,
+    });
+  }, [turnosInput, valorPix, valorCartao, valorTaxas]);
+
+  const temDiferenca = Math.abs(apuracao.diferenca_caixa) > 0.05;
+
+  const handleSalvarFechamento = async () => {
+    if (apuracao.tem_pendencias) {
+      toast({
+        title: 'Sobras Pendentes',
+        description: 'Informe as sobras de todos os produtos ou confirme que vendeu tudo.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    if (temDiferenca && !justificativa.trim()) {
+      toast({
+        title: 'Informe a Justificativa',
+        description: `Existe uma diferença de R$ ${Math.abs(apuracao.diferenca_caixa).toFixed(2)}. Por favor informe a justificativa.`,
+        variant: 'warning',
+      });
+      return;
+    }
+
     const confirmou = await confirmDialog.confirm({
       title: `Fechamento Unificado — ${pdvNome}`,
-      message: `Confirma a unificação de ${records.length} turno(s) (${turnosLabel}) do PDV "${pdvNome}"?\n\n- Sobras Totais: ${totalRetorno} un\n- Dinheiro: R$ ${valorDinheiro.toFixed(2)}\n- Pix: R$ ${valorPix.toFixed(2)}\n- Cartão Bruto: R$ ${valorCartao.toFixed(2)}${taxaCartaoReais > 0 ? `\n- Taxa Cartão: -R$ ${taxaCartaoReais.toFixed(2)} (${taxaCartaoPercentual.toFixed(2)}%)` : ''}\n- Total Declarado: R$ ${totalDeclarado.toFixed(2)}`,
-      confirmText: 'Confirmar e Encerrar Turnos Unificados',
+      message:
+        `Confirma a unificação de ${records.length} turno(s) do PDV "${pdvNome}"?\n\n` +
+        `• Vendas Líquidas: R$ ${apuracao.faturamento_liquido_esperado.toFixed(2)}\n` +
+        `• Dinheiro dos Turnos: R$ ${dinheiroTotalTurnos.toFixed(2)}\n` +
+        `• Pix Declarado: R$ ${valorPix.toFixed(2)}\n` +
+        `• Cartão Declarado: R$ ${valorCartao.toFixed(2)}\n` +
+        `• Total Bruto Recebido: R$ ${apuracao.total_bruto_recebido.toFixed(2)}\n` +
+        `• Taxas das Operações: -R$ ${apuracao.total_taxas_operacionais.toFixed(2)}\n` +
+        `• Total Líquido após Taxas: R$ ${apuracao.total_liquido_apos_taxas.toFixed(2)}\n` +
+        `• Diferença Comercial: ${apuracao.diferenca_caixa < 0 ? `-R$ ${Math.abs(apuracao.diferenca_caixa).toFixed(2)}` : apuracao.diferenca_caixa > 0 ? `+R$ ${apuracao.diferenca_caixa.toFixed(2)}` : 'R$ 0,00'}\n` +
+        (justificativa.trim() ? `• Justificativa: "${justificativa.trim()}"` : ''),
+      confirmText: 'Confirmar Fechamento',
       cancelText: 'Revisar',
-      variant: 'info',
+      variant: temDiferenca && apuracao.diferenca_caixa < 0 ? 'danger' : 'info',
     });
+
     if (!confirmou) return;
 
     setSalvando(true);
+
     try {
-      const primaryRecord = records[records.length - 1];
+      const organizationId = records[0]?.organization_id;
+      const dataFechamento = records[0]?.data;
 
-      const totalEnviadaNum = gradeConsolidada.reduce(
-        (acc, it) => acc + (Number(it.qtd_enviada) || 0),
-        0
-      );
+      // Atualizações atômicas das remessas do PDV sem zerar registros
+      const remessasUpdates = records.map((r, idx) => {
+        const isUltimo = idx === records.length - 1;
+        const totalRet = isUltimo
+          ? gradeConsolidada.reduce((acc, it) => acc + (Number(it.qtd_retorno) || 0), 0)
+          : 0;
 
-      const payloadPrimary = {
-        qtd_total_retorno: totalRetorno,
-        qtd_total_enviada: totalEnviadaNum,
-        itens_grade: gradeConsolidada,
-        valor_dinheiro_gaveta: valorDinheiro,
-        valor_pix_declarado: valorPix,
-        valor_cartao_declarado: valorCartao,
-        taxa_cartao_reais: taxaCartaoReais,
-        taxa_cartao_percentual: Number(taxaCartaoPercentual.toFixed(2)),
-        faturamento_bruto_teorico: faturamentoBrutoTeorico,
-        faturamento_liquido_esperado: faturamentoBrutoTeorico,
-        pix_cartao_esperado: pixCartaoEsperado,
-        tipo_fechamento: 'unificado',
-        observacoes: `Fechamento Unificado (${records.length} turnos: ${turnosLabel})`,
-        status: 'encerrado',
-        updated_at: new Date().toISOString(),
-      };
+        return {
+          id: r.id,
+          itens_grade: gradeConsolidada.map((it) => ({
+            ...it,
+            qtd_retorno: isUltimo ? Number(it.qtd_retorno) || 0 : 0,
+          })),
+          qtd_total_retorno: totalRet,
+          faturamento_bruto_teorico: isUltimo ? apuracao.faturamento_bruto_esperado : 0,
+          faturamento_liquido_esperado: isUltimo ? apuracao.faturamento_liquido_esperado : 0,
+        };
+      });
 
-      const payloadSecondary = {
-        qtd_total_retorno: 0,
-        valor_dinheiro_gaveta: 0,
-        valor_pix_declarado: 0,
-        valor_cartao_declarado: 0,
-        faturamento_bruto_teorico: 0,
-        faturamento_liquido_esperado: 0,
-        pix_cartao_esperado: 0,
-        tipo_fechamento: 'unificado',
-        observacoes: `Unificado no registro principal (${primaryRecord.id})`,
-        status: 'encerrado',
-        updated_at: new Date().toISOString(),
-      };
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('fechar_pdvs_unificado', {
+        p_organization_id: organizationId,
+        p_data: dataFechamento,
+        p_remessa_ids: records.map((r) => r.id),
+        p_pix_declarado: valorPix,
+        p_cartao_debito_declarado: 0,
+        p_cartao_credito_declarado: valorCartao,
+        p_outros_declarado: 0,
+        p_justificativa: justificativa.trim() || null,
+        p_remessas_updates: remessasUpdates,
+        p_taxas_operacionais: valorTaxas,
+      });
 
-      const { error: errPrimary } = await supabase
-        .from('remessas_cargas_pdv')
-        .update(payloadPrimary)
-        .eq('id', primaryRecord.id);
+      if (rpcError) throw rpcError;
 
-      if (errPrimary) throw errPrimary;
-
-      for (const rec of records) {
-        if (rec.id !== primaryRecord.id) {
-          const { error: errSec } = await supabase
-            .from('remessas_cargas_pdv')
-            .update(payloadSecondary)
-            .eq('id', rec.id);
-          if (errSec) console.warn('Erro ao atualizar turno secundário:', errSec);
+      // Persistência das taxas operacionais no registro do fechamento geral
+      if (rpcResult?.fechamento_id && valorTaxas > 0) {
+        try {
+          await supabase
+            .from('fechamentos_unificados_pdv')
+            .update({
+              total_taxas_operacionais: valorTaxas,
+              total_liquido_apos_taxas: apuracao.total_liquido_apos_taxas,
+            })
+            .eq('id', rpcResult.fechamento_id);
+        } catch (e) {
+          console.warn('Aguardando migração de total_taxas_operacionais:', e);
         }
       }
 
       toast({
-        title: 'Turnos Unificados com Sucesso! ⚡',
-        description: `Fechamento do PDV ${pdvNome} realizado (${records.length} turnos). Total: R$ ${totalDeclarado.toFixed(2)}.`,
+        title: 'Fechamento Unificado Concluído! ⚡',
+        description: `PDV ${pdvNome} encerrado com sucesso. Registros preservados.`,
         variant: 'success',
       });
 
-      const updatedRecords = records.map((rec) =>
-        rec.id === primaryRecord.id
-          ? { ...rec, ...payloadPrimary }
-          : { ...rec, ...payloadSecondary }
-      );
+      confetti({ particleCount: 60, spread: 50 });
+
+      const updatedRecords: RemessaKanban[] = records.map((r) => ({
+        ...r,
+        fechamento_unificado_id: rpcResult?.fechamento_id,
+        tipo_fechamento: 'unificado',
+        status: 'encerrado',
+      }));
 
       onSave(updatedRecords);
     } catch (err: any) {
-      toast({ title: 'Erro no Fechamento Unificado', description: err.message, variant: 'error' });
+      console.error('Erro ao fechar turnos unificados:', err);
+      toast({ title: 'Erro ao Salvar', description: err.message, variant: 'error' });
     } finally {
       setSalvando(false);
     }
@@ -3749,8 +3716,7 @@ function FechamentoUnificadoPDVModal({
                 <Layers className="h-4 w-4 text-cyan-600" /> Fechamento Unificado — {pdvNome}
               </h3>
               <p className="text-[11px] font-medium text-text/50 mt-0.5">
-                Agrupando {records.length} turno(s):{' '}
-                <span className="font-bold text-cyan-800 dark:text-cyan-200">{turnosLabel}</span>
+                Agrupando {records.length} turno(s) do mesmo PDV com preservação dos registros
               </p>
             </div>
             <button
@@ -3762,14 +3728,7 @@ function FechamentoUnificadoPDVModal({
             </button>
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-cyan-800 dark:text-cyan-200 bg-cyan-50 dark:bg-cyan-950/40 rounded-xl p-3 border border-cyan-200 dark:border-cyan-800">
-            <Calendar className="h-4 w-4 text-cyan-600 shrink-0" />
-            <span>
-              Este procedimento somará o estoque e consolidará os valores em{' '}
-              <strong>Dinheiro, Pix e Cartão</strong> de todos os turnos juntos.
-            </span>
-          </div>
-
+          {/* Accordion de Turnos */}
           <div className="space-y-2">
             <button
               type="button"
@@ -3778,7 +3737,7 @@ function FechamentoUnificadoPDVModal({
             >
               <span className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-                <span>Ver Valores e Detalhes de Cada Turno ({records.length})</span>
+                <span>Ver Dinheiro de Cada Turno ({records.length})</span>
               </span>
               <span className="flex items-center gap-1 text-[11px] font-extrabold text-cyan-700 dark:text-cyan-300">
                 {mostrarDetalhesTurnos ? 'Ocultar' : 'Ver Detalhes'}
@@ -3791,68 +3750,18 @@ function FechamentoUnificadoPDVModal({
             </button>
 
             {mostrarDetalhesTurnos && (
-              <div className="space-y-2 max-h-52 overflow-y-auto p-2.5 bg-slate-50 dark:bg-slate-900/80 rounded-xl border border-slate-200 dark:border-slate-800 animate-fade-in">
-                {records.map((r, idx) => {
-                  const env = Number(r.qtd_total_enviada) || 0;
-                  const ret = Number(r.qtd_total_retorno) || 0;
-                  const vend = Math.max(0, env - ret);
-                  const din = Number(r.valor_dinheiro_gaveta) || 0;
-                  const px = Number(r.valor_pix_declarado) || 0;
-                  const car = Number(r.valor_cartao_declarado) || 0;
-                  const fat =
-                    Number(r.faturamento_liquido_esperado) ||
-                    Number(r.faturamento_bruto_teorico) ||
-                    din + px + car;
-
-                  return (
-                    <div
-                      key={r.id || idx}
-                      className="rounded-lg bg-background p-2.5 border border-primary/10 space-y-1.5 text-xs shadow-2xs"
-                    >
-                      <div className="flex items-center justify-between font-bold">
-                        <span className="text-cyan-800 dark:text-cyan-300 flex items-center gap-1.5 capitalize">
-                          <Clock className="h-3.5 w-3.5 text-cyan-600" />
-                          {formatTurno(r.turno)}
-                          {r.vendedor_nome && (
-                            <span className="text-[10px] font-medium text-text/50">
-                              ({r.vendedor_nome})
-                            </span>
-                          )}
-                        </span>
-                        <span className="font-mono text-emerald-600 dark:text-emerald-400 font-extrabold">
-                          Fat: R$ {fat.toFixed(2)}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-1 text-[10px] font-mono text-text/60 bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-md text-center">
-                        <div>
-                          Enviado: <strong className="text-text/80">{env}</strong>
-                        </div>
-                        <div>
-                          Sobra:{' '}
-                          <strong className="text-amber-700 dark:text-amber-400">{ret}</strong>
-                        </div>
-                        <div>
-                          Vendido:{' '}
-                          <strong className="text-emerald-700 dark:text-emerald-400">{vend}</strong>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between text-[10px] text-text/70 pt-1 border-t border-slate-100 dark:border-slate-800">
-                        <span className="flex items-center gap-1 font-mono">
-                          <Banknote className="h-3 w-3 text-emerald-500" /> Din: R$ {din.toFixed(2)}
-                        </span>
-                        <span className="flex items-center gap-1 font-mono">
-                          <Smartphone className="h-3 w-3 text-purple-500" /> Pix: R$ {px.toFixed(2)}
-                        </span>
-                        <span className="flex items-center gap-1 font-mono">
-                          <CreditCard className="h-3 w-3 text-cyan-500" /> Cartão: R${' '}
-                          {car.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="space-y-1.5 p-2 bg-slate-50 dark:bg-slate-900/80 rounded-xl border border-slate-200 dark:border-slate-800">
+                {records.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between text-xs p-2 rounded-lg bg-background border border-primary/10"
+                  >
+                    <span className="font-semibold text-text/80">{formatTurno(r.turno)}</span>
+                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                      R$ {Number(r.valor_dinheiro_gaveta || 0).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -3860,101 +3769,83 @@ function FechamentoUnificadoPDVModal({
           <button
             type="button"
             onClick={handleZerarSobras}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors cursor-pointer"
           >
             <CheckCircle2 className="h-4 w-4" /> Vendeu Tudo nos Turnos (Sobra Zero)
           </button>
 
+          {/* Lista de Sobras */}
           <div className="space-y-1.5 max-h-52 overflow-y-auto">
-            {gradeConsolidada
-              .filter(
-                (it) => (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0) > 0
-              )
-              .map((item) => {
-                const disponivel =
-                  (Number(item.qtd_sobra_anterior) || 0) + (Number(item.qtd_enviada) || 0);
-                return (
-                  <div
-                    key={item.produto_id}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-primary/10 bg-background p-2.5"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-text/80 truncate">{item.nome}</p>
-                      <p className="text-[10px] text-text/40">
-                        Disponível Total:{' '}
-                        <span className="font-mono font-bold text-text/70">{disponivel} un</span>
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <label className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">
-                        Sobra Unificada:
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={disponivel}
-                        value={item.qtd_retorno}
-                        onChange={(e) => {
-                          const val = Math.max(
-                            0,
-                            Math.min(disponivel, Number(e.target.value) || 0)
-                          );
-                          setGradeConsolidada((prev) =>
-                            prev.map((it) =>
-                              it.produto_id === item.produto_id ? { ...it, qtd_retorno: val } : it
-                            )
-                          );
-                        }}
-                        className="w-16 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 text-center text-sm font-mono font-bold text-amber-800 dark:text-amber-200 outline-none focus:ring-2 focus:ring-amber-400"
-                      />
-                    </div>
+            {gradeConsolidada.map((item) => {
+              const disponivel =
+                (Number(item.qtd_sobra_anterior) || 0) + (Number(item.qtd_enviada) || 0);
+              const isPendente = item.qtd_retorno === null || item.qtd_retorno === undefined;
+
+              return (
+                <div
+                  key={item.produto_id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-primary/10 bg-background p-2.5"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-text/80 truncate">{item.nome}</p>
+                    <p className="text-[10px] text-text/40">
+                      Disponível:{' '}
+                      <span className="font-mono font-bold text-text/70">{disponivel} un</span>
+                    </p>
                   </div>
-                );
-              })}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <label className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">
+                      Sobra:
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={disponivel}
+                      value={item.qtd_retorno ?? ''}
+                      placeholder="Pend."
+                      onChange={(e) => {
+                        const val =
+                          e.target.value === ''
+                            ? null
+                            : Math.max(0, Math.min(disponivel, Number(e.target.value)));
+                        setGradeConsolidada((prev) =>
+                          prev.map((it) =>
+                            it.produto_id === item.produto_id ? { ...it, qtd_retorno: val } : it
+                          )
+                        );
+                      }}
+                      className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none ${
+                        isPendente
+                          ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
+                          : 'border-slate-300 dark:border-slate-700 bg-background text-text'
+                      }`}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-center text-xs">
-            <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-2">
-              <span className="text-[9px] font-bold uppercase text-text/40 block">
-                Total Disponível
-              </span>
-              <span className="font-mono font-black text-text/80 text-sm">{totalEnviado}</span>
-            </div>
-            <div className="rounded-xl bg-amber-100 dark:bg-amber-900/30 p-2">
-              <span className="text-[9px] font-bold uppercase text-amber-700 dark:text-amber-400 block">
-                Total Sobras
-              </span>
-              <span className="font-mono font-black text-amber-700 dark:text-amber-300 text-sm">
-                {totalRetorno}
-              </span>
-            </div>
-            <div className="rounded-xl bg-emerald-100 dark:bg-emerald-900/30 p-2">
-              <span className="text-[9px] font-bold uppercase text-emerald-700 dark:text-emerald-400 block">
-                Total Vendido
-              </span>
-              <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-sm">
-                {totalVendido}
-              </span>
-            </div>
-          </div>
-
+          {/* Lançamento dos Valores */}
           <div className="space-y-3 pt-1">
             <h4 className="text-xs font-extrabold uppercase tracking-wider text-text/70 flex items-center gap-1.5">
-              <Banknote className="h-4 w-4 text-emerald-600" /> Lançamento dos Valores do Fechamento
+              <Banknote className="h-4 w-4 text-emerald-600" /> Valores do Fechamento
             </h4>
 
-            <div>
-              <label className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 mb-1">
-                <Banknote className="h-3.5 w-3.5" /> Valor em Dinheiro (R$)
-              </label>
-              <BRLCurrencyInput
-                value={valorDinheiro}
-                onChange={(val) => setValorDinheiro(val)}
-                className="w-full rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 font-mono text-base font-bold text-emerald-800 dark:text-emerald-200 outline-none focus:ring-2 focus:ring-emerald-400"
-              />
+            {/* Dinheiro (Read Only) */}
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold uppercase text-emerald-800 dark:text-emerald-300 block">
+                  Dinheiro Somado dos Turnos
+                </span>
+                <span className="text-[10px] text-text/50">Recuperado automaticamente</span>
+              </div>
+              <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-sm">
+                R$ {dinheiroTotalTurnos.toFixed(2)}
+              </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1.5 mb-1">
                   <Smartphone className="h-3.5 w-3.5" /> Pix (R$)
@@ -3962,81 +3853,96 @@ function FechamentoUnificadoPDVModal({
                 <BRLCurrencyInput
                   value={valorPix}
                   onChange={(val) => setValorPix(val)}
-                  className="w-full rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20 px-3 py-2 font-mono text-sm font-bold text-purple-800 dark:text-purple-200 outline-none focus:ring-2 focus:ring-purple-400"
+                  className="w-full rounded-xl border border-purple-300 dark:border-purple-700 bg-background px-3 py-2 font-mono text-sm font-bold text-text outline-none"
                 />
               </div>
               <div>
                 <label className="text-xs font-bold text-cyan-700 dark:text-cyan-400 flex items-center gap-1.5 mb-1">
-                  <CreditCard className="h-3.5 w-3.5" /> Cartão Bruto (R$)
+                  <CreditCard className="h-3.5 w-3.5" /> Cartão (R$)
                 </label>
                 <BRLCurrencyInput
                   value={valorCartao}
                   onChange={(val) => setValorCartao(val)}
-                  className="w-full rounded-xl border border-cyan-300 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 px-3 py-2 font-mono text-sm font-bold text-cyan-800 dark:text-cyan-200 outline-none focus:ring-2 focus:ring-cyan-400"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center justify-between mb-1">
-                  <span className="flex items-center gap-1">
-                    <DollarSign className="h-3.5 w-3.5" /> Taxa (R$)
-                  </span>
-                  {valorCartao > 0 && (
-                    <span className="text-[10px] font-mono text-amber-600 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 rounded-full font-extrabold">
-                      {taxaCartaoPercentual.toFixed(2)}%
-                    </span>
-                  )}
-                </label>
-                <BRLCurrencyInput
-                  value={taxaCartaoReais}
-                  onChange={(val) => setTaxaCartaoReais(val)}
-                  placeholder="R$ 0,00"
-                  className="w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 font-mono text-sm font-bold text-amber-900 dark:text-amber-100 outline-none focus:ring-2 focus:ring-amber-400"
+                  className="w-full rounded-xl border border-cyan-300 dark:border-cyan-700 bg-background px-3 py-2 font-mono text-sm font-bold text-text outline-none"
                 />
               </div>
             </div>
-          </div>
 
-          <div className="rounded-xl bg-slate-900 dark:bg-slate-950 p-3 text-xs space-y-1.5">
-            <div className="flex justify-between text-slate-300">
-              <span>Faturamento Bruto Teórico ({records.length} Turnos):</span>
-              <span className="font-mono font-bold text-white">
-                R$ {faturamentoBrutoTeorico.toFixed(2)}
-              </span>
+            {/* Taxa Financeira Única em Reais (R$) */}
+            <div className="bg-amber-50/50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-300 dark:border-amber-800 flex items-center justify-between gap-3">
+              <div>
+                <label className="text-xs font-black uppercase text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                  <DollarSign className="h-4 w-4 text-amber-600" /> Taxas das Operações (R$)
+                </label>
+                <p className="text-[10px] text-text/60">
+                  Total único em Reais descontado pelas operadoras no dia
+                </p>
+              </div>
+              <div className="w-36">
+                <BRLCurrencyInput
+                  value={valorTaxas}
+                  onChange={(val) => setValorTaxas(Math.max(0, val))}
+                  className="w-full rounded-lg border border-amber-300 dark:border-amber-700 bg-background px-2.5 py-1.5 font-mono text-xs font-black text-right outline-none"
+                />
+              </div>
             </div>
-            <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
-              <span>Pix/Cartão Esperado:</span>
-              <span className="font-mono font-bold text-cyan-300">
-                R$ {pixCartaoEsperado.toFixed(2)}
-              </span>
-            </div>
-            {taxaCartaoReais > 0 && (
-              <div className="flex justify-between text-amber-300 font-bold border-t border-slate-800 pt-1">
-                <span>Taxa de Cartão Aplicada:</span>
-                <span className="font-mono">
-                  -R$ {taxaCartaoReais.toFixed(2)} ({taxaCartaoPercentual.toFixed(2)}%)
+
+            {/* Balanço */}
+            <div className="rounded-xl bg-slate-900 dark:bg-slate-950 p-3 text-xs space-y-1.5">
+              <div className="flex justify-between text-slate-300">
+                <span>Vendas Líquidas Apuradas:</span>
+                <span className="font-mono font-bold text-white">
+                  R$ {apuracao.faturamento_liquido_esperado.toFixed(2)}
                 </span>
               </div>
+              <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
+                <span>Total Bruto Recebido:</span>
+                <span className="font-mono font-bold text-cyan-300">
+                  R$ {apuracao.total_bruto_recebido.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
+                <span>Taxas Operacionais:</span>
+                <span className="font-mono font-bold text-amber-400">
+                  -R$ {apuracao.total_taxas_operacionais.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
+                <span>Líquido após Taxas:</span>
+                <span className="font-mono font-bold text-emerald-400">
+                  R$ {apuracao.total_liquido_apos_taxas.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between font-bold border-t border-slate-800 pt-1">
+                <span
+                  className={apuracao.diferenca_caixa < 0 ? 'text-rose-400' : 'text-emerald-400'}
+                >
+                  Diferença Comercial:
+                </span>
+                <span
+                  className={`font-mono ${apuracao.diferenca_caixa < 0 ? 'text-rose-400' : 'text-emerald-400'}`}
+                >
+                  {apuracao.diferenca_caixa < 0
+                    ? `-R$ ${Math.abs(apuracao.diferenca_caixa).toFixed(2)}`
+                    : `+R$ ${apuracao.diferenca_caixa.toFixed(2)}`}
+                </span>
+              </div>
+            </div>
+
+            {temDiferenca && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase">
+                  Justificativa da Divergência *
+                </label>
+                <input
+                  type="text"
+                  value={justificativa}
+                  onChange={(e) => setJustificativa(e.target.value)}
+                  placeholder="Motivo da diferença de caixa..."
+                  className="w-full rounded-lg border border-rose-300 dark:border-rose-700 bg-background p-2 text-xs"
+                />
+              </div>
             )}
-            <div className="flex justify-between text-emerald-300 font-extrabold border-t border-slate-800 pt-1">
-              <span>Líquido a Receber (Gaveta + Pix + Cartão Líq.):</span>
-              <span className="font-mono font-extrabold text-emerald-300">
-                R$ {(valorDinheiro + valorPix + cartaoLiquido).toFixed(2)}
-              </span>
-            </div>
-            <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
-              <span className="font-bold text-white">
-                Total Bruto Declarado (Dinheiro + Pix + Cartão):
-              </span>
-              <span
-                className={`font-mono font-extrabold ${
-                  Math.abs(totalDeclarado - faturamentoBrutoTeorico) < 1
-                    ? 'text-emerald-400'
-                    : 'text-amber-300'
-                }`}
-              >
-                R$ {totalDeclarado.toFixed(2)}
-              </span>
-            </div>
           </div>
 
           <div className="flex gap-2 pt-2 border-t border-primary/10">
@@ -4044,29 +3950,32 @@ function FechamentoUnificadoPDVModal({
               type="button"
               onClick={onClose}
               disabled={salvando}
-              className="flex-1 rounded-xl border border-primary/20 bg-primary/5 py-2.5 text-xs font-bold text-text/70 hover:bg-primary/10 transition-colors disabled:opacity-50"
+              className="flex-1 rounded-xl border border-primary/20 bg-primary/5 py-2.5 text-xs font-bold text-text/70 hover:bg-primary/10 transition-colors disabled:opacity-50 cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="button"
-              onClick={handleSalvarFechamentoUnificado}
-              disabled={salvando}
-              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 py-2.5 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-50 active:scale-[0.97]"
+              onClick={handleSalvarFechamento}
+              disabled={
+                salvando || apuracao.tem_pendencias || (temDiferenca && !justificativa.trim())
+              }
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 py-2.5 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-50 active:scale-[0.97] cursor-pointer"
             >
               {salvando ? (
                 <>
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Salvando...
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Concluindo...
                 </>
               ) : (
                 <>
-                  <Layers className="h-3.5 w-3.5" /> Concluir Fechamento Unificado
+                  <Layers className="h-3.5 w-3.5" /> Concluir Fechamento
                 </>
               )}
             </button>
           </div>
         </div>
       </div>
+
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         onClose={confirmDialog.handleCancel}

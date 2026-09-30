@@ -1077,6 +1077,7 @@ function NovoEnvioModal({
   profile,
   dataAcerto,
   turnoInicial,
+  localInicialId,
   sobrasAnteriores,
   onClose,
   onSave,
@@ -1086,6 +1087,7 @@ function NovoEnvioModal({
   profile: any;
   dataAcerto: string;
   turnoInicial: 'manha' | 'tarde' | 'noite' | 'integral';
+  localInicialId?: string;
   sobrasAnteriores: ItemGradeKanban[] | null;
   onClose: () => void;
   onSave: (created: RemessaKanban) => void;
@@ -1093,7 +1095,7 @@ function NovoEnvioModal({
   const { toast } = useToast();
   const confirmDialog = useConfirm();
   const [salvando, setSalvando] = useState(false);
-  const [localId, setLocalId] = useState(locais[0]?.id || '');
+  const [localId, setLocalId] = useState(localInicialId || locais[0]?.id || '');
   const [turno, setTurno] = useState<string>(turnoInicial);
   const [vendedorNome, setVendedorNome] = useState('');
 
@@ -2593,9 +2595,24 @@ function UnificarTodosPDVsModal({
   // null = Não informado (Pendente) | >= 0 = Conferido
   const [sobrasPorProduto, setSobrasPorProduto] = useState<Record<string, number | null>>(() => {
     const map: Record<string, number | null> = {};
+    const porPdv = new Map<string, RemessaKanban[]>();
     selectedRecords.forEach((r) => {
-      if (Array.isArray(r.itens_grade)) {
-        r.itens_grade.forEach((it) => {
+      const list = porPdv.get(r.local_id) || [];
+      list.push(r);
+      porPdv.set(r.local_id, list);
+    });
+
+    const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
+
+    porPdv.forEach((recordsDoPdv) => {
+      recordsDoPdv.sort((a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99));
+      const ultimoTurno = recordsDoPdv[recordsDoPdv.length - 1];
+      if (Array.isArray(ultimoTurno.itens_grade)) {
+        ultimoTurno.itens_grade.forEach((it) => {
+          const disp = (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0);
+          if (disp <= 0 && (!it.qtd_retorno || Number(it.qtd_retorno) <= 0)) {
+            return;
+          }
           if (
             it.qtd_retorno !== null &&
             it.qtd_retorno !== undefined &&
@@ -2634,9 +2651,11 @@ function UnificarTodosPDVsModal({
       Object.keys(prev).forEach((k) => {
         next[k] = 0;
       });
-      // Também adiciona os produtos base caso algum não estivesse no mapa
-      produtosBase.forEach((p) => {
-        next[p.id] = 0;
+      selectedRecords.forEach((r) => {
+        (r.itens_grade || []).forEach((it) => {
+          const disp = (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0);
+          if (disp > 0) next[it.produto_id] = 0;
+        });
       });
       return next;
     });
@@ -2649,7 +2668,6 @@ function UnificarTodosPDVsModal({
 
   // Monta a estrutura TurnoFechamentoInput[] para o motor centralizado fechamento-pdv-calc
   const turnosInput: TurnoFechamentoInput[] = useMemo(() => {
-    // Agrupa por PDV para saber qual é o último turno cronológico
     const porPdv = new Map<string, RemessaKanban[]>();
     selectedRecords.forEach((r) => {
       const list = porPdv.get(r.local_id) || [];
@@ -2657,21 +2675,86 @@ function UnificarTodosPDVsModal({
       porPdv.set(r.local_id, list);
     });
 
+    const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
+
+    // Lista ordenada dos PDVs com seus últimos turnos
+    const pdvUltimosTurnos: { localId: string; record: RemessaKanban }[] = [];
+    porPdv.forEach((recordsDoPdv, localId) => {
+      recordsDoPdv.sort((a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99));
+      pdvUltimosTurnos.push({
+        localId,
+        record: recordsDoPdv[recordsDoPdv.length - 1],
+      });
+    });
+
+    // Mapeamento prévio: distribui a sobra global de cada produto entre os últimos turnos dos PDVs
+    const distribuicaoSobras = new Map<string, Map<string, number | null>>();
+    const todosProdutos = new Set<string>();
+    selectedRecords.forEach((r) => {
+      (r.itens_grade || []).forEach((it) => todosProdutos.add(it.produto_id));
+    });
+
+    todosProdutos.forEach((prodId) => {
+      const sobraGlobal = sobrasPorProduto[prodId];
+      const mapaPdv = new Map<string, number | null>();
+
+      if (sobraGlobal === null || sobraGlobal === undefined) {
+        pdvUltimosTurnos.forEach((p) => mapaPdv.set(p.localId, null));
+      } else {
+        let somaExistente = 0;
+        let todosTinhamSobra = true;
+        const disponiveisPorPdv: { localId: string; disp: number; sobraPrevia: number | null }[] =
+          [];
+
+        pdvUltimosTurnos.forEach((p) => {
+          const itemNoPdv = (p.record.itens_grade || []).find((it) => it.produto_id === prodId);
+          const disp =
+            (Number(itemNoPdv?.qtd_enviada) || 0) + (Number(itemNoPdv?.qtd_sobra_anterior) || 0);
+          const ret =
+            itemNoPdv?.qtd_retorno !== null && itemNoPdv?.qtd_retorno !== undefined
+              ? Number(itemNoPdv.qtd_retorno)
+              : null;
+          if (ret === null) todosTinhamSobra = false;
+          else somaExistente += ret;
+          disponiveisPorPdv.push({ localId: p.localId, disp, sobraPrevia: ret });
+        });
+
+        if (todosTinhamSobra && somaExistente === sobraGlobal) {
+          disponiveisPorPdv.forEach((dp) => mapaPdv.set(dp.localId, dp.sobraPrevia));
+        } else {
+          let restante = sobraGlobal;
+          disponiveisPorPdv.forEach((dp, idx) => {
+            const isUltimo = idx === disponiveisPorPdv.length - 1;
+            if (isUltimo) {
+              mapaPdv.set(dp.localId, restante);
+            } else {
+              const alocado = Math.min(dp.disp, restante);
+              mapaPdv.set(dp.localId, alocado);
+              restante -= alocado;
+            }
+          });
+        }
+      }
+
+      distribuicaoSobras.set(prodId, mapaPdv);
+    });
+
     const result: TurnoFechamentoInput[] = [];
 
     porPdv.forEach((recordsDoPdv, localId) => {
-      const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
-      recordsDoPdv.sort((a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99));
-
       recordsDoPdv.forEach((r, idx) => {
         const isUltimoDoPdv = idx === recordsDoPdv.length - 1;
         const itensInput: ItemMovimentacaoPDV[] = [];
 
         if (Array.isArray(r.itens_grade) && r.itens_grade.length > 0) {
           r.itens_grade.forEach((it) => {
-            const sobraGlobal = sobrasPorProduto[it.produto_id];
-            // No último turno do PDV, atribui a sobra física; nos turnos anteriores, foi transferida (0)
-            const sobraTurno = isUltimoDoPdv ? sobraGlobal : 0;
+            let sobraTurno: number | null = 0;
+            if (isUltimoDoPdv) {
+              const alocacaoPdv = distribuicaoSobras.get(it.produto_id);
+              sobraTurno = alocacaoPdv ? (alocacaoPdv.get(localId) ?? null) : null;
+            } else {
+              sobraTurno = 0; // Turnos anteriores já transferiram tudo
+            }
 
             itensInput.push({
               produto_id: it.produto_id,
@@ -2778,10 +2861,13 @@ function UnificarTodosPDVsModal({
 
       // Prepara o array de atualização atômica das remessas sem zerar dinheiro nem registros secundários
       const remessasUpdates = selectedRecords.map((r) => {
+        const turnoCalc = turnosInput.find((t) => t.id === r.id);
         const itensAtualizados = (r.itens_grade || []).map((it) => {
-          const sobra = sobrasPorProduto[it.produto_id];
-          const env = Number(it.qtd_sobra_anterior || 0) + Number(it.qtd_enviada || 0);
-          const ret = sobra !== null && sobra !== undefined ? Math.max(0, Number(sobra)) : 0;
+          const itemCalc = turnoCalc?.itens_grade.find((gi) => gi.produto_id === it.produto_id);
+          const ret =
+            itemCalc?.qtd_retorno !== null && itemCalc?.qtd_retorno !== undefined
+              ? Math.max(0, Number(itemCalc.qtd_retorno))
+              : 0;
           return {
             ...it,
             qtd_retorno: ret,
@@ -3002,53 +3088,74 @@ function UnificarTodosPDVsModal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
-                  {apuracao.itens_consolidados.map((item) => {
-                    const sobraAtual = sobrasPorProduto[item.produto_id];
-                    const isPendente = sobraAtual === null || sobraAtual === undefined;
-
-                    return (
-                      <tr
-                        key={item.produto_id}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-900/50"
+                  {apuracao.itens_consolidados.filter(
+                    (item) =>
+                      item.qtd_disponivel > 0 || (sobrasPorProduto[item.produto_id] ?? 0) > 0
+                  ).length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="p-6 text-center text-xs text-text/40 font-sans font-medium"
                       >
-                        <td className="p-2.5 font-sans font-bold text-text/90">{item.nome}</td>
-                        <td className="p-2.5 text-center text-text/60">
-                          R$ {item.preco_unitario.toFixed(2)}
-                        </td>
-                        <td className="p-2.5 text-center font-bold text-text/80">
-                          {item.qtd_disponivel} un
-                        </td>
-                        <td className="p-2.5 text-center bg-amber-50/40 dark:bg-amber-950/20">
-                          <input
-                            type="number"
-                            min={0}
-                            max={item.qtd_disponivel}
-                            value={sobraAtual ?? ''}
-                            placeholder="Pend."
-                            onChange={(e) => {
-                              const val =
-                                e.target.value === '' ? null : Math.max(0, Number(e.target.value));
-                              setSobrasPorProduto((prev) => ({
-                                ...prev,
-                                [item.produto_id]: val,
-                              }));
-                            }}
-                            className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none transition-all ${
-                              isPendente
-                                ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
-                                : 'border-slate-300 dark:border-slate-700 bg-background text-text focus:border-cyan-500'
-                            }`}
-                          />
-                        </td>
-                        <td className="p-2.5 text-center font-extrabold text-emerald-600 dark:text-emerald-400">
-                          {isPendente ? '—' : `${item.qtd_vendida} un`}
-                        </td>
-                        <td className="p-2.5 text-right font-extrabold text-text/90">
-                          {isPendente ? '—' : `R$ ${item.faturamento_bruto.toFixed(2)}`}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        Nenhum produto com carga enviada para os PDVs selecionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    apuracao.itens_consolidados
+                      .filter(
+                        (item) =>
+                          item.qtd_disponivel > 0 || (sobrasPorProduto[item.produto_id] ?? 0) > 0
+                      )
+                      .map((item) => {
+                        const sobraAtual = sobrasPorProduto[item.produto_id];
+                        const isPendente = sobraAtual === null || sobraAtual === undefined;
+
+                        return (
+                          <tr
+                            key={item.produto_id}
+                            className="hover:bg-slate-50 dark:hover:bg-slate-900/50"
+                          >
+                            <td className="p-2.5 font-sans font-bold text-text/90">{item.nome}</td>
+                            <td className="p-2.5 text-center text-text/60">
+                              R$ {item.preco_unitario.toFixed(2)}
+                            </td>
+                            <td className="p-2.5 text-center font-bold text-text/80">
+                              {item.qtd_disponivel} un
+                            </td>
+                            <td className="p-2.5 text-center bg-amber-50/40 dark:bg-amber-950/20">
+                              <input
+                                type="number"
+                                min={0}
+                                max={item.qtd_disponivel}
+                                value={sobraAtual ?? ''}
+                                placeholder="Pend."
+                                onChange={(e) => {
+                                  const val =
+                                    e.target.value === ''
+                                      ? null
+                                      : Math.max(0, Number(e.target.value));
+                                  setSobrasPorProduto((prev) => ({
+                                    ...prev,
+                                    [item.produto_id]: val,
+                                  }));
+                                }}
+                                className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none transition-all ${
+                                  isPendente
+                                    ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
+                                    : 'border-slate-300 dark:border-slate-700 bg-background text-text focus:border-cyan-500'
+                                }`}
+                              />
+                            </td>
+                            <td className="p-2.5 text-center font-extrabold text-emerald-600 dark:text-emerald-400">
+                              {isPendente ? '—' : `${item.qtd_vendida} un`}
+                            </td>
+                            <td className="p-2.5 text-right font-extrabold text-text/90">
+                              {isPendente ? '—' : `R$ ${item.faturamento_bruto.toFixed(2)}`}
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -3507,7 +3614,13 @@ function FechamentoUnificadoPDVModal({
       });
     });
 
-    records.forEach((rec) => {
+    const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
+    const sortedRecords = [...records].sort(
+      (a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99)
+    );
+    const ultimoRecord = sortedRecords[sortedRecords.length - 1];
+
+    sortedRecords.forEach((rec) => {
       if (Array.isArray(rec.itens_grade) && rec.itens_grade.length > 0) {
         rec.itens_grade.forEach((it) => {
           const existing = map.get(it.produto_id) || {
@@ -3525,14 +3638,22 @@ function FechamentoUnificadoPDVModal({
             qtd_sobra_anterior:
               (Number(existing.qtd_sobra_anterior) || 0) + (Number(it.qtd_sobra_anterior) || 0),
             qtd_enviada: (Number(existing.qtd_enviada) || 0) + (Number(it.qtd_enviada) || 0),
-            qtd_retorno:
-              it.qtd_retorno !== null && it.qtd_retorno !== undefined
-                ? (Number(existing.qtd_retorno) || 0) + Number(it.qtd_retorno)
-                : existing.qtd_retorno,
+            qtd_retorno: null,
           });
         });
       }
     });
+
+    // Pega as sobras físicas do último turno cronológico (evita acumular sobras de turnos anteriores)
+    if (ultimoRecord && Array.isArray(ultimoRecord.itens_grade)) {
+      ultimoRecord.itens_grade.forEach((it) => {
+        const existing = map.get(it.produto_id);
+        if (existing) {
+          existing.qtd_retorno =
+            it.qtd_retorno !== null && it.qtd_retorno !== undefined ? Number(it.qtd_retorno) : null;
+        }
+      });
+    }
 
     return Array.from(map.values()).filter(
       (it) => (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0) > 0
@@ -4015,6 +4136,7 @@ export function PDVKanbanView({
   } | null>(null);
   const [modalUnificarTodos, setModalUnificarTodos] = useState(false);
   const [modalNovoEnvio, setModalNovoEnvio] = useState(false);
+  const [selectedLocalEnvio, setSelectedLocalEnvio] = useState<string | null>(null);
   const [modalRomaneio, setModalRomaneio] = useState<RemessaKanban | null>(null);
   const [modalAuditoriaPDV, setModalAuditoriaPDV] = useState<{
     local: LocalPDV;
@@ -4121,6 +4243,11 @@ export function PDVKanbanView({
   useEffect(() => {
     carregarRegistros();
   }, [carregarRegistros]);
+
+  // PDVs que ainda não tiveram carga enviada para a data selecionada
+  const pdvsAguardandoCarga = useMemo(() => {
+    return locais.filter((loc) => !registros.some((r) => r.local_id === loc.id));
+  }, [locais, registros]);
 
   // Distribute registros into columns
   const colAberto = registros.filter((r) => r.status === 'aberto');
@@ -4319,23 +4446,83 @@ export function PDVKanbanView({
             title="Preparar Carga"
             subtitle="A Enviar"
             icon={Truck}
-            count={0}
+            count={pdvsAguardandoCarga.length}
             colorClass="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300"
             bgClass="bg-indigo-100/50 dark:bg-indigo-900/30"
             borderClass="border-indigo-300 dark:border-indigo-700"
           />
-          <div className="p-3 space-y-3">
+          <div className="p-3 space-y-3 flex-1 overflow-y-auto">
             <button
               type="button"
-              onClick={() => setModalNovoEnvio(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-3 text-xs font-bold text-white shadow-sm transition-all active:scale-[0.97]"
+              onClick={() => {
+                setSelectedLocalEnvio(pdvsAguardandoCarga[0]?.id || null);
+                setModalNovoEnvio(true);
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-2.5 text-xs font-bold text-white shadow-sm transition-all active:scale-[0.97] cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               Novo Envio de Carga
             </button>
-            <p className="text-[10px] text-text/40 text-center font-medium leading-relaxed">
-              Monte a carga para um PDV e turno.
-            </p>
+
+            {loading ? (
+              <div className="flex flex-col items-center gap-2 py-6 text-text/40">
+                <RefreshCw className="h-5 w-5 animate-spin" />
+                <span className="text-[10px] font-medium">Carregando...</span>
+              </div>
+            ) : pdvsAguardandoCarga.length === 0 ? (
+              <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 text-center space-y-1">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 mx-auto" />
+                <p className="text-xs font-bold text-emerald-800 dark:text-emerald-200">
+                  Todos os PDVs com carga enviada!
+                </p>
+                <p className="text-[10px] text-emerald-700/60 dark:text-emerald-300/60 leading-relaxed">
+                  Use o botão acima para enviar nova carga ou turno adicional.
+                </p>
+              </div>
+            ) : (
+              pdvsAguardandoCarga.map((local) => (
+                <div
+                  key={`aguardando-${local.id}`}
+                  className="rounded-xl border border-indigo-200/80 dark:border-indigo-800/80 bg-background p-3 shadow-2xs space-y-2.5 transition-all hover:border-indigo-400"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {local.logo_url ? (
+                        <img
+                          src={local.logo_url}
+                          alt={local.nome}
+                          className="h-7 w-7 rounded-lg object-contain bg-slate-100 p-0.5"
+                        />
+                      ) : (
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
+                          <Store className="h-4 w-4" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <span className="text-xs font-black uppercase text-text/90 block truncate">
+                          {local.nome}
+                        </span>
+                        <span className="text-[10px] text-text/40 font-medium">Sem carga hoje</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-mono">
+                      Aguardando
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedLocalEnvio(local.id);
+                      setModalNovoEnvio(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2 shadow-xs transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    <Truck className="h-3.5 w-3.5" /> Enviar Carga
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -4639,8 +4826,12 @@ export function PDVKanbanView({
           profile={profile}
           dataAcerto={dataAcerto}
           turnoInicial="manha"
+          localInicialId={selectedLocalEnvio || undefined}
           sobrasAnteriores={sobrasAnteriores}
-          onClose={() => setModalNovoEnvio(false)}
+          onClose={() => {
+            setModalNovoEnvio(false);
+            setSelectedLocalEnvio(null);
+          }}
           onSave={handleRegistroUpdated}
         />
       )}

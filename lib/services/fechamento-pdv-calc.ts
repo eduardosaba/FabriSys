@@ -200,7 +200,13 @@ export function apurarFechamentoUnificado(
       registroProd.qtd_devolucao_fabrica += Number(item.qtd_devolucao_fabrica || 0);
       registroProd.qtd_perdas += Number(item.qtd_perda || 0);
 
-      if (item.qtd_retorno === null || item.qtd_retorno === undefined) {
+      // Só considera pendência de sobra se o produto teve carga enviada ou movimentação no turno
+      const teveMovimentoNoTurno =
+        Number(item.qtd_enviada || 0) > 0 ||
+        Number(item.qtd_estoque_inicial || 0) > 0 ||
+        Number(item.qtd_transferencia_recebida || 0) > 0;
+
+      if (teveMovimentoNoTurno && (item.qtd_retorno === null || item.qtd_retorno === undefined)) {
         registroProd.tem_pendencia = true;
         pendencias.push({
           pdv_id: t.local_id,
@@ -267,15 +273,18 @@ export function apurarFechamentoUnificado(
     totalVendidoGeral += vendida;
     faturamentoBrutoGeral += fatBruto;
 
-    itensCalculados.push({
-      produto_id: p.produto_id,
-      nome: p.nome,
-      preco_unitario: p.preco_unitario,
-      qtd_disponivel: disponivel,
-      qtd_vendida: vendida,
-      faturamento_bruto: fatBruto,
-      tem_pendencia_sobra: p.tem_pendencia,
-    });
+    // Inclui apenas itens que tiveram carga, movimentação ou sobra registrada
+    if (disponivel > 0 || p.sobra_final_acumulada > 0 || p.qtd_entradas_fabrica > 0) {
+      itensCalculados.push({
+        produto_id: p.produto_id,
+        nome: p.nome,
+        preco_unitario: p.preco_unitario,
+        qtd_disponivel: disponivel,
+        qtd_vendida: vendida,
+        faturamento_bruto: fatBruto,
+        tem_pendencia_sobra: p.tem_pendencia,
+      });
+    }
   });
 
   faturamentoBrutoGeral = Math.round(faturamentoBrutoGeral * 100) / 100;

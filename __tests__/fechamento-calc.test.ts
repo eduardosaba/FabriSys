@@ -209,4 +209,50 @@ describe('Motor de Cálculo de Fechamento de PDVs (fechamento-pdv-calc)', () => 
     expect(res.qtd_vendida).toBe(5);
     expect(res.faturamento_bruto).toBe(100.0);
   });
+
+  it('Cenário: Produtos sem carga (enviada = 0) não poluem itens_consolidados nem geram pendências', () => {
+    const turnos: TurnoFechamentoInput[] = [
+      {
+        id: 't1',
+        local_id: 'pdv1',
+        pdv_nome: 'PDV 1',
+        data: '2026-09-30',
+        turno: 'manha',
+        status: 'encerrado',
+        valor_dinheiro_gaveta: 100.0,
+        itens_grade: [
+          {
+            produto_id: 'p_com_carga',
+            nome: 'Empada com Carga',
+            preco_unitario: 10.0,
+            qtd_enviada: 10,
+            qtd_retorno: 2,
+          },
+          {
+            produto_id: 'p_sem_carga',
+            nome: 'Empada que Não Foi Enviada',
+            preco_unitario: 15.0,
+            qtd_enviada: 0,
+            qtd_estoque_inicial: 0,
+            qtd_retorno: null, // Sem sobra informada porque nunca foi para o PDV
+          },
+        ],
+      },
+    ];
+
+    const res = apurarFechamentoUnificado(turnos, {
+      pix: 0,
+      cartao_debito: 0,
+      cartao_credito: 0,
+    });
+
+    // Produto sem carga NÃO deve gerar pendência de conferência
+    expect(res.tem_pendencias).toBe(false);
+    expect(res.pendencias).toHaveLength(0);
+
+    // Produto sem carga NÃO deve estar na lista de itens consolidados para conferência
+    expect(res.itens_consolidados).toHaveLength(1);
+    expect(res.itens_consolidados[0].produto_id).toBe('p_com_carga');
+    expect(res.itens_consolidados[0].qtd_vendida).toBe(8);
+  });
 });

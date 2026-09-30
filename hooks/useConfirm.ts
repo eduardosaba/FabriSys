@@ -8,6 +8,7 @@ interface ConfirmOptions {
   confirmText?: string;
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
+  size?: 'sm' | 'md' | 'lg';
 }
 
 export function useConfirm() {

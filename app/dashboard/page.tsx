@@ -347,13 +347,11 @@ export default function DashboardPage() {
           // As grades de itens (itens_grade) são individuais por turno e somam exatamente o faturamento apurado.
           // Os valores financeiros digitais dos secundários já estão zerados no banco, garantindo ausência de duplicidade.
 
-          // Remessas abertas ou parciais representam mercadorias em circulação (não faturamento realizado)
-          const isAbertoOuParcial =
-            reg.status === 'aberto' ||
-            reg.status === 'dinheiro_informado' ||
-            reg.status === 'sobras_informadas';
+          // Apenas registros com status 'auditado' ou 'conferido' geram faturamento realizado e vendas reais
+          const isAuditado = reg.status === 'auditado' || reg.status === 'conferido';
 
-          if (isAbertoOuParcial) {
+          if (!isAuditado) {
+            // Remessas em aberto, em venda ou aguardando auditoria representam mercadorias em circulação (não faturamento realizado)
             if (Array.isArray(reg.itens_grade) && reg.itens_grade.length > 0) {
               reg.itens_grade.forEach((item: any) => {
                 const env = Number(item.qtd_sobra_anterior || 0) + Number(item.qtd_enviada || 0);
@@ -365,12 +363,6 @@ export default function DashboardPage() {
             }
             return;
           }
-
-          // Apenas registros com fechamento confirmado geram faturamento realizado
-          const isConfirmado =
-            reg.status === 'encerrado' || reg.status === 'auditado' || reg.status === 'conferido';
-
-          if (!isConfirmado) return;
 
           // Se tiver grade de itens detalhada e conferida
           if (Array.isArray(reg.itens_grade) && reg.itens_grade.length > 0) {
@@ -393,14 +385,14 @@ export default function DashboardPage() {
             // Se for um fechamento geral consolidado
             const fatReg =
               Number(reg.faturamento_liquido_esperado || 0) ||
-              Number(reg.faturamento_bruto_teorico || 0) ||
               Number(reg.valor_dinheiro_gaveta || 0) +
                 Number(reg.valor_pix_declarado || 0) +
-                Number(reg.valor_cartao_declarado || 0);
+                Number(reg.valor_cartao_declarado || 0) ||
+              Number(reg.faturamento_bruto_teorico || 0);
             totalFat += fatReg;
           }
 
-          // Acumula valores financeiros confirmados
+          // Acumula valores financeiros confirmados da auditoria
           totalDinheiroRecebido += Number(reg.valor_dinheiro_gaveta || 0);
 
           // Se a remessa pertence a um fechamento unificado moderno, os digitais estão consolidados em fechamentos_unificados_pdv
@@ -410,52 +402,9 @@ export default function DashboardPage() {
             totalTaxasFinanceiras += Number(reg.taxa_cartao_reais || 0);
           }
         });
-      } else {
-        // Fallback secundário para ordens de produção caso não haja fechamentos no período
-        const { data: ordensRaw } = await supabase
-          .from('ordens_producao')
-          .select('quantidade_prevista, produto_final_id, created_at')
-          .gte('created_at', startIso)
-          .lte('created_at', endIso);
-
-        const ordens = ordensRaw || [];
-        const produtoIds = Array.from(
-          new Set(ordens.map((o: any) => String(o.produto_final_id)).filter(Boolean))
-        );
-        const produtoMap: Record<string, { nome: string; preco_venda: number }> = {};
-        if (produtoIds.length > 0) {
-          const chunkSize = 50;
-          for (let i = 0; i < produtoIds.length; i += chunkSize) {
-            const chunk = produtoIds.slice(i, i + chunkSize);
-            const { data: produtos } = await supabase
-              .from('produtos_finais')
-              .select('id, nome, preco_venda')
-              .in('id', (chunk || []).filter(Boolean));
-            (produtos || []).forEach((p: any) => {
-              produtoMap[String(p.id)] = {
-                nome: p.nome || 'Desconhecido',
-                preco_venda: Number(p.preco_venda || 0),
-              };
-            });
-          }
-        }
-
-        (ordens || []).forEach((item: any) => {
-          const qtd = Number(item.quantidade_prevista || 0);
-          const prodInfo = produtoMap[String(item.produto_final_id)];
-          const preco = Number(prodInfo?.preco_venda || 0);
-          const nome = prodInfo?.nome || 'Desconhecido';
-          const total = qtd * preco;
-
-          totalFat += total;
-
-          if (!mapaProdutos[nome]) mapaProdutos[nome] = { nome, quantidade: 0, faturamento: 0 };
-          mapaProdutos[nome].quantidade += qtd;
-          mapaProdutos[nome].faturamento += total;
-        });
       }
 
-      // Consulta complementar a fechamentos unificados para consolidação dos recebimentos digitais e taxas operacionais
+      // Consulta complementar a fechamentos unificados já auditados para consolidação dos recebimentos digitais e taxas operacionais
       try {
         let queryFech = supabase
           .from('fechamentos_unificados_pdv')
@@ -463,7 +412,8 @@ export default function DashboardPage() {
             'total_taxas_operacionais, total_pix_declarado, total_cartao_debito_declarado, total_cartao_credito_declarado, total_outros_declarado'
           )
           .gte('data', dataInicial)
-          .lte('data', dataFinal);
+          .lte('data', dataFinal)
+          .in('status', ['auditado', 'conferido']);
         if (profile?.organization_id) {
           queryFech = queryFech.eq('organization_id', profile.organization_id);
         }
@@ -873,23 +823,23 @@ export default function DashboardPage() {
           {/* 1. Faturamento Vendas */}
           <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block">
-              Vendas Confirmadas
+              Vendas Auditadas
             </span>
             <span className="font-mono font-black text-base text-slate-900 dark:text-slate-100">
               R$ {kpis.faturamentoEstimado.toFixed(2)}
             </span>
-            <span className="text-[9px] text-slate-400 block mt-0.5">Turnos encerrados</span>
+            <span className="text-[9px] text-slate-400 block mt-0.5">Dias auditados</span>
           </div>
 
           {/* 2. Mercadorias em Circulação */}
           <div className="bg-amber-50/50 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-200 dark:border-amber-800/60">
             <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase block">
-              Em Circulação
+              Em Aberto / Circulação
             </span>
             <span className="font-mono font-black text-base text-amber-800 dark:text-amber-300">
               R$ {kpis.mercadoriasCirculacao.toFixed(2)}
             </span>
-            <span className="text-[9px] text-amber-600/70 block mt-0.5">Aguardando fechamento</span>
+            <span className="text-[9px] text-amber-600/70 block mt-0.5">Aguardando auditoria</span>
           </div>
 
           {/* 3. Recebimentos Brutos */}

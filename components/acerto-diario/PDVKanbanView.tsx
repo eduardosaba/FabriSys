@@ -227,16 +227,22 @@ function KanbanCard({
   const hasLogo = Boolean(logoUrl) && !imgError;
 
   const enviado = Number(registro.qtd_total_enviada) || 0;
-  const retorno = Number(registro.qtd_total_retorno) || 0;
-  const vendido = Math.max(0, enviado - retorno);
+  const isAberto = registro.status === 'aberto';
+  const temSobraRegistrada =
+    registro.status !== 'aberto' &&
+    registro.qtd_total_retorno !== null &&
+    registro.qtd_total_retorno !== undefined;
+  const retorno = temSobraRegistrada ? Number(registro.qtd_total_retorno) : 0;
+  const vendido = temSobraRegistrada ? Math.max(0, enviado - retorno) : 0;
   const dinheiro = Number(registro.valor_dinheiro_gaveta) || 0;
   const pix = Number(registro.valor_pix_declarado) || 0;
   const cartao = Number(registro.valor_cartao_declarado) || 0;
-  const faturamento =
-    Number(registro.faturamento_liquido_esperado) ||
-    Number(registro.faturamento_bruto_teorico) ||
-    dinheiro + pix + cartao;
-  const taxaSobra = calcTaxaSobra(enviado, retorno);
+  const faturamento = isAberto
+    ? 0
+    : Number(registro.faturamento_liquido_esperado) ||
+      Number(registro.faturamento_bruto_teorico) ||
+      dinheiro + pix + cartao;
+  const taxaSobra = isAberto ? 0 : calcTaxaSobra(enviado, retorno);
   const caixaBatido = Math.abs(faturamento - (dinheiro + pix + cartao)) < 1;
 
   return (
@@ -285,7 +291,7 @@ function KanbanCard({
               Sobra
             </span>
             <span className="text-sm font-black text-amber-700 dark:text-amber-300 font-mono">
-              {retorno}
+              {isAberto ? '-' : retorno}
             </span>
           </div>
           <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 p-1.5">
@@ -293,7 +299,7 @@ function KanbanCard({
               Vendido
             </span>
             <span className="text-sm font-black text-emerald-700 dark:text-emerald-300 font-mono">
-              {vendido}
+              {isAberto ? '-' : vendido}
             </span>
           </div>
         </div>
@@ -500,9 +506,93 @@ function RegistrarSobrasModal({
       return;
     }
 
+    const totalEnviadoNum = gradeItens.reduce(
+      (acc, it) => acc + (Number(it.qtd_enviada) || 0),
+      0
+    );
+
     const confirmou = await confirmDialog.confirm({
       title: `Registrar Sobras — ${pdvNome}`,
-      message: `Confirma o registro de ${totalRetorno} itens de sobra e R$ ${valorDinheiro.toFixed(2)} em dinheiro para o PDV "${pdvNome}" (${formatTurno(registro.turno)})?`,
+      size: 'md',
+      message: (
+        <div className="space-y-3 text-left">
+          {/* Header Resumo */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs border border-slate-200 dark:border-slate-800">
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">PDV</span>
+              <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm truncate block">{pdvNome}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Turno</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">{formatTurno(registro.turno)}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Atendente</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">{registro.vendedor_nome || 'Não informado'}</span>
+            </div>
+          </div>
+
+          {/* Cards de Métricas de Estoque */}
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Total Enviado</span>
+              <span className="text-sm font-extrabold text-slate-800 dark:text-slate-200">{totalEnviadoNum} un</span>
+            </div>
+            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+              <span className="text-[10px] text-amber-700 dark:text-amber-400 uppercase font-bold block">Sobras em Loja</span>
+              <span className="text-sm font-extrabold text-amber-700 dark:text-amber-400">{totalRetorno} un</span>
+            </div>
+            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 uppercase font-bold block">Vendidos</span>
+              <span className="text-sm font-extrabold text-emerald-700 dark:text-emerald-400">{Math.max(0, totalEnviadoNum - totalRetorno)} un</span>
+            </div>
+          </div>
+
+          {/* Resumo Financeiro */}
+          <div className="p-3 bg-slate-900 text-white rounded-xl text-xs space-y-2 shadow-sm">
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5 text-emerald-400" /> Dinheiro Físico na Gaveta:</span>
+              <span className="font-mono font-bold text-emerald-400 text-sm">R$ {valorDinheiro.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-cyan-400" /> Pix / Cartão Esperado:</span>
+              <span className="font-mono font-bold text-cyan-300">R$ {pixCartaoEsperado.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center border-t border-slate-800 pt-1.5 text-white font-extrabold">
+              <span>Faturamento Teórico Bruto:</span>
+              <span className="font-mono text-primary text-sm">R$ {faturamentoBruto.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Mini-lista dos produtos e sobras */}
+          {gradeItens.filter((it) => (Number(it.qtd_enviada) || 0) > 0 || (Number(it.qtd_retorno) || 0) > 0).length > 0 && (
+            <div>
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Conferência das Sobras por Produto:
+              </p>
+              <div className="max-h-32 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 text-xs bg-white dark:bg-slate-900">
+                {gradeItens
+                  .filter((it) => (Number(it.qtd_enviada) || 0) > 0 || (Number(it.qtd_retorno) || 0) > 0)
+                  .map((it, idx) => {
+                    const env = Number(it.qtd_enviada) || 0;
+                    const sob = it.qtd_retorno !== null && it.qtd_retorno !== undefined ? Number(it.qtd_retorno) : 0;
+                    const vend = Math.max(0, env - sob);
+                    return (
+                      <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <span className="font-medium text-slate-800 dark:text-slate-200 truncate pr-2">{it.nome}</span>
+                        <div className="flex items-center gap-2 text-[11px] shrink-0 font-mono">
+                          <span className="text-slate-400">Env: {env}</span>
+                          <span className="text-amber-600 dark:text-amber-400 font-semibold">Sobra: {sob}</span>
+                          <span className="text-primary font-bold">Vend: {vend}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+        </div>
+      ),
       confirmText: 'Confirmar Sobras + Dinheiro',
       cancelText: 'Revisar',
       variant: 'info',
@@ -511,10 +601,6 @@ function RegistrarSobrasModal({
 
     setSalvando(true);
     try {
-      const totalEnviadoNum = gradeItens.reduce(
-        (acc, it) => acc + (Number(it.qtd_enviada) || 0),
-        0
-      );
 
       const payload = {
         qtd_total_retorno: totalRetorno,
@@ -765,6 +851,7 @@ function RegistrarSobrasModal({
         confirmText={confirmDialog.options.confirmText}
         cancelText={confirmDialog.options.cancelText}
         variant={confirmDialog.options.variant}
+        size={confirmDialog.options.size}
       />
     </>
   );
@@ -808,21 +895,74 @@ function LancarPixCartaoModal({
   const diferencaCaixa = totalRecebido - faturamento;
 
   const handleSalvar = async () => {
-    const partes = [];
-    if (precisaInformarDinheiro) partes.push(`Dinheiro R$ ${valorDinheiro.toFixed(2)}`);
-    partes.push(`Pix R$ ${valorPix.toFixed(2)}`);
-    partes.push(`Cartão Bruto R$ ${valorCartao.toFixed(2)}`);
-    if (taxaCartaoReais > 0) {
-      partes.push(
-        `Taxa Cartão -R$ ${taxaCartaoReais.toFixed(2)} (${taxaCartaoPercentual.toFixed(2)}%)`
-      );
-    }
     const confirmou = await confirmDialog.confirm({
       title: `Encerrar Turno — ${pdvNome}`,
-      message: `Confirma o lançamento de ${partes.join(' + ')} e o encerramento do turno para "${pdvNome}" (${formatTurno(registro.turno)})?`,
+      size: 'md',
+      message: (
+        <div className="space-y-3 text-left">
+          {/* Header Resumo */}
+          <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs border border-slate-200 dark:border-slate-800">
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">PDV</span>
+              <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm truncate block">{pdvNome}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Turno</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">{formatTurno(registro.turno)} ({registro.data || 'Hoje'})</span>
+            </div>
+          </div>
+
+          {/* Resumo Financeiro */}
+          <div className="p-3 bg-slate-900 text-white rounded-xl text-xs space-y-2 shadow-sm">
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5 text-emerald-400" /> Dinheiro Gaveta:</span>
+              <span className="font-mono font-bold text-emerald-400">R$ {valorDinheiro.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Smartphone className="h-3.5 w-3.5 text-purple-400" /> Pix Declarado:</span>
+              <span className="font-mono font-bold text-purple-300">R$ {valorPix.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-cyan-400" /> Cartão Bruto:</span>
+              <span className="font-mono font-bold text-cyan-300">R$ {valorCartao.toFixed(2)}</span>
+            </div>
+            {taxaCartaoReais > 0 && (
+              <div className="flex justify-between items-center text-amber-300 border-t border-slate-800 pt-1">
+                <span>Taxa Cartão ({taxaCartaoPercentual.toFixed(2)}%):</span>
+                <span className="font-mono font-bold">-R$ {taxaCartaoReais.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center border-t border-slate-700 pt-1.5 text-white font-extrabold">
+              <span>Total Apurado:</span>
+              <span className="font-mono text-primary text-sm">R$ {totalDeclarado.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Conciliação de Caixa */}
+          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
+            caixaBatido
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+              : diferencaCaixa < 0
+                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+          }`}>
+            <span>{caixaBatido ? '✓ Caixa 100% Batido' : diferencaCaixa < 0 ? '⚠ Quebra de Caixa / Falta' : '⚠ Sobra no Caixa'}</span>
+            <span className="font-mono font-bold">
+              {diferencaCaixa === 0 ? 'R$ 0,00' : `${diferencaCaixa > 0 ? '+' : ''}R$ ${diferencaCaixa.toFixed(2)}`}
+            </span>
+          </div>
+
+          {justificativa.trim() && (
+            <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+              <span className="font-bold text-slate-700 dark:text-slate-200 block text-[10px] uppercase">Justificativa:</span>
+              "{justificativa.trim()}"
+            </div>
+          )}
+        </div>
+      ),
       confirmText: 'Confirmar e Encerrar',
       cancelText: 'Revisar',
-      variant: 'info',
+      variant: !caixaBatido && diferencaCaixa < 0 ? 'danger' : 'info',
     });
     if (!confirmou) return;
 
@@ -1066,6 +1206,7 @@ function LancarPixCartaoModal({
         confirmText={confirmDialog.options.confirmText}
         cancelText={confirmDialog.options.cancelText}
         variant={confirmDialog.options.variant}
+        size={confirmDialog.options.size}
       />
     </>
   );
@@ -1123,11 +1264,62 @@ function NovoEnvioModal({
     }
 
     const pdvNome = locais.find((l) => l.id === localId)?.nome || 'PDV';
+    const itensEnviados = gradeItens.filter((it) => (Number(it.qtd_enviada) || 0) > 0);
+
     const confirmou = await confirmDialog.confirm({
       title: `Confirmar Envio — ${pdvNome}`,
-      message: `Enviar ${totalEnviado} unidades para "${pdvNome}" (${formatTurno(turno)})?`,
-      confirmText: 'Confirmar Envio',
-      cancelText: 'Revisar',
+      size: 'md',
+      message: (
+        <div className="space-y-3 text-left">
+          {/* Header Resumo */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs border border-slate-200 dark:border-slate-800">
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">PDV de Destino</span>
+              <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm truncate block">{pdvNome}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Data / Turno</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">{dataAcerto} ({formatTurno(turno)})</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Atendente</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">{vendedorNome.trim() || 'Não informado'}</span>
+            </div>
+          </div>
+
+          {/* Destaque de Quantidade */}
+          <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 flex items-center justify-between">
+            <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+              <Truck className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              Total de Produtos a Enviar:
+            </span>
+            <span className="font-mono text-base font-extrabold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-indigo-900/60 px-2.5 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-700">
+              {totalEnviado} un
+            </span>
+          </div>
+
+          {/* Romaneio dos Produtos */}
+          {itensEnviados.length > 0 && (
+            <div>
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Romaneio Detalhado da Carga ({itensEnviados.length} itens):
+              </p>
+              <div className="max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 text-xs bg-white dark:bg-slate-900">
+                {itensEnviados.map((it, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <span className="font-medium text-slate-800 dark:text-slate-200 truncate pr-2">{it.nome}</span>
+                    <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 shrink-0 bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded border border-indigo-200/50 dark:border-indigo-800/50">
+                      {it.qtd_enviada} un
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ),
+      confirmText: 'Confirmar e Enviar Carga',
+      cancelText: 'Revisar Quantidades',
       variant: 'info',
     });
     if (!confirmou) return;
@@ -1394,6 +1586,7 @@ function NovoEnvioModal({
         confirmText={confirmDialog.options.confirmText}
         cancelText={confirmDialog.options.cancelText}
         variant={confirmDialog.options.variant}
+        size={confirmDialog.options.size}
       />
     </>
   );
@@ -1752,7 +1945,67 @@ function AuditarPDVModal({
   const handleSalvar = async () => {
     const confirmou = await confirmDialog.confirm({
       title: `Auditar ${pdvNome}`,
-      message: `Confirmar auditoria com Pix real de R$ ${pixReal.toFixed(2)} e Cartão real de R$ ${cartaoReal.toFixed(2)}? ${diferenca !== 0 ? `Isso irá registrar uma diferença de R$ ${diferenca.toFixed(2)}.` : ''}`,
+      size: 'md',
+      message: (
+        <div className="space-y-3 text-left">
+          {/* Header Resumo */}
+          <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs border border-slate-200 dark:border-slate-800">
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">PDV</span>
+              <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm truncate block">{pdvNome}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Turnos Auditados</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">{records.length} {records.length === 1 ? 'Turno' : 'Turnos'}</span>
+            </div>
+          </div>
+
+          {/* Resumo Financeiro da Auditoria */}
+          <div className="p-3 bg-slate-900 text-white rounded-xl text-xs space-y-2 shadow-sm">
+            <div className="flex justify-between items-center text-slate-300">
+              <span>Faturamento Esperado:</span>
+              <span className="font-mono font-bold text-slate-200">R$ {faturamento.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5 text-emerald-400" /> Dinheiro Físico:</span>
+              <span className="font-mono font-bold text-emerald-400">R$ {dinheiro.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Smartphone className="h-3.5 w-3.5 text-purple-400" /> Pix Real Conferido:</span>
+              <span className="font-mono font-bold text-purple-300">R$ {pixReal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-cyan-400" /> Cartão Real Conferido:</span>
+              <span className="font-mono font-bold text-cyan-300">R$ {cartaoReal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center border-t border-slate-700 pt-1.5 text-white font-extrabold">
+              <span>Total Recebido Real:</span>
+              <span className="font-mono text-emerald-400 text-sm">R$ {totalRecebidoReal.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Status Auditoria / Diferença */}
+          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
+            diferenca === 0
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+              : diferenca < 0
+                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+          }`}>
+            <span>{diferenca === 0 ? '✓ Auditoria 100% Batida' : diferenca < 0 ? '⚠ Diferença Negativa / Falta' : '⚠ Sobra no Caixa'}</span>
+            <span className="font-mono font-bold">
+              {diferenca === 0 ? 'R$ 0,00' : `${diferenca > 0 ? '+' : ''}R$ ${diferenca.toFixed(2)}`}
+            </span>
+          </div>
+
+          {justificativa.trim() && (
+            <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+              <span className="font-bold text-slate-700 dark:text-slate-200 block text-[10px] uppercase">Justificativa da Auditoria:</span>
+              "{justificativa.trim()}"
+            </div>
+          )}
+        </div>
+      ),
       confirmText: 'Auditar e Finalizar',
       cancelText: 'Revisar',
       variant: diferenca < 0 ? 'danger' : 'info',
@@ -2068,6 +2321,7 @@ function AuditarPDVModal({
         confirmText={confirmDialog.options.confirmText}
         cancelText={confirmDialog.options.cancelText}
         variant={confirmDialog.options.variant}
+        size={confirmDialog.options.size}
       />
     </>
   );
@@ -2186,19 +2440,63 @@ function AuditarTodosPDVsModal({
 
     const confirmou = await confirmDialog.confirm({
       title: `Auditar ${selectedPdvs.length} PDV(s)`,
-      message:
-        `Confirmar auditoria consolidada dos ${selectedPdvs.length} PDV(s) selecionados?
+      size: 'md',
+      message: (
+        <div className="space-y-3 text-left">
+          {/* Header Resumo */}
+          <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs border border-slate-200 dark:border-slate-800">
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">PDVs Selecionados</span>
+              <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">{selectedPdvs.length} PDVs</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Data da Auditoria</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">{dataAuditoria}</span>
+            </div>
+          </div>
 
-` +
-        `Faturamento esperado: R$ ${faturamentoTotal.toFixed(2)}
-` +
-        `Dinheiro físico: R$ ${dinheiroDeclarado.toFixed(2)}
-` +
-        `Pix no extrato: R$ ${pixReal.toFixed(2)}
-` +
-        `Cartão nas maquininhas: R$ ${cartaoReal.toFixed(2)}
-` +
-        `Diferença geral: R$ ${diferenca.toFixed(2)}`,
+          {/* Resumo Financeiro da Auditoria */}
+          <div className="p-3 bg-slate-900 text-white rounded-xl text-xs space-y-2 shadow-sm">
+            <div className="flex justify-between items-center text-slate-300">
+              <span>Faturamento Total Esperado:</span>
+              <span className="font-mono font-bold text-slate-200">R$ {faturamentoTotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5 text-emerald-400" /> Dinheiro Físico Declarado:</span>
+              <span className="font-mono font-bold text-emerald-400">R$ {dinheiroDeclarado.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Smartphone className="h-3.5 w-3.5 text-purple-400" /> Pix no Extrato Bancário:</span>
+              <span className="font-mono font-bold text-purple-300">R$ {pixReal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-cyan-400" /> Cartão nas Maquininhas:</span>
+              <span className="font-mono font-bold text-cyan-300">R$ {cartaoReal.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Status Geral da Conciliação */}
+          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
+            caixaPerfeito
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+              : diferenca < -0.05
+                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+          }`}>
+            <span>{caixaPerfeito ? '✓ Caixa Perfeito e Conciliado' : diferenca < -0.05 ? '⚠ Diferença Geral Negativa' : '⚠ Sobra Geral no Caixa'}</span>
+            <span className="font-mono font-bold">
+              {diferenca > 0.05 ? '+' : ''}R$ {diferenca.toFixed(2)}
+            </span>
+          </div>
+
+          {justificativa.trim() && (
+            <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+              <span className="font-bold text-slate-700 dark:text-slate-200 block text-[10px] uppercase">Justificativa:</span>
+              "{justificativa.trim()}"
+            </div>
+          )}
+        </div>
+      ),
       confirmText: 'Auditar e Finalizar',
       cancelText: 'Revisar',
       variant: diferenca < -0.05 ? 'danger' : 'info',
@@ -2537,6 +2835,7 @@ function AuditarTodosPDVsModal({
         confirmText={confirmDialog.options.confirmText}
         cancelText={confirmDialog.options.cancelText}
         variant={confirmDialog.options.variant}
+        size={confirmDialog.options.size}
       />
     </>
   );
@@ -2733,18 +3032,113 @@ function UnificarTodosPDVsModal({
 
     const confirmou = await confirmDialog.confirm({
       title: `Confirmar Fechamento Unificado (${selectedPdvs.length} PDVs)`,
-      message:
-        `Confirma o fechamento unificado de ${selectedPdvs.length} PDV(s) (${selectedRecords.length} turnos)?\n\n` +
-        `• Vendas Líquidas Apuradas: R$ ${apuracao.faturamento_liquido_esperado.toFixed(2)}\n` +
-        `• Dinheiro Somado dos Turnos: R$ ${apuracao.total_dinheiro_turnos.toFixed(2)}\n` +
-        `• Pix Declarado: R$ ${globalPix.toFixed(2)}\n` +
-        `• Cartão Débito: R$ ${globalDebito.toFixed(2)}\n` +
-        `• Cartão Crédito: R$ ${globalCredito.toFixed(2)}\n` +
-        `• Total Bruto Recebido: R$ ${apuracao.total_bruto_recebido.toFixed(2)}\n` +
-        `• Taxas das Operações: -R$ ${apuracao.total_taxas_operacionais.toFixed(2)}\n` +
-        `• Total Líquido após Taxas: R$ ${apuracao.total_liquido_apos_taxas.toFixed(2)}\n` +
-        `• Diferença Comercial de Caixa: ${apuracao.diferenca_caixa < 0 ? `-R$ ${Math.abs(apuracao.diferenca_caixa).toFixed(2)}` : apuracao.diferenca_caixa > 0 ? `+R$ ${apuracao.diferenca_caixa.toFixed(2)}` : 'R$ 0,00 (Caixa Batido)'}\n` +
-        (justificativa.trim() ? `• Justificativa: "${justificativa.trim()}"` : ''),
+      size: 'lg',
+      message: (
+        <div className="space-y-3 text-left">
+          {/* Header Resumo */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs border border-slate-200 dark:border-slate-800 text-center">
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">PDVs</span>
+              <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">{selectedPdvs.length}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Turnos</span>
+              <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">{selectedRecords.length}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Sobras Físicas</span>
+              <span className="font-extrabold text-amber-600 dark:text-amber-400 text-sm font-mono">{apuracao.total_sobras_conferidas} un</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Itens Vendidos</span>
+              <span className="font-extrabold text-primary text-sm font-mono">{apuracao.total_vendido_conferido} un</span>
+            </div>
+          </div>
+
+          {/* Card Financeiro Consolidado */}
+          <div className="p-3 bg-slate-900 text-white rounded-xl text-xs space-y-1.5 shadow-sm">
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5 text-emerald-400" /> Dinheiro Gaveta (Todos os PDVs):</span>
+              <span className="font-mono font-bold text-emerald-400">R$ {apuracao.total_dinheiro_turnos.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Smartphone className="h-3.5 w-3.5 text-purple-400" /> Pix Extrato Bancário:</span>
+              <span className="font-mono font-bold text-purple-300">R$ {globalPix.toFixed(2)}</span>
+            </div>
+            {(globalDebito > 0 || globalCredito > 0) && (
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-cyan-400" /> Cartão Débito / Crédito:</span>
+                <span className="font-mono font-bold text-cyan-300">
+                  R$ {(globalDebito + globalCredito).toFixed(2)}
+                  <span className="text-[10px] text-slate-400 ml-1">
+                    (Déb: {globalDebito.toFixed(2)} | Créd: {globalCredito.toFixed(2)})
+                  </span>
+                </span>
+              </div>
+            )}
+            {globalOutros > 0 && (
+              <div className="flex justify-between items-center text-slate-300">
+                <span>Outros Recebimentos:</span>
+                <span className="font-mono font-bold text-slate-200">R$ {globalOutros.toFixed(2)}</span>
+              </div>
+            )}
+            {apuracao.total_taxas_operacionais > 0 && (
+              <div className="flex justify-between items-center text-amber-300 border-t border-slate-800 pt-1">
+                <span>Taxas das Operações de Cartão:</span>
+                <span className="font-mono font-bold">-R$ {apuracao.total_taxas_operacionais.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center border-t border-slate-800 pt-1.5 text-white font-extrabold">
+              <span>Total Líquido Consolidado a Receber:</span>
+              <span className="font-mono text-emerald-400 text-sm">R$ {apuracao.total_liquido_apos_taxas.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Conciliação Comercial Geral */}
+          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
+            !temDiferenca
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+              : apuracao.diferenca_caixa < 0
+                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+          }`}>
+            <span>{!temDiferenca ? '✓ Caixa Geral 100% Batido' : apuracao.diferenca_caixa < 0 ? '⚠ Diferença Geral Negativa' : '⚠ Sobra Geral no Caixa'}</span>
+            <span className="font-mono font-bold">
+              {apuracao.diferenca_caixa === 0 ? 'R$ 0,00' : `${apuracao.diferenca_caixa > 0 ? '+' : ''}R$ ${apuracao.diferenca_caixa.toFixed(2)}`}
+            </span>
+          </div>
+
+          {/* Relação dos PDVs Participantes */}
+          <div>
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+              PDVs no Fechamento ({selectedPdvs.length}):
+            </p>
+            <div className="max-h-28 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 text-xs bg-white dark:bg-slate-900">
+              {selectedPdvs.map((p) => {
+                const dinPdv = p.records.reduce((acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0), 0);
+                const sobPdv = p.records.reduce((acc, r) => acc + (Number(r.qtd_total_retorno) || 0), 0);
+                return (
+                  <div key={p.local.id} className="flex justify-between items-center p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <span className="font-bold text-slate-800 dark:text-slate-200 truncate pr-2">{p.local.nome}</span>
+                    <div className="flex items-center gap-2 text-[11px] font-mono shrink-0">
+                      <span className="text-slate-400">{p.records.length} turnos</span>
+                      <span className="text-amber-600 dark:text-amber-400">Sobra: {sobPdv} un</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">Din: R$ {dinPdv.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {justificativa.trim() && (
+            <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+              <span className="font-bold text-slate-700 dark:text-slate-200 block text-[10px] uppercase">Justificativa:</span>
+              "{justificativa.trim()}"
+            </div>
+          )}
+        </div>
+      ),
       confirmText: 'Confirmar Fechamento Geral',
       cancelText: 'Revisar',
       variant: temDiferenca && apuracao.diferenca_caixa < 0 ? 'danger' : 'info',
@@ -3537,6 +3931,7 @@ function UnificarTodosPDVsModal({
         confirmText={confirmDialog.options.confirmText}
         cancelText={confirmDialog.options.cancelText}
         variant={confirmDialog.options.variant}
+        size={confirmDialog.options.size}
       />
     </>
   );
@@ -3688,17 +4083,93 @@ function FechamentoUnificadoPDVModal({
 
     const confirmou = await confirmDialog.confirm({
       title: `Fechamento Unificado — ${pdvNome}`,
-      message:
-        `Confirma a unificação de ${records.length} turno(s) do PDV "${pdvNome}"?\n\n` +
-        `• Vendas Líquidas: R$ ${apuracao.faturamento_liquido_esperado.toFixed(2)}\n` +
-        `• Dinheiro dos Turnos: R$ ${dinheiroTotalTurnos.toFixed(2)}\n` +
-        `• Pix Declarado: R$ ${valorPix.toFixed(2)}\n` +
-        `• Cartão Declarado: R$ ${valorCartao.toFixed(2)}\n` +
-        `• Total Bruto Recebido: R$ ${apuracao.total_bruto_recebido.toFixed(2)}\n` +
-        `• Taxas das Operações: -R$ ${apuracao.total_taxas_operacionais.toFixed(2)}\n` +
-        `• Total Líquido após Taxas: R$ ${apuracao.total_liquido_apos_taxas.toFixed(2)}\n` +
-        `• Diferença Comercial: ${apuracao.diferenca_caixa < 0 ? `-R$ ${Math.abs(apuracao.diferenca_caixa).toFixed(2)}` : apuracao.diferenca_caixa > 0 ? `+R$ ${apuracao.diferenca_caixa.toFixed(2)}` : 'R$ 0,00'}\n` +
-        (justificativa.trim() ? `• Justificativa: "${justificativa.trim()}"` : ''),
+      size: 'md',
+      message: (
+        <div className="space-y-3 text-left">
+          {/* Header com badges */}
+          <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs border border-slate-200 dark:border-slate-800">
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">PDV</span>
+              <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm truncate block">{pdvNome}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Turnos Unificados</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">
+                {records.length} {records.length === 1 ? 'Turno' : 'Turnos'} ({records.map(r => formatTurno(r.turno)).join(', ')})
+              </span>
+            </div>
+          </div>
+
+          {/* Cards de Métricas de Vendas e Sobras */}
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Vendas Líquidas</span>
+              <span className="font-mono font-extrabold text-slate-800 dark:text-slate-100 text-xs">
+                R$ {apuracao.faturamento_liquido_esperado.toFixed(2)}
+              </span>
+            </div>
+            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+              <span className="text-[10px] text-amber-700 dark:text-amber-400 uppercase font-bold block">Sobras Físicas</span>
+              <span className="font-mono font-extrabold text-amber-700 dark:text-amber-400 text-xs">
+                {apuracao.total_sobras_conferidas} un
+              </span>
+            </div>
+            <div className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800">
+              <span className="text-[10px] text-cyan-700 dark:text-cyan-400 uppercase font-bold block">Itens Vendidos</span>
+              <span className="font-mono font-extrabold text-cyan-700 dark:text-cyan-400 text-xs">
+                {apuracao.total_vendido_conferido} un
+              </span>
+            </div>
+          </div>
+
+          {/* Card Financeiro Escuro com Valores Lançados */}
+          <div className="p-3 bg-slate-900 text-white rounded-xl text-xs space-y-2 shadow-sm">
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5 text-emerald-400" /> Dinheiro Físico Turnos:</span>
+              <span className="font-mono font-bold text-emerald-400">R$ {dinheiroTotalTurnos.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><Smartphone className="h-3.5 w-3.5 text-purple-400" /> Pix Declarado:</span>
+              <span className="font-mono font-bold text-purple-300">R$ {valorPix.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-cyan-400" /> Cartão Declarado:</span>
+              <span className="font-mono font-bold text-cyan-300">R$ {valorCartao.toFixed(2)}</span>
+            </div>
+            {apuracao.total_taxas_operacionais > 0 && (
+              <div className="flex justify-between items-center text-amber-300 border-t border-slate-800 pt-1">
+                <span>Taxas das Operações:</span>
+                <span className="font-mono font-bold">-R$ {apuracao.total_taxas_operacionais.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center border-t border-slate-800 pt-1.5 text-white font-extrabold">
+              <span>Total Líquido após Taxas:</span>
+              <span className="font-mono text-emerald-400 text-sm">R$ {apuracao.total_liquido_apos_taxas.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Status de Caixa / Alerta de Diferença */}
+          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
+            !temDiferenca
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+              : apuracao.diferenca_caixa < 0
+                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+          }`}>
+            <span>{!temDiferenca ? '✓ Caixa Batido' : apuracao.diferenca_caixa < 0 ? '⚠ Sobra Negativa / Quebra de Caixa' : '⚠ Sobra Positiva no Caixa'}</span>
+            <span className="font-mono font-bold">
+              {apuracao.diferenca_caixa === 0 ? 'R$ 0,00' : `${apuracao.diferenca_caixa > 0 ? '+' : ''}R$ ${apuracao.diferenca_caixa.toFixed(2)}`}
+            </span>
+          </div>
+
+          {justificativa.trim() && (
+            <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+              <span className="font-bold text-slate-700 dark:text-slate-200 block text-[10px] uppercase">Justificativa:</span>
+              "{justificativa.trim()}"
+            </div>
+          )}
+        </div>
+      ),
       confirmText: 'Confirmar Fechamento',
       cancelText: 'Revisar',
       variant: temDiferenca && apuracao.diferenca_caixa < 0 ? 'danger' : 'info',
@@ -4167,6 +4638,7 @@ function FechamentoUnificadoPDVModal({
         confirmText={confirmDialog.options.confirmText}
         cancelText={confirmDialog.options.cancelText}
         variant={confirmDialog.options.variant}
+        size={confirmDialog.options.size}
       />
     </>
   );
@@ -4344,27 +4816,37 @@ export function PDVKanbanView({
     (r) => r.status === 'dinheiro_informado' || r.status === 'sobras_informadas'
   );
 
+  // Apenas registros com status 'auditado' ou 'conferido' representam dados reais consolidados do dia
+  const registrosAuditados = useMemo(
+    () => registros.filter((r) => r.status === 'auditado' || r.status === 'conferido'),
+    [registros]
+  );
+
   // KPIs
   const totalEnviadoKanban = registros.reduce(
     (acc, r) => acc + (Number(r.qtd_total_enviada) || 0),
     0
   );
-  const totalVendidoKanban = registros.reduce((acc, r) => {
+  const totalSobrasAuditadasKanban = registrosAuditados.reduce((acc, r) => {
+    return acc + (Number(r.qtd_total_retorno) || 0);
+  }, 0);
+  const totalVendidoKanban = registrosAuditados.reduce((acc, r) => {
     const env = Number(r.qtd_total_enviada) || 0;
     const ret = Number(r.qtd_total_retorno) || 0;
     return acc + Math.max(0, env - ret);
   }, 0);
-  const totalDinheiroKanban = registros.reduce(
+  const totalDinheiroKanban = registrosAuditados.reduce(
     (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
     0
   );
-  const totalFaturamentoKanban = registros.reduce((acc, r) => {
+  const totalFaturamentoKanban = registrosAuditados.reduce((acc, r) => {
     const fat =
       Number(r.faturamento_liquido_esperado) ||
-      Number(r.faturamento_bruto_teorico) ||
       (Number(r.valor_dinheiro_gaveta) || 0) +
         (Number(r.valor_pix_declarado) || 0) +
-        (Number(r.valor_cartao_declarado) || 0);
+        (Number(r.valor_cartao_declarado) || 0) ||
+      Number(r.faturamento_bruto_teorico) ||
+      0;
     return acc + fat;
   }, 0);
 
@@ -4497,29 +4979,56 @@ export function PDVKanbanView({
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-[11px] font-bold">
+          <div
+            className="flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-[11px] font-bold"
+            title="Total de mercadorias enviadas aos PDVs na data selecionada"
+          >
             <Package className="h-3.5 w-3.5 text-primary" />
             <span className="text-text/50">Enviado:</span>
             <span className="font-mono text-text/80">{totalEnviadoKanban} un</span>
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 text-[11px] font-bold">
+          <div
+            className="flex items-center gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/30 px-2.5 py-1 text-[11px] font-bold"
+            title="Sobras apuradas em auditoria"
+          >
+            <RotateCcw className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="text-amber-700 dark:text-amber-400">Sobras:</span>
+            <span className="font-mono text-amber-800 dark:text-amber-300">
+              {totalSobrasAuditadasKanban} un
+            </span>
+          </div>
+          <div
+            className="flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 text-[11px] font-bold"
+            title="Vendas reais consolidadas de PDVs auditados"
+          >
             <ShoppingBag className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="text-emerald-700 dark:text-emerald-400">Vendido:</span>
             <span className="font-mono text-emerald-800 dark:text-emerald-300">
               {totalVendidoKanban} un
             </span>
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 text-[11px] font-bold">
+          <div
+            className="flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 text-[11px] font-bold"
+            title="Dinheiro recolhido apurado na auditoria"
+          >
             <DollarSign className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="text-emerald-700 dark:text-emerald-400">R$:</span>
             <span className="font-mono text-emerald-800 dark:text-emerald-300">
               {totalDinheiroKanban.toFixed(2)}
             </span>
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1 text-[11px] font-bold">
+          <div
+            className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1 text-[11px] font-bold"
+            title="Faturamento real apurado pós-auditoria"
+          >
             <TrendingUp className="h-3.5 w-3.5 text-primary" />
             <span className="text-primary font-black">R$ {totalFaturamentoKanban.toFixed(2)}</span>
           </div>
+          {registros.length > 0 && registrosAuditados.length === 0 && (
+            <span className="flex items-center gap-1 rounded-lg border border-amber-300/60 bg-amber-100/60 dark:bg-amber-950/40 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+              <Clock className="h-3 w-3" /> Aguardando auditoria do dia
+            </span>
+          )}
         </div>
       </div>
 
@@ -4946,6 +5455,7 @@ export function PDVKanbanView({
         confirmText={confirmDialog.options.confirmText}
         cancelText={confirmDialog.options.cancelText}
         variant={confirmDialog.options.variant}
+        size={confirmDialog.options.size}
       />
     </div>
   );

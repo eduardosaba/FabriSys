@@ -3052,7 +3052,7 @@ function UnificarTodosPDVsModal({
             </div>
             <div>
               <span className="text-[10px] text-slate-500 uppercase font-bold block">Itens Vendidos</span>
-              <span className="font-extrabold text-primary text-sm font-mono">{apuracao.total_vendido_conferido} un</span>
+              <span className="font-extrabold text-primary text-sm font-mono">{apuracao.total_vendido} un</span>
             </div>
           </div>
 
@@ -4118,7 +4118,7 @@ function FechamentoUnificadoPDVModal({
             <div className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800">
               <span className="text-[10px] text-cyan-700 dark:text-cyan-400 uppercase font-bold block">Itens Vendidos</span>
               <span className="font-mono font-extrabold text-cyan-700 dark:text-cyan-400 text-xs">
-                {apuracao.total_vendido_conferido} un
+                {apuracao.total_vendido} un
               </span>
             </div>
           </div>

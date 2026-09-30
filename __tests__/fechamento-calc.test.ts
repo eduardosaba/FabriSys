@@ -255,4 +255,77 @@ describe('Motor de Cálculo de Fechamento de PDVs (fechamento-pdv-calc)', () => 
     expect(res.itens_consolidados[0].produto_id).toBe('p_com_carga');
     expect(res.itens_consolidados[0].qtd_vendida).toBe(8);
   });
+
+  it('Cenário: Sobras NUNCA são distribuídas entre PDVs — cada PDV/turno retorna fisicamente à fábrica de forma independente', () => {
+    // Simulação Larissa Saba:
+    // PDV Centro: Enviou 10, retornou 2 à fábrica -> vendeu 8
+    // PDV Shopping: Enviou 10, retornou 0 à fábrica -> vendeu 10
+    // Total enviado fábrica = 20
+    // Total sobras físicas = 2 (NÃO 4!)
+    // Total vendido = 18 (NÃO 16!)
+    const turnos: TurnoFechamentoInput[] = [
+      {
+        id: 'remessa_centro',
+        local_id: 'pdv_centro',
+        pdv_nome: 'PDV Centro',
+        data: '2026-09-30',
+        turno: 'integral',
+        status: 'encerrado',
+        valor_dinheiro_gaveta: 100.0,
+        itens_grade: [
+          {
+            produto_id: 'bolo_pote',
+            nome: 'Bolo de Pote',
+            preco_unitario: 10.0,
+            qtd_enviada: 10,
+            qtd_retorno: 2, // Sobraram 2 e retornaram à fábrica
+          },
+        ],
+      },
+      {
+        id: 'remessa_shopping',
+        local_id: 'pdv_shopping',
+        pdv_nome: 'PDV Shopping',
+        data: '2026-09-30',
+        turno: 'integral',
+        status: 'encerrado',
+        valor_dinheiro_gaveta: 100.0,
+        itens_grade: [
+          {
+            produto_id: 'bolo_pote',
+            nome: 'Bolo de Pote',
+            preco_unitario: 10.0,
+            qtd_enviada: 10,
+            qtd_retorno: 0, // Vendeu tudo, nada retornou à fábrica
+          },
+        ],
+      },
+    ];
+
+    const res = apurarFechamentoUnificado(turnos, {
+      pix: 0,
+      cartao_debito: 0,
+      cartao_credito: 0,
+    });
+
+    // 1. Total enviado à fábrica deve ser 20
+    expect(res.total_enviado_fabrica).toBe(20);
+
+    // 2. Sobras físicas devem ser estritamente 2 un (não 4!)
+    expect(res.total_sobras_conferidas).toBe(2);
+
+    // 3. Total vendido deve ser 18 un (não 16!)
+    expect(res.total_vendido).toBe(18);
+
+    // 4. Faturamento bruto: 18 * 10 = R$ 180,00
+    expect(res.faturamento_bruto_esperado).toBe(180.0);
+    expect(res.faturamento_liquido_esperado).toBe(180.0);
+
+    // 5. Item consolidado
+    expect(res.itens_consolidados).toHaveLength(1);
+    expect(res.itens_consolidados[0].qtd_disponivel).toBe(20);
+    expect(res.itens_consolidados[0].qtd_vendida).toBe(18);
+    expect(res.itens_consolidados[0].faturamento_bruto).toBe(180.0);
+    expect(res.itens_consolidados[0].tem_pendencia_sobra).toBe(false);
+  });
 });

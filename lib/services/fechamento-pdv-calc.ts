@@ -221,9 +221,11 @@ export function apurarFechamentoUnificado(
     });
   });
 
-  // Para calcular a sobra final física real por PDV:
-  // Se houver múltiplos turnos no mesmo PDV no dia, a sobra que permaneceu é a do ÚLTIMO turno cronológico.
-  // Se forem PDVs diferentes, as sobras dos PDVs se somam.
+  // Para calcular a sobra física real retornada à fábrica:
+  // Regra Larissa Saba: a sobra não é distribuída e sempre retorna à fábrica.
+  // Cada turno representa um envio e um retorno independente à fábrica.
+  // Caso haja um rollover interno explícito no mesmo PDV (qtd_estoque_inicial > 0),
+  // a sobra do turno anterior foi reutilizada no balcão e apenas a do último turno retorna à fábrica.
   const turnosPorPDV = new Map<string, TurnoFechamentoInput[]>();
   turnos.forEach((t) => {
     const list = turnosPorPDV.get(t.local_id) || [];
@@ -232,16 +234,31 @@ export function apurarFechamentoUnificado(
   });
 
   turnosPorPDV.forEach((turnosDoPdv) => {
-    const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
-    turnosDoPdv.sort((a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99));
-    const ultimoTurno = turnosDoPdv[turnosDoPdv.length - 1];
+    const temRolloverInterno = turnosDoPdv.some((t) =>
+      (t.itens_grade || []).some((it) => Number(it.qtd_estoque_inicial || 0) > 0)
+    );
 
-    (ultimoTurno.itens_grade || []).forEach((item) => {
-      const registroProd = mapaProdutos.get(item.produto_id);
-      if (registroProd && item.qtd_retorno !== null && item.qtd_retorno !== undefined) {
-        registroProd.sobra_final_acumulada += Number(item.qtd_retorno);
-      }
-    });
+    if (temRolloverInterno) {
+      const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
+      turnosDoPdv.sort((a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99));
+      const ultimoTurno = turnosDoPdv[turnosDoPdv.length - 1];
+
+      (ultimoTurno.itens_grade || []).forEach((item) => {
+        const registroProd = mapaProdutos.get(item.produto_id);
+        if (registroProd && item.qtd_retorno !== null && item.qtd_retorno !== undefined) {
+          registroProd.sobra_final_acumulada += Number(item.qtd_retorno);
+        }
+      });
+    } else {
+      turnosDoPdv.forEach((t) => {
+        (t.itens_grade || []).forEach((item) => {
+          const registroProd = mapaProdutos.get(item.produto_id);
+          if (registroProd && item.qtd_retorno !== null && item.qtd_retorno !== undefined) {
+            registroProd.sobra_final_acumulada += Number(item.qtd_retorno);
+          }
+        });
+      });
+    }
   });
 
   // 3. Apuração Final dos Itens Consolidados

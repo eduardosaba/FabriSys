@@ -2591,39 +2591,30 @@ function UnificarTodosPDVsModal({
   );
   const [globalTaxas, setGlobalTaxas] = useState<number>(initialTaxaSum);
 
-  // Mapeamento de Sobras por Produto: Record<produto_id, number | null>
-  // null = Não informado (Pendente) | >= 0 = Conferido
-  const [sobrasPorProduto, setSobrasPorProduto] = useState<Record<string, number | null>>(() => {
-    const map: Record<string, number | null> = {};
-    const porPdv = new Map<string, RemessaKanban[]>();
+  // Mapeamento de Sobras por Remessa/PDV: Record<remessa_id, Record<produto_id, number | null>>
+  // Regra Larissa Saba: a sobra NUNCA é distribuída entre PDVs. Cada remessa retorna fisicamente à fábrica.
+  const [sobrasPorRemessa, setSobrasPorRemessa] = useState<
+    Record<string, Record<string, number | null>>
+  >(() => {
+    const map: Record<string, Record<string, number | null>> = {};
     selectedRecords.forEach((r) => {
-      const list = porPdv.get(r.local_id) || [];
-      list.push(r);
-      porPdv.set(r.local_id, list);
-    });
-
-    const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
-
-    porPdv.forEach((recordsDoPdv) => {
-      recordsDoPdv.sort((a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99));
-      const ultimoTurno = recordsDoPdv[recordsDoPdv.length - 1];
-      if (Array.isArray(ultimoTurno.itens_grade)) {
-        ultimoTurno.itens_grade.forEach((it) => {
-          const disp = (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0);
-          if (disp <= 0 && (!it.qtd_retorno || Number(it.qtd_retorno) <= 0)) {
-            return;
-          }
-          if (
-            it.qtd_retorno !== null &&
-            it.qtd_retorno !== undefined &&
-            !isNaN(Number(it.qtd_retorno))
-          ) {
-            map[it.produto_id] = (map[it.produto_id] ?? 0) + Number(it.qtd_retorno);
-          } else if (map[it.produto_id] === undefined) {
-            map[it.produto_id] = null;
-          }
-        });
-      }
+      map[r.id] = {};
+      (r.itens_grade || []).forEach((it) => {
+        const disp = (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0);
+        if (disp <= 0 && (!it.qtd_retorno || Number(it.qtd_retorno) <= 0)) {
+          map[r.id][it.produto_id] = 0;
+          return;
+        }
+        if (
+          it.qtd_retorno !== null &&
+          it.qtd_retorno !== undefined &&
+          !isNaN(Number(it.qtd_retorno))
+        ) {
+          map[r.id][it.produto_id] = Number(it.qtd_retorno);
+        } else {
+          map[r.id][it.produto_id] = null;
+        }
+      });
     });
     return map;
   });
@@ -2646,15 +2637,12 @@ function UnificarTodosPDVsModal({
   };
 
   const handleZerarTodasSobras = () => {
-    setSobrasPorProduto((prev) => {
-      const next: Record<string, number | null> = {};
-      Object.keys(prev).forEach((k) => {
-        next[k] = 0;
-      });
+    setSobrasPorRemessa((prev) => {
+      const next: Record<string, Record<string, number | null>> = {};
       selectedRecords.forEach((r) => {
+        next[r.id] = { ...(prev[r.id] || {}) };
         (r.itens_grade || []).forEach((it) => {
-          const disp = (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0);
-          if (disp > 0) next[it.produto_id] = 0;
+          next[r.id][it.produto_id] = 0;
         });
       });
       return next;
@@ -2667,123 +2655,38 @@ function UnificarTodosPDVsModal({
   };
 
   // Monta a estrutura TurnoFechamentoInput[] para o motor centralizado fechamento-pdv-calc
+  // Cada remessa preserva seu próprio retorno físico à fábrica (sem distribuição nem duplicação)
   const turnosInput: TurnoFechamentoInput[] = useMemo(() => {
-    const porPdv = new Map<string, RemessaKanban[]>();
-    selectedRecords.forEach((r) => {
-      const list = porPdv.get(r.local_id) || [];
-      list.push(r);
-      porPdv.set(r.local_id, list);
-    });
-
-    const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
-
-    // Lista ordenada dos PDVs com seus últimos turnos
-    const pdvUltimosTurnos: { localId: string; record: RemessaKanban }[] = [];
-    porPdv.forEach((recordsDoPdv, localId) => {
-      recordsDoPdv.sort((a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99));
-      pdvUltimosTurnos.push({
-        localId,
-        record: recordsDoPdv[recordsDoPdv.length - 1],
+    return selectedRecords.map((r) => {
+      const pdvNome =
+        r.locais?.nome || allPdvs.find((p) => p.local.id === r.local_id)?.local.nome || 'PDV';
+      const itensInput: ItemMovimentacaoPDV[] = (r.itens_grade || []).map((it) => {
+        const ret = sobrasPorRemessa[r.id]?.[it.produto_id];
+        return {
+          produto_id: it.produto_id,
+          nome: it.nome,
+          preco_unitario: Number(it.preco_unitario || 0),
+          qtd_estoque_inicial: Number(it.qtd_sobra_anterior || 0),
+          qtd_enviada: Number(it.qtd_enviada || 0),
+          qtd_retorno: ret !== undefined ? ret : null,
+        };
       });
+
+      return {
+        id: r.id,
+        local_id: r.local_id,
+        pdv_nome: pdvNome,
+        data: r.data,
+        turno: r.turno,
+        status: r.status,
+        valor_dinheiro_gaveta:
+          r.valor_dinheiro_gaveta !== null && r.valor_dinheiro_gaveta !== undefined
+            ? Number(r.valor_dinheiro_gaveta)
+            : null,
+        itens_grade: itensInput,
+      };
     });
-
-    // Mapeamento prévio: distribui a sobra global de cada produto entre os últimos turnos dos PDVs
-    const distribuicaoSobras = new Map<string, Map<string, number | null>>();
-    const todosProdutos = new Set<string>();
-    selectedRecords.forEach((r) => {
-      (r.itens_grade || []).forEach((it) => todosProdutos.add(it.produto_id));
-    });
-
-    todosProdutos.forEach((prodId) => {
-      const sobraGlobal = sobrasPorProduto[prodId];
-      const mapaPdv = new Map<string, number | null>();
-
-      if (sobraGlobal === null || sobraGlobal === undefined) {
-        pdvUltimosTurnos.forEach((p) => mapaPdv.set(p.localId, null));
-      } else {
-        let somaExistente = 0;
-        let todosTinhamSobra = true;
-        const disponiveisPorPdv: { localId: string; disp: number; sobraPrevia: number | null }[] =
-          [];
-
-        pdvUltimosTurnos.forEach((p) => {
-          const itemNoPdv = (p.record.itens_grade || []).find((it) => it.produto_id === prodId);
-          const disp =
-            (Number(itemNoPdv?.qtd_enviada) || 0) + (Number(itemNoPdv?.qtd_sobra_anterior) || 0);
-          const ret =
-            itemNoPdv?.qtd_retorno !== null && itemNoPdv?.qtd_retorno !== undefined
-              ? Number(itemNoPdv.qtd_retorno)
-              : null;
-          if (ret === null) todosTinhamSobra = false;
-          else somaExistente += ret;
-          disponiveisPorPdv.push({ localId: p.localId, disp, sobraPrevia: ret });
-        });
-
-        if (todosTinhamSobra && somaExistente === sobraGlobal) {
-          disponiveisPorPdv.forEach((dp) => mapaPdv.set(dp.localId, dp.sobraPrevia));
-        } else {
-          let restante = sobraGlobal;
-          disponiveisPorPdv.forEach((dp, idx) => {
-            const isUltimo = idx === disponiveisPorPdv.length - 1;
-            if (isUltimo) {
-              mapaPdv.set(dp.localId, restante);
-            } else {
-              const alocado = Math.min(dp.disp, restante);
-              mapaPdv.set(dp.localId, alocado);
-              restante -= alocado;
-            }
-          });
-        }
-      }
-
-      distribuicaoSobras.set(prodId, mapaPdv);
-    });
-
-    const result: TurnoFechamentoInput[] = [];
-
-    porPdv.forEach((recordsDoPdv, localId) => {
-      recordsDoPdv.forEach((r, idx) => {
-        const isUltimoDoPdv = idx === recordsDoPdv.length - 1;
-        const itensInput: ItemMovimentacaoPDV[] = [];
-
-        if (Array.isArray(r.itens_grade) && r.itens_grade.length > 0) {
-          r.itens_grade.forEach((it) => {
-            let sobraTurno: number | null = 0;
-            if (isUltimoDoPdv) {
-              const alocacaoPdv = distribuicaoSobras.get(it.produto_id);
-              sobraTurno = alocacaoPdv ? (alocacaoPdv.get(localId) ?? null) : null;
-            } else {
-              sobraTurno = 0; // Turnos anteriores já transferiram tudo
-            }
-
-            itensInput.push({
-              produto_id: it.produto_id,
-              nome: it.nome,
-              preco_unitario: Number(it.preco_unitario || 0),
-              qtd_estoque_inicial: Number(it.qtd_sobra_anterior || 0),
-              qtd_enviada: Number(it.qtd_enviada || 0),
-              qtd_retorno: sobraTurno,
-            });
-          });
-        }
-
-        result.push({
-          id: r.id,
-          local_id: localId,
-          data: r.data,
-          turno: r.turno,
-          status: r.status,
-          valor_dinheiro_gaveta:
-            r.valor_dinheiro_gaveta !== null && r.valor_dinheiro_gaveta !== undefined
-              ? Number(r.valor_dinheiro_gaveta)
-              : null,
-          itens_grade: itensInput,
-        });
-      });
-    });
-
-    return result;
-  }, [selectedRecords, sobrasPorProduto]);
+  }, [selectedRecords, sobrasPorRemessa, allPdvs]);
 
   // Executa o cálculo oficial unificado compartilhado
   const apuracao = useMemo(() => {
@@ -3081,17 +2984,14 @@ function UnificarTodosPDVsModal({
                     <th className="p-2.5 text-center">Preço</th>
                     <th className="p-2.5 text-center">Enviado</th>
                     <th className="p-2.5 text-center bg-amber-50/80 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200">
-                      Sobra Fís.
+                      Sobra Fís. (Retorno Fábrica)
                     </th>
                     <th className="p-2.5 text-center">Vendido</th>
                     <th className="p-2.5 text-right">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
-                  {apuracao.itens_consolidados.filter(
-                    (item) =>
-                      item.qtd_disponivel > 0 || (sobrasPorProduto[item.produto_id] ?? 0) > 0
-                  ).length === 0 ? (
+                  {apuracao.itens_consolidados.length === 0 ? (
                     <tr>
                       <td
                         colSpan={6}
@@ -3101,60 +3001,142 @@ function UnificarTodosPDVsModal({
                       </td>
                     </tr>
                   ) : (
-                    apuracao.itens_consolidados
-                      .filter(
-                        (item) =>
-                          item.qtd_disponivel > 0 || (sobrasPorProduto[item.produto_id] ?? 0) > 0
-                      )
-                      .map((item) => {
-                        const sobraAtual = sobrasPorProduto[item.produto_id];
-                        const isPendente = sobraAtual === null || sobraAtual === undefined;
-
-                        return (
-                          <tr
-                            key={item.produto_id}
-                            className="hover:bg-slate-50 dark:hover:bg-slate-900/50"
-                          >
-                            <td className="p-2.5 font-sans font-bold text-text/90">{item.nome}</td>
-                            <td className="p-2.5 text-center text-text/60">
-                              R$ {item.preco_unitario.toFixed(2)}
-                            </td>
-                            <td className="p-2.5 text-center font-bold text-text/80">
-                              {item.qtd_disponivel} un
-                            </td>
-                            <td className="p-2.5 text-center bg-amber-50/40 dark:bg-amber-950/20">
-                              <input
-                                type="number"
-                                min={0}
-                                max={item.qtd_disponivel}
-                                value={sobraAtual ?? ''}
-                                placeholder="Pend."
-                                onChange={(e) => {
-                                  const val =
-                                    e.target.value === ''
-                                      ? null
-                                      : Math.max(0, Number(e.target.value));
-                                  setSobrasPorProduto((prev) => ({
-                                    ...prev,
-                                    [item.produto_id]: val,
-                                  }));
-                                }}
-                                className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none transition-all ${
-                                  isPendente
-                                    ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
-                                    : 'border-slate-300 dark:border-slate-700 bg-background text-text focus:border-cyan-500'
-                                }`}
-                              />
-                            </td>
-                            <td className="p-2.5 text-center font-extrabold text-emerald-600 dark:text-emerald-400">
-                              {isPendente ? '—' : `${item.qtd_vendida} un`}
-                            </td>
-                            <td className="p-2.5 text-right font-extrabold text-text/90">
-                              {isPendente ? '—' : `R$ ${item.faturamento_bruto.toFixed(2)}`}
-                            </td>
-                          </tr>
+                    apuracao.itens_consolidados.map((item) => {
+                      const remessasDoItem = selectedRecords.filter((r) => {
+                        const it = (r.itens_grade || []).find(
+                          (g) => g.produto_id === item.produto_id
                         );
-                      })
+                        const disp =
+                          (Number(it?.qtd_enviada) || 0) + (Number(it?.qtd_sobra_anterior) || 0);
+                        const ret = sobrasPorRemessa[r.id]?.[item.produto_id];
+                        return disp > 0 || (ret !== null && ret !== undefined && ret > 0);
+                      });
+
+                      return (
+                        <tr
+                          key={item.produto_id}
+                          className="hover:bg-slate-50 dark:hover:bg-slate-900/50"
+                        >
+                          <td className="p-2.5 font-sans font-bold text-text/90">{item.nome}</td>
+                          <td className="p-2.5 text-center text-text/60">
+                            R$ {item.preco_unitario.toFixed(2)}
+                          </td>
+                          <td className="p-2.5 text-center font-bold text-text/80">
+                            {item.qtd_disponivel} un
+                          </td>
+                          <td className="p-2.5 bg-amber-50/40 dark:bg-amber-950/20">
+                            {remessasDoItem.length <= 1 ? (
+                              <div className="flex justify-center">
+                                {(() => {
+                                  const r = remessasDoItem[0] || selectedRecords[0];
+                                  if (!r) return null;
+                                  const it = (r.itens_grade || []).find(
+                                    (g) => g.produto_id === item.produto_id
+                                  );
+                                  const disp =
+                                    (Number(it?.qtd_enviada) || 0) +
+                                    (Number(it?.qtd_sobra_anterior) || 0);
+                                  const sobraVal = sobrasPorRemessa[r.id]?.[item.produto_id];
+                                  const isPendente = sobraVal === null || sobraVal === undefined;
+
+                                  return (
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={disp}
+                                      value={sobraVal ?? ''}
+                                      placeholder="Pend."
+                                      onChange={(e) => {
+                                        const val =
+                                          e.target.value === ''
+                                            ? null
+                                            : Math.max(0, Math.min(disp, Number(e.target.value)));
+                                        setSobrasPorRemessa((prev) => ({
+                                          ...prev,
+                                          [r.id]: {
+                                            ...(prev[r.id] || {}),
+                                            [item.produto_id]: val,
+                                          },
+                                        }));
+                                      }}
+                                      className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none transition-all ${
+                                        isPendente
+                                          ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
+                                          : 'border-slate-300 dark:border-slate-700 bg-background text-text focus:border-cyan-500'
+                                      }`}
+                                    />
+                                  );
+                                })()}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                {remessasDoItem.map((r) => {
+                                  const pdvNome =
+                                    r.locais?.nome ||
+                                    allPdvs.find((p) => p.local.id === r.local_id)?.local.nome ||
+                                    'PDV';
+                                  const it = (r.itens_grade || []).find(
+                                    (g) => g.produto_id === item.produto_id
+                                  );
+                                  const disp =
+                                    (Number(it?.qtd_enviada) || 0) +
+                                    (Number(it?.qtd_sobra_anterior) || 0);
+                                  const sobraVal = sobrasPorRemessa[r.id]?.[item.produto_id];
+                                  const isPendente = sobraVal === null || sobraVal === undefined;
+
+                                  return (
+                                    <div
+                                      key={r.id}
+                                      className="flex items-center justify-between gap-1.5 bg-slate-50 dark:bg-slate-900/40 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-800"
+                                    >
+                                      <span
+                                        className="text-[10px] text-text/70 font-semibold truncate max-w-[90px]"
+                                        title={`${pdvNome} (${formatTurno(r.turno)})`}
+                                      >
+                                        {pdvNome.split(' ')[0]} ({disp}):
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={disp}
+                                        value={sobraVal ?? ''}
+                                        placeholder="Pend."
+                                        onChange={(e) => {
+                                          const val =
+                                            e.target.value === ''
+                                              ? null
+                                              : Math.max(0, Math.min(disp, Number(e.target.value)));
+                                          setSobrasPorRemessa((prev) => ({
+                                            ...prev,
+                                            [r.id]: {
+                                              ...(prev[r.id] || {}),
+                                              [item.produto_id]: val,
+                                            },
+                                          }));
+                                        }}
+                                        className={`w-14 rounded-md border px-1.5 py-0.5 text-center font-mono font-bold text-xs outline-none transition-all ${
+                                          isPendente
+                                            ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
+                                            : 'border-slate-300 dark:border-slate-700 bg-background text-text focus:border-cyan-500'
+                                        }`}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-center font-extrabold text-emerald-600 dark:text-emerald-400">
+                            {item.tem_pendencia_sobra ? '—' : `${item.qtd_vendida} un`}
+                          </td>
+                          <td className="p-2.5 text-right font-extrabold text-text/90">
+                            {item.tem_pendencia_sobra
+                              ? '—'
+                              : `R$ ${item.faturamento_bruto.toFixed(2)}`}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -3599,69 +3581,45 @@ function FechamentoUnificadoPDVModal({
   const [valorTaxas, setValorTaxas] = useState<number>(initialTaxaSum);
   const [mostrarDetalhesTurnos, setMostrarDetalhesTurnos] = useState(false);
 
-  // Sobras consolidadas deste PDV
-  const [gradeConsolidada, setGradeConsolidada] = useState<ItemGradeKanban[]>(() => {
-    const map = new Map<string, ItemGradeKanban>();
-
-    produtosBase.forEach((p) => {
-      map.set(p.id, {
-        produto_id: p.id,
-        nome: p.nome,
-        preco_unitario: p.preco,
-        qtd_sobra_anterior: 0,
-        qtd_enviada: 0,
-        qtd_retorno: null,
-      });
-    });
-
-    const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
-    const sortedRecords = [...records].sort(
-      (a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99)
-    );
-    const ultimoRecord = sortedRecords[sortedRecords.length - 1];
-
-    sortedRecords.forEach((rec) => {
-      if (Array.isArray(rec.itens_grade) && rec.itens_grade.length > 0) {
-        rec.itens_grade.forEach((it) => {
-          const existing = map.get(it.produto_id) || {
-            produto_id: it.produto_id,
-            nome: it.nome,
-            preco_unitario: Number(it.preco_unitario) || 0,
-            qtd_sobra_anterior: 0,
-            qtd_enviada: 0,
-            qtd_retorno: null,
-          };
-          map.set(it.produto_id, {
-            ...existing,
-            nome: it.nome || existing.nome,
-            preco_unitario: Number(it.preco_unitario) || existing.preco_unitario,
-            qtd_sobra_anterior:
-              (Number(existing.qtd_sobra_anterior) || 0) + (Number(it.qtd_sobra_anterior) || 0),
-            qtd_enviada: (Number(existing.qtd_enviada) || 0) + (Number(it.qtd_enviada) || 0),
-            qtd_retorno: null,
-          });
-        });
-      }
-    });
-
-    // Pega as sobras físicas do último turno cronológico (evita acumular sobras de turnos anteriores)
-    if (ultimoRecord && Array.isArray(ultimoRecord.itens_grade)) {
-      ultimoRecord.itens_grade.forEach((it) => {
-        const existing = map.get(it.produto_id);
-        if (existing) {
-          existing.qtd_retorno =
-            it.qtd_retorno !== null && it.qtd_retorno !== undefined ? Number(it.qtd_retorno) : null;
+  // Mapeamento de Sobras por Turno: Record<remessa_id, Record<produto_id, number | null>>
+  // Regra Larissa Saba: a sobra NUNCA é distribuída. Cada turno retorna fisicamente à fábrica.
+  const [sobrasPorTurno, setSobrasPorTurno] = useState<
+    Record<string, Record<string, number | null>>
+  >(() => {
+    const map: Record<string, Record<string, number | null>> = {};
+    records.forEach((r) => {
+      map[r.id] = {};
+      (r.itens_grade || []).forEach((it) => {
+        const disp = (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0);
+        if (disp <= 0 && (!it.qtd_retorno || Number(it.qtd_retorno) <= 0)) {
+          map[r.id][it.produto_id] = 0;
+          return;
+        }
+        if (
+          it.qtd_retorno !== null &&
+          it.qtd_retorno !== undefined &&
+          !isNaN(Number(it.qtd_retorno))
+        ) {
+          map[r.id][it.produto_id] = Number(it.qtd_retorno);
+        } else {
+          map[r.id][it.produto_id] = null;
         }
       });
-    }
-
-    return Array.from(map.values()).filter(
-      (it) => (Number(it.qtd_enviada) || 0) + (Number(it.qtd_sobra_anterior) || 0) > 0
-    );
+    });
+    return map;
   });
 
   const handleZerarSobras = () => {
-    setGradeConsolidada((prev) => prev.map((it) => ({ ...it, qtd_retorno: 0 })));
+    setSobrasPorTurno((prev) => {
+      const next: Record<string, Record<string, number | null>> = {};
+      records.forEach((r) => {
+        next[r.id] = { ...(prev[r.id] || {}) };
+        (r.itens_grade || []).forEach((it) => {
+          next[r.id][it.produto_id] = 0;
+        });
+      });
+      return next;
+    });
     toast({
       title: 'Vendeu tudo nos turnos!',
       description: 'Todas as sobras confirmadas como zero para este PDV.',
@@ -3670,25 +3628,25 @@ function FechamentoUnificadoPDVModal({
   };
 
   // Monta TurnoFechamentoInput[] para apuração oficial
+  // Cada turno preserva seus itens e seu retorno físico autêntico à fábrica
   const turnosInput: TurnoFechamentoInput[] = useMemo(() => {
-    const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
-    const sorted = [...records].sort(
-      (a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99)
-    );
-
-    return sorted.map((r, idx) => {
-      const isUltimo = idx === sorted.length - 1;
-      const itensInput: ItemMovimentacaoPDV[] = gradeConsolidada.map((g) => ({
-        produto_id: g.produto_id,
-        nome: g.nome,
-        preco_unitario: Number(g.preco_unitario || 0),
-        qtd_enviada: isUltimo ? Number(g.qtd_enviada || 0) : 0,
-        qtd_retorno: isUltimo ? g.qtd_retorno : 0,
-      }));
+    return records.map((r) => {
+      const itensInput: ItemMovimentacaoPDV[] = (r.itens_grade || []).map((it) => {
+        const ret = sobrasPorTurno[r.id]?.[it.produto_id];
+        return {
+          produto_id: it.produto_id,
+          nome: it.nome,
+          preco_unitario: Number(it.preco_unitario || 0),
+          qtd_estoque_inicial: Number(it.qtd_sobra_anterior || 0),
+          qtd_enviada: Number(it.qtd_enviada || 0),
+          qtd_retorno: ret !== undefined ? ret : null,
+        };
+      });
 
       return {
         id: r.id,
         local_id: local.id,
+        pdv_nome: pdvNome,
         data: r.data,
         turno: r.turno,
         status: r.status,
@@ -3696,7 +3654,7 @@ function FechamentoUnificadoPDVModal({
         itens_grade: itensInput,
       };
     });
-  }, [records, local.id, gradeConsolidada]);
+  }, [records, local.id, pdvNome, sobrasPorTurno]);
 
   const apuracao = useMemo(() => {
     return apurarFechamentoUnificado(turnosInput, {
@@ -3755,21 +3713,37 @@ function FechamentoUnificadoPDVModal({
       const dataFechamento = records[0]?.data;
 
       // Atualizações atômicas das remessas do PDV sem zerar registros
-      const remessasUpdates = records.map((r, idx) => {
-        const isUltimo = idx === records.length - 1;
-        const totalRet = isUltimo
-          ? gradeConsolidada.reduce((acc, it) => acc + (Number(it.qtd_retorno) || 0), 0)
-          : 0;
+      const remessasUpdates = records.map((r) => {
+        const turnoCalc = turnosInput.find((t) => t.id === r.id);
+        const itensAtualizados = (r.itens_grade || []).map((it) => {
+          const itemCalc = turnoCalc?.itens_grade.find((gi) => gi.produto_id === it.produto_id);
+          const ret =
+            itemCalc?.qtd_retorno !== null && itemCalc?.qtd_retorno !== undefined
+              ? Math.max(0, Number(itemCalc.qtd_retorno))
+              : 0;
+          return {
+            ...it,
+            qtd_retorno: ret,
+          };
+        });
+
+        const totalRetorno = itensAtualizados.reduce(
+          (acc, it) => acc + Number(it.qtd_retorno || 0),
+          0
+        );
+        const fatCalculado = itensAtualizados.reduce((acc, it) => {
+          const env = Number(it.qtd_sobra_anterior || 0) + Number(it.qtd_enviada || 0);
+          const ret = Number(it.qtd_retorno || 0);
+          const vend = Math.max(0, env - ret);
+          return acc + vend * (Number(it.preco_unitario) || 0);
+        }, 0);
 
         return {
           id: r.id,
-          itens_grade: gradeConsolidada.map((it) => ({
-            ...it,
-            qtd_retorno: isUltimo ? Number(it.qtd_retorno) || 0 : 0,
-          })),
-          qtd_total_retorno: totalRet,
-          faturamento_bruto_teorico: isUltimo ? apuracao.faturamento_bruto_esperado : 0,
-          faturamento_liquido_esperado: isUltimo ? apuracao.faturamento_liquido_esperado : 0,
+          itens_grade: itensAtualizados,
+          qtd_total_retorno: totalRetorno,
+          faturamento_bruto_teorico: fatCalculado,
+          faturamento_liquido_esperado: fatCalculado,
         };
       });
 
@@ -3897,54 +3871,141 @@ function FechamentoUnificadoPDVModal({
 
           {/* Lista de Sobras */}
           <div className="space-y-1.5 max-h-52 overflow-y-auto">
-            {gradeConsolidada.map((item) => {
-              const disponivel =
-                (Number(item.qtd_sobra_anterior) || 0) + (Number(item.qtd_enviada) || 0);
-              const isPendente = item.qtd_retorno === null || item.qtd_retorno === undefined;
+            {apuracao.itens_consolidados.length === 0 ? (
+              <div className="text-center py-4 text-xs text-text/40 font-medium">
+                Nenhum produto com carga enviada para este PDV.
+              </div>
+            ) : (
+              apuracao.itens_consolidados.map((item) => {
+                const turnosDoItem = records.filter((r) => {
+                  const it = (r.itens_grade || []).find((g) => g.produto_id === item.produto_id);
+                  const disp =
+                    (Number(it?.qtd_enviada) || 0) + (Number(it?.qtd_sobra_anterior) || 0);
+                  const ret = sobrasPorTurno[r.id]?.[item.produto_id];
+                  return disp > 0 || (ret !== null && ret !== undefined && ret > 0);
+                });
 
-              return (
-                <div
-                  key={item.produto_id}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-primary/10 bg-background p-2.5"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-text/80 truncate">{item.nome}</p>
-                    <p className="text-[10px] text-text/40">
-                      Disponível:{' '}
-                      <span className="font-mono font-bold text-text/70">{disponivel} un</span>
-                    </p>
+                return (
+                  <div
+                    key={item.produto_id}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-primary/10 bg-background p-2.5"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-text/80 truncate">{item.nome}</p>
+                      <p className="text-[10px] text-text/40">
+                        Total Disp.:{' '}
+                        <span className="font-mono font-bold text-text/70">
+                          {item.qtd_disponivel} un
+                        </span>{' '}
+                        | Vendido:{' '}
+                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          {item.tem_pendencia_sobra ? '—' : `${item.qtd_vendida} un`}
+                        </span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {turnosDoItem.length <= 1 ? (
+                        (() => {
+                          const r = turnosDoItem[0] || records[0];
+                          if (!r) return null;
+                          const it = (r.itens_grade || []).find(
+                            (g) => g.produto_id === item.produto_id
+                          );
+                          const disp =
+                            (Number(it?.qtd_enviada) || 0) + (Number(it?.qtd_sobra_anterior) || 0);
+                          const sobraVal = sobrasPorTurno[r.id]?.[item.produto_id];
+                          const isPendente = sobraVal === null || sobraVal === undefined;
+
+                          return (
+                            <div className="flex items-center gap-1">
+                              <label className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">
+                                Sobra:
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={disp}
+                                value={sobraVal ?? ''}
+                                placeholder="Pend."
+                                onChange={(e) => {
+                                  const val =
+                                    e.target.value === ''
+                                      ? null
+                                      : Math.max(0, Math.min(disp, Number(e.target.value)));
+                                  setSobrasPorTurno((prev) => ({
+                                    ...prev,
+                                    [r.id]: {
+                                      ...(prev[r.id] || {}),
+                                      [item.produto_id]: val,
+                                    },
+                                  }));
+                                }}
+                                className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none ${
+                                  isPendente
+                                    ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
+                                    : 'border-slate-300 dark:border-slate-700 bg-background text-text'
+                                }`}
+                              />
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div className="flex flex-col gap-1">
+                          {turnosDoItem.map((r) => {
+                            const turnoNome = formatTurno(r.turno);
+                            const it = (r.itens_grade || []).find(
+                              (g) => g.produto_id === item.produto_id
+                            );
+                            const disp =
+                              (Number(it?.qtd_enviada) || 0) +
+                              (Number(it?.qtd_sobra_anterior) || 0);
+                            const sobraVal = sobrasPorTurno[r.id]?.[item.produto_id];
+                            const isPendente = sobraVal === null || sobraVal === undefined;
+
+                            return (
+                              <div
+                                key={r.id}
+                                className="flex items-center justify-between gap-1.5 bg-slate-50 dark:bg-slate-900/40 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-800"
+                              >
+                                <span className="text-[10px] text-text/70 font-semibold truncate max-w-[80px]">
+                                  {turnoNome} ({disp}):
+                                </span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={disp}
+                                  value={sobraVal ?? ''}
+                                  placeholder="Pend."
+                                  onChange={(e) => {
+                                    const val =
+                                      e.target.value === ''
+                                        ? null
+                                        : Math.max(0, Math.min(disp, Number(e.target.value)));
+                                    setSobrasPorTurno((prev) => ({
+                                      ...prev,
+                                      [r.id]: {
+                                        ...(prev[r.id] || {}),
+                                        [item.produto_id]: val,
+                                      },
+                                    }));
+                                  }}
+                                  className={`w-14 rounded border px-1 py-0.5 text-center font-mono font-bold text-xs outline-none ${
+                                    isPendente
+                                      ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
+                                      : 'border-slate-300 dark:border-slate-700 bg-background text-text'
+                                  }`}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <label className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">
-                      Sobra:
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={disponivel}
-                      value={item.qtd_retorno ?? ''}
-                      placeholder="Pend."
-                      onChange={(e) => {
-                        const val =
-                          e.target.value === ''
-                            ? null
-                            : Math.max(0, Math.min(disponivel, Number(e.target.value)));
-                        setGradeConsolidada((prev) =>
-                          prev.map((it) =>
-                            it.produto_id === item.produto_id ? { ...it, qtd_retorno: val } : it
-                          )
-                        );
-                      }}
-                      className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none ${
-                        isPendente
-                          ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
-                          : 'border-slate-300 dark:border-slate-700 bg-background text-text'
-                      }`}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
 
           {/* Lançamento dos Valores */}

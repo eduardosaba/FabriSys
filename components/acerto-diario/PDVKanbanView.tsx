@@ -4282,20 +4282,48 @@ export function PDVKanbanView({
   const handleRevertToEmVenda = async (id: string, pdvNome: string) => {
     const isConfirmed = await confirmDialog.confirm({
       title: 'Retornar Carga',
-      message: `Tem certeza que deseja retornar a carga de ${pdvNome} para "Em Venda no PDV"?`,
+      message: `Tem certeza que deseja retornar a carga de ${pdvNome} para "Em Venda no PDV"? Todos os valores de sobras e dinheiro informados serão reiniciados.`,
       confirmText: 'Retornar',
       variant: 'warning',
     });
     if (!isConfirmed) return;
 
     try {
+      const registroAtual = registros.find((r) => r.id === id);
+      const itensResetados = (registroAtual?.itens_grade || []).map((it) => ({
+        ...it,
+        qtd_retorno: null,
+      }));
+
+      const payloadReset = {
+        status: 'aberto',
+        valor_dinheiro_gaveta: 0,
+        valor_pix_declarado: 0,
+        valor_cartao_declarado: 0,
+        taxa_cartao_reais: 0,
+        taxa_cartao_percentual: 0,
+        qtd_total_retorno: 0,
+        faturamento_bruto_teorico: 0,
+        faturamento_liquido_esperado: 0,
+        pix_cartao_esperado: 0,
+        diferenca_auditoria: 0,
+        itens_grade: itensResetados,
+        updated_at: new Date().toISOString(),
+      };
+
       const { error } = await supabase
         .from('remessas_cargas_pdv')
-        .update({ status: 'aberto' })
+        .update(payloadReset)
         .eq('id', id);
       if (error) throw error;
-      toast({ title: 'Retornado para Em Venda', variant: 'success' });
-      setRegistros((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'aberto' } : r)));
+      toast({
+        title: 'Retornado para Em Venda',
+        description: `Carga de ${pdvNome} retornada. Sobras e valores em dinheiro foram zerados.`,
+        variant: 'success',
+      });
+      setRegistros((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, ...payloadReset } : r))
+      );
     } catch (e: any) {
       toast({ title: 'Erro ao retornar', description: e.message, variant: 'error' });
     }
@@ -4378,17 +4406,21 @@ export function PDVKanbanView({
     })
     .filter(Boolean) as { local: LocalPDV; records: RemessaKanban[] }[];
 
+  // Apenas PDVs com fechamento em andamento na etapa de Sobras & Caixa (colParcial)
   const pdvsPendentesAgrupados = locais
     .map((local) => {
-      const records = registros.filter(
+      const localRecords = registros.filter(
         (r) =>
           r.local_id === local.id &&
           (r.status === 'aberto' ||
             r.status === 'dinheiro_informado' ||
             r.status === 'sobras_informadas')
       );
-      if (records.length === 0) return null;
-      return { local, records };
+      const temTurnoEmSobrasCaixa = localRecords.some(
+        (r) => r.status === 'dinheiro_informado' || r.status === 'sobras_informadas'
+      );
+      if (!temTurnoEmSobrasCaixa) return null;
+      return { local, records: localRecords };
     })
     .filter(Boolean) as { local: LocalPDV; records: RemessaKanban[] }[];
 

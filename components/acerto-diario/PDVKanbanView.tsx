@@ -1673,6 +1673,7 @@ function PDVGroupCard({
   actionColor,
   onAction,
   onOpenRecibo,
+  onRevert,
 }: {
   local: LocalPDV;
   records: RemessaKanban[];
@@ -1681,6 +1682,7 @@ function PDVGroupCard({
   actionColor?: string;
   onAction?: () => void;
   onOpenRecibo?: (data: ReciboRegistroData) => void;
+  onRevert?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const pdvNome = local.nome || 'PDV';
@@ -1691,11 +1693,21 @@ function PDVGroupCard({
   const pix = records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
   const cartao = records.reduce((acc, r) => acc + (Number(r.valor_cartao_declarado) || 0), 0);
   const taxaReais = records.reduce((acc, r) => acc + (Number(r.taxa_cartao_reais) || 0), 0);
-  const faturamento = records.reduce(
-    (acc, r) =>
-      acc + (Number(r.faturamento_liquido_esperado) || Number(r.faturamento_bruto_teorico) || 0),
-    0
-  );
+  const faturamento = records.reduce((acc, r) => {
+    if (r.itens_grade && Array.isArray(r.itens_grade) && r.itens_grade.length > 0) {
+      const somaItens = r.itens_grade.reduce((sum, it) => {
+        const env = (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0);
+        const ret = Number(it.qtd_retorno) || 0;
+        const vend = Math.max(0, env - ret);
+        const preco = Number(it.preco_unitario || 0);
+        return sum + vend * preco;
+      }, 0);
+      if (somaItens > 0) return acc + somaItens;
+    }
+    return (
+      acc + (Number(r.faturamento_liquido_esperado) || Number(r.faturamento_bruto_teorico) || 0)
+    );
+  }, 0);
 
   const dif = records.reduce((acc, r) => acc + (Number(r.diferenca_auditoria) || 0), 0);
   const isAuditado = records.some((r) => r.status === 'auditado' || r.status === 'conferido');
@@ -1860,10 +1872,21 @@ function PDVGroupCard({
           </button>
         )}
 
+        {onRevert && !isAuditado && (
+          <button
+            type="button"
+            onClick={onRevert}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 py-1.5 text-xs font-bold transition-all active:scale-[0.97]"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+            ↩ Retornar para Sobras & Caixa
+          </button>
+        )}
+
         <button
           type="button"
           onClick={handleOpenReciboData}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 transition-all active:scale-[0.97]"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 transition-all active:scale-[0.97]"
         >
           <Eye className="h-3.5 w-3.5 text-primary shrink-0" />
           Ver Detalhes / Recibo
@@ -4802,13 +4825,68 @@ export function PDVKanbanView({
     }
   };
 
+  const handleReverterAguardandoAuditoria = async (records: RemessaKanban[], pdvNome: string) => {
+    const isConfirmed = await confirmDialog.confirm({
+      title: 'Retornar Fechamento',
+      message: `Tem certeza que deseja retornar o fechamento de ${pdvNome} para "Sobras & Caixa"? O status voltará para a etapa de lançamentos (Coluna 3) para permitir correções de dinheiro, Pix e Cartão.`,
+      confirmText: 'Retornar para Sobras & Caixa',
+      variant: 'warning',
+    });
+    if (!isConfirmed) return;
+
+    try {
+      const payloadRevert = {
+        status: 'sobras_informadas',
+        updated_at: new Date().toISOString(),
+      };
+
+      for (const r of records) {
+        const { error } = await supabase
+          .from('remessas_cargas_pdv')
+          .update(payloadRevert)
+          .eq('id', r.id);
+        if (error) throw error;
+      }
+
+      toast({
+        title: 'Retornado para Sobras & Caixa',
+        description: `O fechamento de ${pdvNome} retornou para a etapa de lançamentos.`,
+        variant: 'success',
+      });
+
+      handleRegistroUpdated(records.map((r) => ({ ...r, ...payloadRevert })));
+    } catch (e: any) {
+      toast({ title: 'Erro ao retornar', description: e.message, variant: 'error' });
+    }
+  };
+
   useEffect(() => {
     carregarRegistros();
   }, [carregarRegistros]);
 
-  // PDVs que ainda não tiveram carga enviada para a data selecionada
+  // Garante que qualquer local que possua remessa hoje seja considerado no Kanban
+  const locaisCompletos = useMemo(() => {
+    const mapa = new Map<string, LocalPDV>(locais.map((loc) => [loc.id, loc]));
+    registros.forEach((r) => {
+      if (r.local_id && !mapa.has(r.local_id)) {
+        mapa.set(r.local_id, {
+          id: r.local_id,
+          nome: r.locais?.nome || 'PDV / Fábrica',
+          logo_url: r.locais?.logo_url,
+        });
+      }
+    });
+    return Array.from(mapa.values());
+  }, [locais, registros]);
+
+  // PDVs que ainda não tiveram carga enviada para a data selecionada (exclui locais administrativos de produção sem carga pendente)
   const pdvsAguardandoCarga = useMemo(() => {
-    return locais.filter((loc) => !registros.some((r) => r.local_id === loc.id));
+    return locais.filter(
+      (loc) =>
+        !registros.some((r) => r.local_id === loc.id) &&
+        !String(loc.nome || '').toLowerCase().includes('fábrica') &&
+        !String(loc.nome || '').toLowerCase().includes('fabrica')
+    );
   }, [locais, registros]);
 
   // Distribute registros into columns
@@ -4817,9 +4895,12 @@ export function PDVKanbanView({
     (r) => r.status === 'dinheiro_informado' || r.status === 'sobras_informadas'
   );
 
-  // Apenas registros com status 'auditado' ou 'conferido' representam dados reais consolidados do dia
+  // Apenas registros com status 'auditado', 'conferido' ou 'concluido' representam dados reais consolidados do dia
   const registrosAuditados = useMemo(
-    () => registros.filter((r) => r.status === 'auditado' || r.status === 'conferido'),
+    () =>
+      registros.filter(
+        (r) => r.status === 'auditado' || r.status === 'conferido' || r.status === 'concluido'
+      ),
     [registros]
   );
 
@@ -4871,18 +4952,27 @@ export function PDVKanbanView({
   };
 
   // Grupos por PDV
-  const agrupadosAguardandoAuditoria = locais
+  const agrupadosAguardandoAuditoria = locaisCompletos
     .map((local) => {
-      const records = registros.filter((r) => r.local_id === local.id && r.status === 'encerrado');
+      const records = registros.filter(
+        (r) =>
+          r.local_id === local.id &&
+          (r.status === 'encerrado' ||
+            r.status === 'fechado' ||
+            r.status === 'pendente_auditoria' ||
+            r.status === 'pendente')
+      );
       if (records.length === 0) return null;
       return { local, records };
     })
     .filter(Boolean) as { local: LocalPDV; records: RemessaKanban[] }[];
 
-  const agrupadosAuditados = locais
+  const agrupadosAuditados = locaisCompletos
     .map((local) => {
       const records = registros.filter(
-        (r) => r.local_id === local.id && (r.status === 'auditado' || r.status === 'conferido')
+        (r) =>
+          r.local_id === local.id &&
+          (r.status === 'auditado' || r.status === 'conferido' || r.status === 'concluido')
       );
       if (records.length === 0) return null;
       return { local, records };
@@ -4890,7 +4980,7 @@ export function PDVKanbanView({
     .filter(Boolean) as { local: LocalPDV; records: RemessaKanban[] }[];
 
   // Apenas PDVs com fechamento em andamento na etapa de Sobras & Caixa (colParcial)
-  const pdvsPendentesAgrupados = locais
+  const pdvsPendentesAgrupados = locaisCompletos
     .map((local) => {
       const localRecords = registros.filter(
         (r) =>
@@ -5326,6 +5416,7 @@ export function PDVKanbanView({
                   records={records}
                   onAction={() => setModalAuditoriaPDV({ local, records })}
                   onOpenRecibo={(reciboData) => setModalReciboData(reciboData)}
+                  onRevert={() => handleReverterAguardandoAuditoria(records, local.nome)}
                   actionLabel="Auditar PDV"
                   actionColor="bg-purple-600 text-white hover:bg-purple-700"
                   actionIcon={ShieldCheck}

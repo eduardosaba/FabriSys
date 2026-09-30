@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import BRLCurrencyInput from '@/components/ui/shared/BRLCurrencyInput';
 import { getLocalDateISOString } from '@/lib/utils';
 import { PDVSelectorCards } from '@/components/ui/shared/PDVSelectorCards';
@@ -711,48 +711,60 @@ export default function AuditoriaPDVPage() {
 
   // --- CONSOLIDAÇÃO FINANCEIRA E DE INDICADORES ---
 
-  const totalEnviadoGeral = registros.reduce((acc, r) => acc + (r.qtd_total_enviada || 0), 0);
-  const totalRetornoGeral = registros.reduce((acc, r) => acc + (r.qtd_total_retorno || 0), 0);
-  const totalVendidosGeral = Math.max(0, totalEnviadoGeral - totalRetornoGeral);
+  // Apenas registros com status 'auditado' ou 'conferido' representam fechamentos consolidados reais do dia.
+  // Registros em aberto, em venda, ou em processo de fechamento/aguardando auditoria NÃO entram nas métricas de vendas, faturamento e sobras.
+  const registrosAuditados = useMemo(
+    () => registros.filter((r) => r.status === 'auditado' || r.status === 'conferido'),
+    [registros]
+  );
 
-  const faturamentoTotalLiquido = registros.reduce(
+  const totalEnviadoGeral = registros.reduce((acc, r) => acc + (r.qtd_total_enviada || 0), 0);
+  const totalEnviadoAuditado = registrosAuditados.reduce(
+    (acc, r) => acc + (r.qtd_total_enviada || 0),
+    0
+  );
+  const totalRetornoGeral = registrosAuditados.reduce(
+    (acc, r) => acc + (r.qtd_total_retorno || 0),
+    0
+  );
+  const totalVendidosGeral = Math.max(0, totalEnviadoAuditado - totalRetornoGeral);
+
+  const faturamentoTotalLiquido = registrosAuditados.reduce(
     (acc, r) => acc + Number(r.faturamento_liquido_esperado || 0),
     0
   );
-  const totalDinheiroGaveta = registros.reduce(
+  const totalDinheiroGaveta = registrosAuditados.reduce(
     (acc, r) => acc + Number(r.valor_dinheiro_gaveta || 0),
     0
   );
-  const totalPixDeclarado = registros.reduce(
+  const totalPixDeclarado = registrosAuditados.reduce(
     (acc, r) => acc + Number(r.valor_pix_declarado || 0),
     0
   );
-  const totalCartaoDeclarado = registros.reduce(
+  const totalCartaoDeclarado = registrosAuditados.reduce(
     (acc, r) => acc + Number(r.valor_cartao_declarado || 0),
     0
   );
-  const totalPixCartaoEsperado = registros.reduce(
+  const totalPixCartaoEsperado = registrosAuditados.reduce(
     (acc, r) => acc + Number(r.pix_cartao_esperado || 0),
     0
   );
 
   const taxaSobraPercentual =
-    totalEnviadoGeral > 0 ? (totalRetornoGeral / totalEnviadoGeral) * 100 : 0;
+    totalEnviadoAuditado > 0 ? (totalRetornoGeral / totalEnviadoAuditado) * 100 : 0;
   const taxaGiroPercentual =
-    totalEnviadoGeral > 0 ? (totalVendidosGeral / totalEnviadoGeral) * 100 : 0;
+    totalEnviadoAuditado > 0 ? (totalVendidosGeral / totalEnviadoAuditado) * 100 : 0;
   const ticketMedioUnitario =
     totalVendidosGeral > 0 ? faturamentoTotalLiquido / totalVendidosGeral : 0;
 
-  // Divergência / Furo de Caixa acumulado
-  const totalFurosDeCaixa = registros
+  // Divergência / Furo de Caixa acumulado (apenas auditorias concluídas)
+  const totalFurosDeCaixa = registrosAuditados
     .filter((r) => Math.abs(Number(r.diferenca_auditoria || 0)) >= 0.5)
     .reduce((acc, r) => acc + Number(r.diferenca_auditoria || 0), 0);
 
   // Status de Auditoria do Período
   const totalTurnos = registros.length;
-  const turnosAuditados = registros.filter(
-    (r) => r.status === 'auditado' || r.status === 'conferido'
-  ).length;
+  const turnosAuditados = registrosAuditados.length;
   const percentualAuditado = totalTurnos > 0 ? (turnosAuditados / totalTurnos) * 100 : 0;
   const statusGeralAuditado = totalTurnos > 0 && turnosAuditados === totalTurnos;
 
@@ -766,9 +778,9 @@ export default function AuditoriaPDVPage() {
 
   // --- PREPARAÇÃO DE DADOS PARA GRÁFICOS ---
 
-  // 1. Ranking dos Produtos Mais Vendidos & Análise de Giro
+  // 1. Ranking dos Produtos Mais Vendidos & Análise de Giro (Apenas registros auditados)
   const rankingMap: Record<string, RankingItem> = {};
-  registros.forEach((reg) => {
+  registrosAuditados.forEach((reg) => {
     // Ignora registros secundários de fechamento unificado para não duplicar somas
     const isSecundarioUnificado =
       reg.observacoes?.includes('Unificado no registro principal') ||
@@ -781,7 +793,8 @@ export default function AuditoriaPDVPage() {
     if (reg.itens_grade && Array.isArray(reg.itens_grade)) {
       reg.itens_grade.forEach((item) => {
         const env = (item.qtd_sobra_anterior || 0) + (item.qtd_enviada || 0);
-        const vend = Math.max(0, env - (item.qtd_retorno || 0));
+        const ret = Number(item.qtd_retorno || 0);
+        const vend = Math.max(0, env - ret);
         if (vend > 0 || env > 0) {
           if (!rankingMap[item.nome]) {
             rankingMap[item.nome] = {
@@ -814,7 +827,7 @@ export default function AuditoriaPDVPage() {
     .filter((p) => p.qtdEnviada >= 10 && p.sobraRate >= 25)
     .sort((a, b) => b.sobraRate - a.sobraRate);
 
-  // 2. Resumo por PDV
+  // 2. Resumo por PDV (Considerando apenas vendas auditadas)
   const resumoPDVMap: Record<string, ResumoPDV> = {};
   registros.forEach((reg) => {
     const isSecundarioUnificado =
@@ -827,7 +840,9 @@ export default function AuditoriaPDVPage() {
 
     const localId = reg.locais?.id || 'geral';
     const localNome = reg.locais?.nome || 'PDV Geral';
-    const vend = Math.max(0, (reg.qtd_total_enviada || 0) - (reg.qtd_total_retorno || 0));
+    const isAudit = reg.status === 'auditado' || reg.status === 'conferido';
+    const vend = isAudit ? Math.max(0, (reg.qtd_total_enviada || 0) - (reg.qtd_total_retorno || 0)) : 0;
+    const ret = isAudit ? (reg.qtd_total_retorno || 0) : 0;
 
     if (!resumoPDVMap[localId]) {
       resumoPDVMap[localId] = {
@@ -846,14 +861,16 @@ export default function AuditoriaPDVPage() {
     }
 
     resumoPDVMap[localId].qtdEnviada += reg.qtd_total_enviada || 0;
-    resumoPDVMap[localId].qtdRetorno += reg.qtd_total_retorno || 0;
+    resumoPDVMap[localId].qtdRetorno += ret;
     resumoPDVMap[localId].qtdVendida += vend;
-    resumoPDVMap[localId].faturamentoLiquido += Number(reg.faturamento_liquido_esperado || 0);
-    resumoPDVMap[localId].dinheiroGaveta += Number(reg.valor_dinheiro_gaveta || 0);
-    resumoPDVMap[localId].pixCartaoEsperado += Number(reg.pix_cartao_esperado || 0);
-    resumoPDVMap[localId].pixDeclarado += Number(reg.valor_pix_declarado || 0);
-    resumoPDVMap[localId].cartaoDeclarado += Number(reg.valor_cartao_declarado || 0);
-    resumoPDVMap[localId].diferencaTotal += Number(reg.diferenca_auditoria || 0);
+    if (isAudit) {
+      resumoPDVMap[localId].faturamentoLiquido += Number(reg.faturamento_liquido_esperado || 0);
+      resumoPDVMap[localId].dinheiroGaveta += Number(reg.valor_dinheiro_gaveta || 0);
+      resumoPDVMap[localId].pixCartaoEsperado += Number(reg.pix_cartao_esperado || 0);
+      resumoPDVMap[localId].pixDeclarado += Number(reg.valor_pix_declarado || 0);
+      resumoPDVMap[localId].cartaoDeclarado += Number(reg.valor_cartao_declarado || 0);
+      resumoPDVMap[localId].diferencaTotal += Number(reg.diferenca_auditoria || 0);
+    }
   });
 
   const resumoPDVs = Object.values(resumoPDVMap).sort(
@@ -881,9 +898,9 @@ export default function AuditoriaPDVPage() {
     },
   ].filter((item) => item.value > 0);
 
-  // 4. Gráfico de Evolução Temporal
+  // 4. Gráfico de Evolução Temporal (Apenas registros auditados)
   const evolucaoMap: Record<string, number> = {};
-  const sortedRegistros = [...registros].sort((a, b) => a.data.localeCompare(b.data));
+  const sortedRegistros = [...registrosAuditados].sort((a, b) => a.data.localeCompare(b.data));
   sortedRegistros.forEach((reg) => {
     const dataPartes = reg.data ? reg.data.split('-') : [];
     const labelData = dataPartes.length === 3 ? `${dataPartes[2]}/${dataPartes[1]}` : reg.data;
@@ -1139,7 +1156,7 @@ export default function AuditoriaPDVPage() {
             })}
           </p>
           <p className="text-[11px] font-semibold text-emerald-800/70 dark:text-emerald-400/80">
-            Dinheiro + Pix + Cartão no período
+            Auditado ({turnosAuditados} de {totalTurnos} lançamento(s))
           </p>
         </div>
 
@@ -1158,7 +1175,7 @@ export default function AuditoriaPDVPage() {
             <span className="text-sm font-bold text-purple-800/60">un</span>
           </p>
           <p className="text-[11px] font-semibold text-purple-800/70 dark:text-purple-400/80">
-            Giro médio: <strong className="font-mono">{taxaGiroPercentual.toFixed(1)}%</strong> da
+            Giro auditado: <strong className="font-mono">{taxaGiroPercentual.toFixed(1)}%</strong> da
             carga
           </p>
         </div>
@@ -1178,7 +1195,7 @@ export default function AuditoriaPDVPage() {
             <span className="text-sm font-bold text-amber-800/60">un</span>
           </p>
           <p className="text-[11px] font-semibold text-amber-800/70 dark:text-amber-400/80">
-            Taxa de Devolução:{' '}
+            Devolução auditada:{' '}
             <strong className="font-mono">{taxaSobraPercentual.toFixed(1)}%</strong>
           </p>
         </div>
@@ -1842,10 +1859,10 @@ export default function AuditoriaPDVPage() {
                 </tr>
               ) : (
                 registros.map((reg) => {
-                  const vend = Math.max(
-                    0,
-                    (reg.qtd_total_enviada || 0) - (reg.qtd_total_retorno || 0)
-                  );
+                  const isAudit = reg.status === 'auditado' || reg.status === 'conferido';
+                  const vend = isAudit
+                    ? Math.max(0, (reg.qtd_total_enviada || 0) - (reg.qtd_total_retorno || 0))
+                    : 0;
 
                   return (
                     <tr key={reg.id} className="hover:bg-primary/5 transition-colors">
@@ -1872,42 +1889,77 @@ export default function AuditoriaPDVPage() {
                       </td>
                       <td className="p-3 text-center font-mono">
                         <span className="text-text/50">{reg.qtd_total_enviada || 0}</span> /{' '}
-                        <span className="text-amber-600 font-bold">
-                          {reg.qtd_total_retorno || 0}
-                        </span>{' '}
-                        / <span className="font-bold text-primary">{vend}</span>
+                        {isAudit ? (
+                          <>
+                            <span className="text-amber-600 font-bold">
+                              {reg.qtd_total_retorno || 0}
+                            </span>{' '}
+                            / <span className="font-bold text-primary">{vend}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-text/40 italic" title="Sobras aguardando conclusão da auditoria">—</span>{' '}
+                            / <span className="text-text/40 italic" title="Vendas confirmadas somente após a conclusão da auditoria">—</span>
+                          </>
+                        )}
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-text/90">
-                        R$ {Number(reg.faturamento_liquido_esperado || 0).toFixed(2)}
+                        {isAudit ? (
+                          `R$ ${Number(reg.faturamento_liquido_esperado || 0).toFixed(2)}`
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400 font-semibold italic text-[11px]">
+                            Aguardando auditoria
+                          </span>
+                        )}
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-emerald-600">
-                        R$ {Number(reg.valor_dinheiro_gaveta || 0).toFixed(2)}
+                        {isAudit ? (
+                          `R$ ${Number(reg.valor_dinheiro_gaveta || 0).toFixed(2)}`
+                        ) : (
+                          <span className="text-text/40 font-normal">—</span>
+                        )}
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-cyan-700 dark:text-cyan-400">
-                        R$ {Number(reg.pix_cartao_esperado || 0).toFixed(2)}
+                        {isAudit ? (
+                          `R$ ${Number(reg.pix_cartao_esperado || 0).toFixed(2)}`
+                        ) : (
+                          <span className="text-text/40 font-normal">—</span>
+                        )}
                       </td>
                       <td
                         className={`p-3 text-right font-mono font-bold ${
-                          Number(reg.diferenca_auditoria || 0) < 0
+                          isAudit && Number(reg.diferenca_auditoria || 0) < 0
                             ? 'text-rose-600'
                             : 'text-emerald-600'
                         }`}
                       >
-                        R$ {Number(reg.diferenca_auditoria || 0).toFixed(2)}
+                        {isAudit ? (
+                          `R$ ${Number(reg.diferenca_auditoria || 0).toFixed(2)}`
+                        ) : (
+                          <span className="text-text/40 font-normal">—</span>
+                        )}
                       </td>
                       <td className="p-3 text-center">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold capitalize ${
-                            reg.status === 'auditado' || reg.status === 'conferido'
+                            isAudit
                               ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                              : reg.status === 'encerrado'
+                                ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300'
+                                : reg.status === 'dinheiro_informado' || reg.status === 'sobras_informadas'
+                                  ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
                           }`}
                         >
                           {reg.status === 'auditado'
                             ? 'Auditado'
                             : reg.status === 'conferido'
                               ? 'Conferido'
-                              : 'Pendente'}
+                              : reg.status === 'encerrado'
+                                ? 'Aguardando Auditoria'
+                                : reg.status === 'dinheiro_informado' || reg.status === 'sobras_informadas'
+                                  ? 'Sobras/Caixa Lançados'
+                                  : 'Em Venda'}
                         </span>
                       </td>
                       <td className="p-3 text-center">

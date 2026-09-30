@@ -60,20 +60,7 @@ export default function AcertoDiarioPage() {
         }
 
         if (dataLocais && dataLocais.length > 0) {
-          const pdvsApenas = dataLocais.filter((loc) => {
-            const tipoLower = String(loc.tipo || '').toLowerCase();
-            const nomeLower = String(loc.nome || '').toLowerCase();
-            return (
-              tipoLower !== 'fabrica' &&
-              tipoLower !== 'fábrica' &&
-              tipoLower !== 'producao' &&
-              tipoLower !== 'produção' &&
-              !nomeLower.includes('fábrica') &&
-              !nomeLower.includes('fabrica')
-            );
-          });
-
-          setLocais(pdvsApenas.length > 0 ? pdvsApenas : dataLocais);
+          setLocais(dataLocais);
         }
 
         // 2. Carregar Produtos Base (Ativos)

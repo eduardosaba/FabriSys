@@ -893,6 +893,7 @@ function LancarPixCartaoModal({
   const diferencaDigital = totalDigital - pixCartaoEsperado;
   const totalRecebido = valorDinheiro + totalDigital;
   const diferencaCaixa = totalRecebido - faturamento;
+  const caixaBatido = Math.abs(diferencaCaixa) < 0.05;
 
   const handleSalvar = async () => {
     const confirmou = await confirmDialog.confirm({

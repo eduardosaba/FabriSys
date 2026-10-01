@@ -172,6 +172,19 @@ export default function PermissoesTab() {
     return profile.role === 'master' || profile.role === 'admin';
   };
 
+  const parseValor = (valor: unknown): Record<string, string[]> => {
+    if (!valor) return {};
+    if (typeof valor === 'string') {
+      try {
+        return JSON.parse(valor);
+      } catch {
+        return {};
+      }
+    }
+    if (typeof valor === 'object') return valor as Record<string, string[]>;
+    return {};
+  };
+
   useEffect(() => {
     const carregarPermissoes = async () => {
       try {
@@ -193,23 +206,13 @@ export default function PermissoesTab() {
             .limit(1)
             .maybeSingle();
 
-          let parsedGlobal: Record<string, string[]> = {};
-          let parsedOrg: Record<string, string[]> = {};
-          try {
-            if (globalData && globalData.valor) parsedGlobal = JSON.parse(globalData.valor);
-          } catch (e) {
-            void e;
-          }
-          try {
-            if (orgData && orgData.valor) parsedOrg = JSON.parse(orgData.valor);
-          } catch (e) {
-            void e;
-          }
+          const parsedGlobal = parseValor(globalData?.valor);
+          const parsedOrg = parseValor(orgData?.valor);
 
           const merged = {
             ...DEFAULT_PERMISSOES,
-            ...(parsedGlobal || {}),
-            ...(parsedOrg || {}),
+            ...parsedGlobal,
+            ...parsedOrg,
           };
           setPermissoes(merged);
         } else {
@@ -221,16 +224,8 @@ export default function PermissoesTab() {
             .limit(1)
             .maybeSingle();
           if (error) throw error;
-          if (data?.valor) {
-            try {
-              const parsed = JSON.parse(data.valor) as Record<string, string[]>;
-              setPermissoes({ ...DEFAULT_PERMISSOES, ...(parsed || {}) });
-            } catch {
-              setPermissoes(DEFAULT_PERMISSOES);
-            }
-          } else {
-            setPermissoes(DEFAULT_PERMISSOES);
-          }
+          const parsed = parseValor(data?.valor);
+          setPermissoes({ ...DEFAULT_PERMISSOES, ...parsed });
         }
       } catch (err) {
         console.error(err);
@@ -306,8 +301,29 @@ export default function PermissoesTab() {
       };
 
       const savePromise = (async () => {
-        const { error } = await supabase.rpc('rpc_upsert_configuracoes_sistema', rpcPayload);
-        if (error) throw error;
+        const { error: rpcErr } = await supabase.rpc('rpc_upsert_configuracoes_sistema', rpcPayload);
+        if (rpcErr) {
+          console.warn('RPC upsert falhou, tentando fallback direto:', rpcErr);
+          const updateQuery = profile?.organization_id
+            ? supabase
+                .from('configuracoes_sistema')
+                .update({
+                  valor: JSON.stringify(mergedPerms),
+                  updated_at: new Date().toISOString()
+                })
+                .eq('chave', payload.chave)
+                .eq('organization_id', profile.organization_id)
+            : supabase
+                .from('configuracoes_sistema')
+                .update({
+                  valor: JSON.stringify(mergedPerms),
+                  updated_at: new Date().toISOString()
+                })
+                .eq('chave', payload.chave)
+                .is('organization_id', null);
+          const { error: directErr } = await updateQuery;
+          if (directErr) throw directErr;
+        }
 
         // Verificação de leitura para confirmar persistência
         const verifyQuery = profile?.organization_id

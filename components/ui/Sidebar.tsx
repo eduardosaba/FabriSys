@@ -348,10 +348,33 @@ const sidebarItems: SidebarItem[] = [
 
 export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+  const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(() => new Set(['acertos_rapidos']));
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
   const pathname = usePathname();
+
+  const toggleSubmenu = (id: string) => {
+    setOpenSubmenus((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (pathname.startsWith('/dashboard/acerto-diario')) {
+      setOpenSubmenus((prev) => {
+        if (prev.has('acertos_rapidos')) return prev;
+        const next = new Set(prev);
+        next.add('acertos_rapidos');
+        return next;
+      });
+    }
+  }, [pathname]);
 
   const { pinnedPages, togglePinPage, isPagePinned } = usePageTracking();
   const { theme } = useTheme();
@@ -528,17 +551,18 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
       // 'admin'/'master' elevated privileges; compare as string to avoid TS literal type issues
       const roleStr = String(profile?.role ?? '');
       if (roleStr === 'express' || roleStr === 'pdv_simples') {
-        const rolePerms = permissoes[profile?.role ?? ''] ||
-          DEFAULT_PERMISSOES[profile?.role ?? ''] || [
-            'acertos_rapidos',
-            'lancar_turno',
-            'fechamento_diario',
-            'auditoria_geral',
-            'produtos',
-            'agenda',
-            'ajuda',
-          ];
-        const directMatch = rolePerms.includes(item.id || '');
+        const basePerms = DEFAULT_PERMISSOES[profile?.role ?? ''] || [
+          'acertos_rapidos',
+          'lancar_turno',
+          'fechamento_diario',
+          'auditoria_geral',
+          'produtos',
+          'agenda',
+          'ajuda',
+        ];
+        const customPerms = permissoes[profile?.role ?? ''] || [];
+        const rolePerms = Array.from(new Set([...basePerms, ...customPerms]));
+        const directMatch = rolePerms.includes(item.id || '') || item.id === 'agenda';
         if (directMatch) return true;
         if (item.children?.length) {
           return item.children.some((child) => rolePerms.includes(child.id || ''));
@@ -738,15 +762,16 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
           visibleMenu.map((item) => {
             const active =
               pathname === item.href || item.children?.some((c) => pathname === c.href);
+            const isSubmenuOpen = openSubmenus.has(item.id || '');
             return (
               <li key={item.id} className="list-none">
                 <div
                   className={`flex items-center rounded-xl px-3 py-2.5 transition-all cursor-pointer ${active ? 'bg-primary/10' : 'hover:bg-slate-50'}`}
-                  onClick={() =>
-                    item.children
-                      ? setOpenSubmenu(openSubmenu === (item.id ?? null) ? null : (item.id ?? null))
-                      : null
-                  }
+                  onClick={() => {
+                    if (item.children) {
+                      toggleSubmenu(item.id || '');
+                    }
+                  }}
                   onMouseEnter={() => setHoveredItem(item.id || null)}
                   onMouseLeave={() => setHoveredItem(null)}
                 >
@@ -786,6 +811,14 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
                         />
                       </button>
                     )}
+                    {!isCollapsed && item.children && (
+                      <ChevronRight
+                        size={16}
+                        className={`ml-auto text-slate-400 transition-transform duration-200 ${
+                          isSubmenuOpen ? 'rotate-90 text-primary' : ''
+                        }`}
+                      />
+                    )}
                   </Link>
                   {isCollapsed && hoveredItem === item.id && (
                     <div className="absolute left-16 bg-slate-800 text-white text-[11px] px-3 py-1.5 rounded shadow-xl z-50 whitespace-nowrap font-bold">
@@ -793,7 +826,7 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
                     </div>
                   )}
                 </div>
-                {!isCollapsed && item.children && openSubmenu === item.id && (
+                {!isCollapsed && item.children && isSubmenuOpen && (
                   <ul className="mt-1 ml-4 border-l-2 border-slate-100 pl-4 space-y-1">
                     {item.children.map((child) => (
                       <li key={child.href} className="list-none">

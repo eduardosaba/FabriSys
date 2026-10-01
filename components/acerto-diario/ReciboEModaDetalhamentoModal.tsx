@@ -44,7 +44,6 @@ export interface ReciboRegistroData {
   valor_pix_declarado?: number;
   valor_cartao_declarado?: number;
   taxa_cartao_reais?: number;
-  taxa_cartao_percentual?: number;
   diferenca_auditoria?: number;
   observacoes?: string;
   itens_grade?: ReciboItemGrade[];
@@ -101,9 +100,8 @@ export default function ReciboEModaDetalhamentoModal({
   const pix = Number(data.valor_pix_declarado || 0);
   const cartaoBruto = Number(data.valor_cartao_declarado || 0);
   const taxaReais = Number(data.taxa_cartao_reais || 0);
-  const taxaPercent =
-    Number(data.taxa_cartao_percentual || 0) ||
-    (cartaoBruto > 0 ? (taxaReais / cartaoBruto) * 100 : 0);
+  const totalDigital = pix + cartaoBruto;
+  const taxaPercent = totalDigital > 0 ? (taxaReais / totalDigital) * 100 : 0;
   const cartaoLiquido = Math.max(0, cartaoBruto - taxaReais);
   const totalLiquido = dinheiro + pix + cartaoLiquido;
   const totalBruto = dinheiro + pix + cartaoBruto;

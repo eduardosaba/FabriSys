@@ -35,6 +35,13 @@ import {
   Printer,
   Search,
   Filter,
+  Eye,
+  Receipt,
+  Percent,
+  Coins,
+  FileSpreadsheet,
+  Layers,
+  ExternalLink,
 } from 'lucide-react';
 
 interface LocalPDV {
@@ -42,6 +49,29 @@ interface LocalPDV {
   nome: string;
   logo_url?: string;
   tipo?: string;
+}
+
+export interface FechamentoUnificadoInfo {
+  id: string;
+  data: string;
+  organization_id?: string;
+  total_faturamento_bruto?: number;
+  total_faturamento_liquido?: number;
+  total_dinheiro_informado?: number;
+  total_pix_declarado?: number;
+  total_cartao_debito_declarado?: number;
+  total_cartao_credito_declarado?: number;
+  total_outros_declarado?: number;
+  total_recebido?: number;
+  total_taxas_operacionais?: number;
+  total_liquido_apos_taxas?: number;
+  diferenca_caixa?: number;
+  justificativa?: string;
+  qtd_turnos?: number;
+  qtd_pdvs?: number;
+  status?: string;
+  created_at?: string;
+  turnos?: RomaneioRegistro[];
 }
 
 interface RomaneioRegistro {
@@ -55,7 +85,6 @@ interface RomaneioRegistro {
   valor_pix_declarado: number;
   valor_cartao_declarado: number;
   taxa_cartao_reais?: number;
-  taxa_cartao_percentual?: number;
   faturamento_liquido_esperado: number;
   pix_cartao_esperado: number;
   diferenca_auditoria: number;
@@ -64,6 +93,10 @@ interface RomaneioRegistro {
   qtd_total_retorno?: number;
   faturamento_bruto_teorico?: number;
   total_descontos_perdas?: number;
+  fechamento_unificado_id?: string | null;
+  tipo_fechamento?: string;
+  fechamento_unificado?: FechamentoUnificadoInfo | null;
+  is_unificado?: boolean;
   locais?: {
     id: string;
     nome: string;
@@ -108,6 +141,51 @@ export default function FechamentoDiarioPage() {
   const [loadingHistorico, setLoadingHistorico] = useState(false);
   const [filtroStatusHistorico, setFiltroStatusHistorico] = useState<string>('todos');
   const [buscaHistorico, setBuscaHistorico] = useState<string>('');
+
+  // Fechamentos unificados mapeados por id e por data
+  const [fechamentosUnificadosMap, setFechamentosUnificadosMap] = useState<Record<string, FechamentoUnificadoInfo>>({});
+  const [fechamentoUnificadoDia, setFechamentoUnificadoDia] = useState<FechamentoUnificadoInfo | null>(null);
+
+  // Modal de Detalhes Financeiros do Fechamento Unificado
+  const [modalDetalhesUnificado, setModalDetalhesUnificado] = useState<FechamentoUnificadoInfo | null>(null);
+  const [carregandoDetalhesUnificado, setCarregandoDetalhesUnificado] = useState(false);
+
+  const abrirModalFinanceiro = useCallback(
+    async (fechamento: any) => {
+      if (!fechamento) return;
+      setCarregandoDetalhesUnificado(true);
+      setModalDetalhesUnificado(fechamento);
+
+      try {
+        let queryTurnos = supabase
+          .from('remessas_cargas_pdv')
+          .select('*, locais(id, nome)')
+          .order('turno', { ascending: true });
+
+        if (fechamento.id) {
+          queryTurnos = queryTurnos.eq('fechamento_unificado_id', fechamento.id);
+        } else if (fechamento.data) {
+          queryTurnos = queryTurnos.eq('data', fechamento.data);
+        }
+
+        if (profile?.organization_id) {
+          queryTurnos = queryTurnos.eq('organization_id', profile.organization_id);
+        }
+
+        const { data: turnosData } = await queryTurnos;
+        setModalDetalhesUnificado((prev: any) => ({
+          ...(prev || fechamento),
+          ...fechamento,
+          turnos: turnosData || [],
+        }));
+      } catch (err) {
+        console.error('Erro ao carregar turnos do fechamento unificado:', err);
+      } finally {
+        setCarregandoDetalhesUnificado(false);
+      }
+    },
+    [profile?.organization_id]
+  );
 
   // Disparar efeito de festa com confetes ao bater zero divergência
   const dispararFestaZeroDivergencia = useCallback(() => {
@@ -225,6 +303,8 @@ export default function FechamentoDiarioPage() {
           valor_cartao_declarado,
           diferenca_auditoria,
           observacoes,
+          fechamento_unificado_id,
+          tipo_fechamento,
           locais(id, nome)
         `
         )
@@ -266,6 +346,8 @@ export default function FechamentoDiarioPage() {
             valor_cartao_declarado,
             diferenca_auditoria,
             observacoes,
+            fechamento_unificado_id,
+            tipo_fechamento,
             locais(id, nome)
           `
           )
@@ -291,20 +373,63 @@ export default function FechamentoDiarioPage() {
 
       if (error && (!data || data.length === 0)) throw error;
 
-      const formatados = (data || []).map((r: any) => ({
-        id: r.id,
-        data: r.data,
-        local_id: r.local_id,
-        turno: r.turno || 'integral',
-        vendedor_nome: r.vendedor_nome || 'Atendente',
-        pdv_nome: r.locais?.nome || 'PDV',
-        status: r.status || 'aberto',
-        valor_dinheiro_gaveta: Number(r.valor_dinheiro_gaveta || 0),
-        valor_pix_declarado: Number(r.valor_pix_declarado || 0),
-        valor_cartao_declarado: Number(r.valor_cartao_declarado || 0),
-        diferenca_auditoria: Number(r.diferenca_auditoria || 0),
-        observacoes: r.observacoes || '',
-      }));
+      // Buscar fechamentos unificados no período para vincular métricas
+      let queryFech = supabase
+        .from('fechamentos_unificados_pdv')
+        .select('*')
+        .order('data', { ascending: false });
+
+      if (profile?.organization_id) {
+        queryFech = queryFech.eq('organization_id', profile.organization_id);
+      }
+
+      if (tipoFiltroData === 'dia') {
+        if (filtroData) queryFech = queryFech.eq('data', filtroData);
+      } else {
+        if (filtroDataInicio) queryFech = queryFech.gte('data', filtroDataInicio);
+        if (filtroDataFim) queryFech = queryFech.lte('data', filtroDataFim);
+      }
+
+      const { data: fechData } = await queryFech;
+      const mapFech: Record<string, FechamentoUnificadoInfo> = {};
+      const mapFechPorData: Record<string, FechamentoUnificadoInfo> = {};
+      if (fechData) {
+        fechData.forEach((f: any) => {
+          mapFech[f.id] = f;
+          mapFechPorData[f.data] = f;
+        });
+      }
+      setFechamentosUnificadosMap((prev) => ({ ...prev, ...mapFech }));
+
+      const formatados = (data || []).map((r: any) => {
+        const fechUnificado =
+          (r.fechamento_unificado_id ? mapFech[r.fechamento_unificado_id] : null) ||
+          mapFechPorData[r.data] ||
+          null;
+
+        const isUnificado = Boolean(
+          r.fechamento_unificado_id || r.tipo_fechamento === 'unificado' || fechUnificado
+        );
+
+        return {
+          id: r.id,
+          data: r.data,
+          local_id: r.local_id,
+          turno: r.turno || 'integral',
+          vendedor_nome: r.vendedor_nome || 'Atendente',
+          pdv_nome: r.locais?.nome || 'PDV',
+          status: r.status || 'aberto',
+          valor_dinheiro_gaveta: Number(r.valor_dinheiro_gaveta || 0),
+          valor_pix_declarado: Number(r.valor_pix_declarado || 0),
+          valor_cartao_declarado: Number(r.valor_cartao_declarado || 0),
+          diferenca_auditoria: Number(r.diferenca_auditoria || 0),
+          observacoes: r.observacoes || '',
+          fechamento_unificado_id: r.fechamento_unificado_id || fechUnificado?.id || null,
+          tipo_fechamento: r.tipo_fechamento || (isUnificado ? 'unificado' : undefined),
+          fechamento_unificado: fechUnificado,
+          is_unificado: isUnificado,
+        };
+      });
 
       setHistoricoFechamentos(formatados);
     } catch (err: any) {
@@ -383,32 +508,88 @@ export default function FechamentoDiarioPage() {
 
       if (error && (!data || data.length === 0)) throw error;
 
-      const formatados: RomaneioRegistro[] = (data || []).map((r: any) => ({
-        id: r.id,
-        data: r.data,
-        local_id: r.local_id,
-        turno: r.turno || 'integral',
-        vendedor_nome: r.vendedor_nome || 'Atendente',
-        status: r.status || 'aberto',
-        valor_dinheiro_gaveta: Number(r.valor_dinheiro_gaveta || 0),
-        valor_pix_declarado: Number(r.valor_pix_declarado || 0),
-        valor_cartao_declarado: Number(r.valor_cartao_declarado || 0),
-        faturamento_liquido_esperado: Number(r.faturamento_liquido_esperado || 0),
-        pix_cartao_esperado: Number(r.pix_cartao_esperado || 0),
-        diferenca_auditoria:
-          (r.status || 'aberto') === 'aberto' ? 0 : Number(r.diferenca_auditoria || 0),
-        observacoes: r.observacoes || '',
-        qtd_total_enviada: Number(r.qtd_total_enviada || 0),
-        qtd_total_retorno: Number(r.qtd_total_retorno || 0),
-        faturamento_bruto_teorico: Number(r.faturamento_bruto_teorico || 0),
-        total_descontos_perdas: Number(r.total_descontos_perdas || 0),
-        locais: r.locais,
-      }));
+      // Buscar fechamento unificado correspondente ao filtro
+      let queryFech = supabase.from('fechamentos_unificados_pdv').select('*');
+
+      if (profile?.organization_id) {
+        queryFech = queryFech.eq('organization_id', profile.organization_id);
+      }
+
+      if (tipoFiltroData === 'dia') {
+        if (filtroData) queryFech = queryFech.eq('data', filtroData);
+      } else {
+        if (filtroDataInicio) queryFech = queryFech.gte('data', filtroDataInicio);
+        if (filtroDataFim) queryFech = queryFech.lte('data', filtroDataFim);
+      }
+
+      const { data: fechData } = await queryFech;
+      const mapFech: Record<string, FechamentoUnificadoInfo> = {};
+      let fechDoDia: FechamentoUnificadoInfo | null = null;
+      if (fechData && fechData.length > 0) {
+        fechData.forEach((f: any) => {
+          mapFech[f.id] = f;
+          if (tipoFiltroData === 'dia' && f.data === filtroData) {
+            fechDoDia = f;
+          }
+        });
+        if (!fechDoDia && tipoFiltroData === 'dia') {
+          fechDoDia = fechData[0];
+        }
+      }
+      setFechamentosUnificadosMap((prev) => ({ ...prev, ...mapFech }));
+      setFechamentoUnificadoDia(fechDoDia);
+
+      const formatados: RomaneioRegistro[] = (data || []).map((r: any) => {
+        const fechUnificado =
+          (r.fechamento_unificado_id ? mapFech[r.fechamento_unificado_id] : null) || fechDoDia;
+        const isUnificado = Boolean(
+          r.fechamento_unificado_id || r.tipo_fechamento === 'unificado' || fechUnificado
+        );
+
+        return {
+          id: r.id,
+          data: r.data,
+          local_id: r.local_id,
+          turno: r.turno || 'integral',
+          vendedor_nome: r.vendedor_nome || 'Atendente',
+          status: r.status || 'aberto',
+          valor_dinheiro_gaveta: Number(r.valor_dinheiro_gaveta || 0),
+          valor_pix_declarado: Number(r.valor_pix_declarado || 0),
+          valor_cartao_declarado: Number(r.valor_cartao_declarado || 0),
+          faturamento_liquido_esperado: Number(r.faturamento_liquido_esperado || 0),
+          pix_cartao_esperado: Number(r.pix_cartao_esperado || 0),
+          diferenca_auditoria:
+            (r.status || 'aberto') === 'aberto' ? 0 : Number(r.diferenca_auditoria || 0),
+          observacoes: r.observacoes || '',
+          qtd_total_enviada: Number(r.qtd_total_enviada || 0),
+          qtd_total_retorno: Number(r.qtd_total_retorno || 0),
+          faturamento_bruto_teorico: Number(r.faturamento_bruto_teorico || 0),
+          total_descontos_perdas: Number(r.total_descontos_perdas || 0),
+          fechamento_unificado_id: r.fechamento_unificado_id || fechUnificado?.id || null,
+          tipo_fechamento: r.tipo_fechamento || (isUnificado ? 'unificado' : undefined),
+          fechamento_unificado: fechUnificado,
+          is_unificado: isUnificado,
+          locais: r.locais,
+        };
+      });
 
       setRegistros(formatados);
 
-      // Se o dia já foi auditado, carregar dados gravados anteriormente
-      if (data && data.length > 0 && data[0].status === 'auditado') {
+      // Se o dia tem fechamento unificado OU já foi auditado, carregar dados gravados
+      if (fechDoDia) {
+        setPixExtratoBanco(Number(fechDoDia.total_pix_declarado || 0));
+        setCartaoMaquininha(
+          Number(fechDoDia.total_cartao_debito_declarado || 0) +
+            Number(fechDoDia.total_cartao_credito_declarado || 0) +
+            Number(fechDoDia.total_outros_declarado || 0)
+        );
+        if (fechDoDia.justificativa) {
+          setJustificativaAuditoria(fechDoDia.justificativa);
+        } else if (data && data[0]?.observacoes?.includes('[AUDITORIA]:')) {
+          const obsParts = data[0].observacoes.split('[AUDITORIA]:');
+          setJustificativaAuditoria(obsParts[1]?.trim() || '');
+        }
+      } else if (data && data.length > 0 && data[0].status === 'auditado') {
         setPixExtratoBanco(Number(data[0].valor_pix_declarado || 0));
         setCartaoMaquininha(Number(data[0].valor_cartao_declarado || 0));
         if (data[0].observacoes?.includes('[AUDITORIA]:')) {
@@ -588,14 +769,20 @@ export default function FechamentoDiarioPage() {
     (acc, r) => acc + Number(r.valor_dinheiro_gaveta || 0),
     0
   );
-  const totalPixDeclarado = registros.reduce(
-    (acc, r) => acc + Number(r.valor_pix_declarado || 0),
-    0
-  );
-  const totalCartaoDeclarado = registros.reduce(
-    (acc, r) => acc + Number(r.valor_cartao_declarado || 0),
-    0
-  );
+  const totalPixDeclarado = fechamentoUnificadoDia
+    ? Number(fechamentoUnificadoDia.total_pix_declarado || 0)
+    : registros.reduce(
+        (acc, r) => acc + Number(r.valor_pix_declarado || 0),
+        0
+      );
+  const totalCartaoDeclarado = fechamentoUnificadoDia
+    ? Number(fechamentoUnificadoDia.total_cartao_debito_declarado || 0) +
+      Number(fechamentoUnificadoDia.total_cartao_credito_declarado || 0) +
+      Number(fechamentoUnificadoDia.total_outros_declarado || 0)
+    : registros.reduce(
+        (acc, r) => acc + Number(r.valor_cartao_declarado || 0),
+        0
+      );
   const totalPixCartaoEsperado = registros.reduce(
     (acc, r) =>
       acc + Number(r.pix_cartao_esperado || r.valor_pix_declarado + r.valor_cartao_declarado),
@@ -822,7 +1009,9 @@ export default function FechamentoDiarioPage() {
 
   // Quando o modo de edição está ativo, a página NÃO considera o dia como bloqueado/auditado
   const isDiaAuditado =
-    registros.length > 0 && registros.every((r) => r.status === 'auditado') && !modoEdicaoDia;
+    ((registros.length > 0 && registros.every((r) => r.status === 'auditado')) ||
+      fechamentoUnificadoDia?.status === 'auditado') &&
+    !modoEdicaoDia;
 
   const handleFinalizarDia = async () => {
     if (registros.length === 0) {
@@ -873,6 +1062,19 @@ export default function FechamentoDiarioPage() {
 
       if (error) throw error;
 
+      if (fechamentoUnificadoDia) {
+        await supabase
+          .from('fechamentos_unificados_pdv')
+          .update({
+            status: 'auditado',
+            total_pix_declarado: pixReal,
+            diferenca_caixa: diferencaConciliacaoDigital,
+            justificativa: justificativaAuditoria.trim() || fechamentoUnificadoDia.justificativa,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', fechamentoUnificadoDia.id);
+      }
+
       if (!temDivergenciaValores && !semValoresInformados) {
         dispararFestaZeroDivergencia();
         toast({
@@ -904,26 +1106,40 @@ export default function FechamentoDiarioPage() {
     const targetData = dataReabrir || filtroData;
     if (!profile?.organization_id) return;
     try {
+      const nowIso = new Date().toISOString();
       const { error } = await supabase
         .from('remessas_cargas_pdv')
         .update({
-          status: 'aberto',
+          status: 'encerrado',
           diferenca_auditoria: 0,
+          updated_at: nowIso,
         })
         .eq('organization_id', profile.organization_id)
         .eq('data', targetData);
 
       if (error) throw error;
 
-      // Reseta modos para o dia voltar limpo ao estado 'Em Aberto'
+      // Sincroniza também o cabeçalho fechamentos_unificados_pdv se houver
+      await supabase
+        .from('fechamentos_unificados_pdv')
+        .update({
+          status: 'encerrado',
+          updated_at: nowIso,
+        })
+        .eq('organization_id', profile.organization_id)
+        .eq('data', targetData);
+
+      // Reseta modos para o dia voltar ao estado 'Aguardando Auditoria'
       setModoEdicaoDia(false);
       setTentouFinalizar(false);
       setJustificativaAuditoria('');
       setPixExtratoBanco(0);
       setCartaoMaquininha(0);
 
-      // Atualiza o estado local dos registros para 'aberto' com diferença zerada
-      setRegistros((prev) => prev.map((r) => ({ ...r, status: 'aberto', diferenca_auditoria: 0 })));
+      // Atualiza o estado local dos registros para 'encerrado' com diferença zerada
+      setRegistros((prev) =>
+        prev.map((r) => ({ ...r, status: 'encerrado', diferenca_auditoria: 0 }))
+      );
 
       if (dataReabrir) {
         setFiltroData(dataReabrir);
@@ -935,12 +1151,12 @@ export default function FechamentoDiarioPage() {
       await carregarHistoricoFechamentos();
 
       toast({
-        title: 'Fechamento Reaberto com Sucesso!',
-        description: `O status do dia ${targetData.split('-').reverse().join('/')} voltou para 'Em Aberto'. A diferença foi zerada e os relatórios liberados para edição.`,
+        title: 'Auditoria Reaberta com Sucesso!',
+        description: `O status do dia ${targetData.split('-').reverse().join('/')} retornou para 'Aguardando Auditoria' (encerrado). Lançamentos e dados preservados para conferência.`,
         variant: 'success',
       });
     } catch (err: any) {
-      toast({ title: 'Erro ao reabrir fechamento', description: err.message, variant: 'error' });
+      toast({ title: 'Erro ao reabrir auditoria', description: err.message, variant: 'error' });
     }
   };
 
@@ -1186,6 +1402,52 @@ export default function FechamentoDiarioPage() {
             </div>
           </div>
 
+          {/* Banner de Fechamento Unificado se houver */}
+          {fechamentoUnificadoDia && (
+            <div className="rounded-2xl border border-purple-300 dark:border-purple-800 bg-gradient-to-r from-purple-50 via-fuchsia-50 to-indigo-50 dark:from-purple-950/40 dark:via-fuchsia-950/30 dark:to-indigo-950/40 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-purple-600 text-white shadow-md">
+                  <Receipt className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-extrabold text-purple-950 dark:text-purple-100">
+                      Fechamento Unificado de PDVs Vinculado
+                    </h3>
+                    <span className="rounded-full bg-purple-200 dark:bg-purple-900/60 border border-purple-300 dark:border-purple-700 px-2 py-0.5 text-[10px] font-black uppercase text-purple-800 dark:text-purple-300">
+                      {fechamentoUnificadoDia.status || 'AUDITADO'}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-purple-800 dark:text-purple-200">
+                    Operações digitais conciliadas de forma unificada:{' '}
+                    <strong>Pix R$ {Number(fechamentoUnificadoDia.total_pix_declarado || 0).toFixed(2)}</strong>,{' '}
+                    <strong>
+                      Cartões R${' '}
+                      {(
+                        Number(fechamentoUnificadoDia.total_cartao_debito_declarado || 0) +
+                        Number(fechamentoUnificadoDia.total_cartao_credito_declarado || 0)
+                      ).toFixed(2)}
+                    </strong>{' '}
+                    e{' '}
+                    <strong>Taxas R$ {Number(fechamentoUnificadoDia.total_taxas_operacionais || 0).toFixed(2)}</strong>{' '}
+                    (Líquido em conta:{' '}
+                    <strong className="text-emerald-700 dark:text-emerald-400">
+                      R$ {Number(fechamentoUnificadoDia.total_liquido_apos_taxas || 0).toFixed(2)}
+                    </strong>
+                    ).
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => abrirModalFinanceiro(fechamentoUnificadoDia)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-purple-700 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-purple-800 transition-all shrink-0 active:scale-95"
+              >
+                <Eye className="h-4 w-4" /> Ver Financeiro Detalhado do Dia
+              </button>
+            </div>
+          )}
+
           {/* Resumo Consolidado dos Caixas do Dia */}
           {(() => {
             const totalSobrasRetorno = registros.reduce(
@@ -1194,7 +1456,7 @@ export default function FechamentoDiarioPage() {
             );
 
             return (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${fechamentoUnificadoDia ? 'lg:grid-cols-6' : 'lg:grid-cols-5'}`}>
                 <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
                   <span className="text-xs font-bold uppercase tracking-wider text-text/50">
                     Vendas (em Dinheiro) R$
@@ -1206,24 +1468,56 @@ export default function FechamentoDiarioPage() {
                 </div>
 
                 <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
-                  <span className="text-xs font-bold uppercase tracking-wider text-text/50">
-                    Vendas no Pix R$
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-text/50">
+                      Vendas no Pix R$
+                    </span>
+                    {fechamentoUnificadoDia && (
+                      <span className="rounded bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[9px] font-bold text-purple-700 dark:text-purple-300">
+                        Unificado
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-1 font-mono text-xl font-black text-cyan-600">
                     R$ {totalPixDeclarado.toFixed(2)}
                   </p>
-                  <p className="text-[10px] text-text/40">Informado nos PDVs</p>
+                  <p className="text-[10px] text-text/40">
+                    {fechamentoUnificadoDia ? 'Extrato Bancário do dia' : 'Informado nos PDVs'}
+                  </p>
                 </div>
 
                 <div className="rounded-2xl border border-primary/10 bg-background p-4 shadow-sm">
-                  <span className="text-xs font-bold uppercase tracking-wider text-text/50">
-                    Vendas nos Cartões R$
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-text/50">
+                      Vendas nos Cartões R$
+                    </span>
+                    {fechamentoUnificadoDia && (
+                      <span className="rounded bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[9px] font-bold text-purple-700 dark:text-purple-300">
+                        Unificado
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-1 font-mono text-xl font-black text-purple-600">
                     R$ {totalCartaoDeclarado.toFixed(2)}
                   </p>
-                  <p className="text-[10px] text-text/40">Informado nos PDVs</p>
+                  <p className="text-[10px] text-text/40">
+                    {fechamentoUnificadoDia
+                      ? `Déb: R$ ${Number(fechamentoUnificadoDia.total_cartao_debito_declarado || 0).toFixed(2)} | Créd: R$ ${Number(fechamentoUnificadoDia.total_cartao_credito_declarado || 0).toFixed(2)}`
+                      : 'Informado nos PDVs'}
+                  </p>
                 </div>
+
+                {fechamentoUnificadoDia && (
+                  <div className="rounded-2xl border border-rose-300/80 bg-rose-50/60 dark:bg-rose-950/30 p-4 shadow-sm">
+                    <span className="text-xs font-bold uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                      Taxas Financeiras
+                    </span>
+                    <p className="mt-1 font-mono text-xl font-black text-rose-600 dark:text-rose-400">
+                      R$ {Number(fechamentoUnificadoDia.total_taxas_operacionais || 0).toFixed(2)}
+                    </p>
+                    <p className="text-[10px] text-rose-700/70">Taxas de maquininhas/Pix</p>
+                  </div>
+                )}
 
                 <div className="rounded-2xl border border-amber-300/80 bg-amber-50/60 dark:bg-amber-950/30 p-4 shadow-sm">
                   <span className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
@@ -1268,10 +1562,20 @@ export default function FechamentoDiarioPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                {fechamentoUnificadoDia && (
+                  <button
+                    type="button"
+                    onClick={() => abrirModalFinanceiro(fechamentoUnificadoDia)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-100 dark:bg-purple-950/60 px-3 py-1.5 text-xs font-bold text-purple-900 dark:text-purple-200 hover:bg-purple-200 transition-colors shadow-2xs"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> Ver Financeiro Unificado
+                  </button>
+                )}
+
                 {isDiaAuditado && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
-                    <ShieldCheck className="h-3.5 w-3.5" /> Dia Encerrado
+                    <ShieldCheck className="h-3.5 w-3.5" /> Dia Auditado
                   </span>
                 )}
 
@@ -1456,11 +1760,23 @@ export default function FechamentoDiarioPage() {
                         0,
                         (reg.qtd_total_enviada || 0) - (reg.qtd_total_retorno || 0)
                       );
+                      const isRowUnificado = Boolean(
+                        reg.fechamento_unificado_id ||
+                          reg.tipo_fechamento === 'unificado' ||
+                          fechamentoUnificadoDia
+                      );
 
                       return (
                         <tr key={reg.id} className="hover:bg-primary/5 transition-colors">
                           <td className="p-3 font-semibold text-text/80">
-                            {reg.locais?.nome || reg.local_id || 'PDV Geral'}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{reg.locais?.nome || reg.local_id || 'PDV Geral'}</span>
+                              {isRowUnificado && (
+                                <span className="inline-flex items-center gap-1 rounded bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[9px] font-bold text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                  🟣 Unificado
+                                </span>
+                              )}
+                            </div>
                             {reg.turno && (
                               <span className="block text-[10px] text-text/40 capitalize">
                                 {reg.turno}
@@ -1481,12 +1797,34 @@ export default function FechamentoDiarioPage() {
                           </td>
                           <td className="p-3 text-right font-mono font-bold text-cyan-700 dark:text-cyan-400">
                             R$ {Number(reg.pix_cartao_esperado || 0).toFixed(2)}
-                            {(Number(reg.valor_pix_declarado || 0) > 0 ||
-                              Number(reg.valor_cartao_declarado || 0) > 0) && (
-                              <span className="block font-sans text-[10px] font-normal text-text/50">
-                                Pix: R$ {Number(reg.valor_pix_declarado || 0).toFixed(2)} | Cartão:
-                                R$ {Number(reg.valor_cartao_declarado || 0).toFixed(2)}
-                              </span>
+                            {isRowUnificado ? (
+                              <div className="mt-1 flex flex-col items-end">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    abrirModalFinanceiro(
+                                      reg.fechamento_unificado_id
+                                        ? fechamentosUnificadosMap[reg.fechamento_unificado_id] ||
+                                            fechamentoUnificadoDia
+                                        : fechamentoUnificadoDia
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 dark:text-purple-300 hover:text-purple-900 hover:underline bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800"
+                                >
+                                  <Eye className="h-3 w-3" /> Ver Financeiro
+                                </button>
+                                <span className="text-[9px] font-normal text-text/40">
+                                  Pix e Cartões unificados
+                                </span>
+                              </div>
+                            ) : (
+                              (Number(reg.valor_pix_declarado || 0) > 0 ||
+                                Number(reg.valor_cartao_declarado || 0) > 0) && (
+                                <span className="block font-sans text-[10px] font-normal text-text/50">
+                                  Pix: R$ {Number(reg.valor_pix_declarado || 0).toFixed(2)} | Cartão:
+                                  R$ {Number(reg.valor_cartao_declarado || 0).toFixed(2)}
+                                </span>
+                              )
                             )}
                           </td>
                           <td
@@ -1498,7 +1836,9 @@ export default function FechamentoDiarioPage() {
                             <span
                               className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-extrabold capitalize ${
                                 reg.status === 'auditado' || reg.status === 'conferido'
-                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300'
+                                  ? isRowUnificado
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-700'
+                                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300'
                                   : reg.status === 'encerrado'
                                     ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 border border-cyan-300'
                                     : reg.status === 'dinheiro_informado'
@@ -1507,9 +1847,13 @@ export default function FechamentoDiarioPage() {
                               }`}
                             >
                               {reg.status === 'auditado'
-                                ? 'Auditado'
+                                ? isRowUnificado
+                                  ? 'Auditado (Unificado)'
+                                  : 'Auditado'
                                 : reg.status === 'conferido'
-                                  ? 'Conferido'
+                                  ? isRowUnificado
+                                    ? 'Conferido (Unificado)'
+                                    : 'Conferido'
                                   : reg.status === 'encerrado'
                                     ? 'Encerrado'
                                     : reg.status === 'dinheiro_informado'
@@ -1521,12 +1865,31 @@ export default function FechamentoDiarioPage() {
                           </td>
                           <td className="p-3 text-center">
                             {reg.status === 'auditado' || reg.status === 'conferido' ? (
-                              <span
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-text/40 cursor-not-allowed"
-                                title="Relatório auditado. Reabra o fechamento para editar ou excluir."
-                              >
-                                <Lock className="h-3.5 w-3.5 text-text/40" /> Bloqueado
-                              </span>
+                              <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                <span
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-text/40 cursor-not-allowed"
+                                  title="Relatório auditado. Reabra o fechamento para editar ou excluir."
+                                >
+                                  <Lock className="h-3.5 w-3.5 text-text/40" /> Bloqueado
+                                </span>
+                                {isRowUnificado && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      abrirModalFinanceiro(
+                                        reg.fechamento_unificado_id
+                                          ? fechamentosUnificadosMap[reg.fechamento_unificado_id] ||
+                                              fechamentoUnificadoDia
+                                          : fechamentoUnificadoDia
+                                      )
+                                    }
+                                    title="Ver financeiro detalhado do fechamento unificado"
+                                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 text-[10px] font-bold hover:bg-purple-200 transition-colors shadow-2xs"
+                                  >
+                                    <Eye className="h-3 w-3" /> Financeiro
+                                  </button>
+                                )}
+                              </div>
                             ) : (
                               <div className="flex items-center justify-center gap-1.5">
                                 {reg.status === 'dinheiro_informado' && (
@@ -1686,74 +2049,131 @@ export default function FechamentoDiarioPage() {
                           </td>
                         </tr>
                       ) : (
-                        historicoFiltrado.map((item) => (
-                          <tr key={item.id} className="hover:bg-primary/5">
-                            <td className="p-3 font-bold text-text/80 whitespace-nowrap">
-                              {item.data ? item.data.split('-').reverse().join('/') : '-'}
-                              <span className="text-text/40 text-[10px] font-normal block">
-                                {item.turno
-                                  ? item.turno.charAt(0).toUpperCase() + item.turno.slice(1)
-                                  : ''}
-                              </span>
-                            </td>
-                            <td className="p-3 font-bold text-primary whitespace-nowrap">
-                              {item.pdv_nome}
-                            </td>
-                            <td className="p-3 text-text/70">{item.vendedor_nome || '-'}</td>
-                            <td className="p-3 text-right font-mono text-emerald-600 font-bold">
-                              R$ {item.valor_dinheiro_gaveta.toFixed(2)}
-                            </td>
-                            <td className="p-3 text-right font-mono text-cyan-600 font-bold">
-                              R$ {item.valor_pix_declarado.toFixed(2)}
-                            </td>
-                            <td className="p-3 text-right font-mono text-purple-600 font-bold">
-                              R$ {item.valor_cartao_declarado.toFixed(2)}
-                            </td>
-                            <td
-                              className={`p-3 text-right font-mono font-bold ${
-                                item.diferenca_auditoria < 0
-                                  ? 'text-rose-600'
-                                  : item.diferenca_auditoria > 0
-                                    ? 'text-emerald-600'
-                                    : 'text-text/60'
-                              }`}
-                            >
-                              R$ {item.diferenca_auditoria.toFixed(2)}
-                            </td>
-                            <td className="p-3 text-center">
-                              <span
-                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
-                                  item.status === 'auditado'
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                    : item.status === 'encerrado'
-                                      ? 'bg-cyan-100 text-cyan-800 border border-cyan-300'
-                                      : item.status === 'dinheiro_informado'
-                                        ? 'bg-amber-500/20 text-amber-900 border border-amber-400 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700 font-extrabold'
-                                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                        historicoFiltrado.map((item) => {
+                          const isItemUnificado = Boolean(
+                            item.fechamento_unificado_id ||
+                              item.tipo_fechamento === 'unificado' ||
+                              item.fechamento_unificado ||
+                              item.is_unificado
+                          );
+                          const fech =
+                            item.fechamento_unificado ||
+                            (item.fechamento_unificado_id
+                              ? fechamentosUnificadosMap[item.fechamento_unificado_id]
+                              : null) ||
+                            fechamentosUnificadosMap[item.data];
+
+                          const pixExibir = fech
+                            ? Number(fech.total_pix_declarado || 0)
+                            : item.valor_pix_declarado;
+                          const cartaoExibir = fech
+                            ? Number(fech.total_cartao_debito_declarado || 0) +
+                              Number(fech.total_cartao_credito_declarado || 0) +
+                              Number(fech.total_outros_declarado || 0)
+                            : item.valor_cartao_declarado;
+
+                          return (
+                            <tr key={item.id} className="hover:bg-primary/5 transition-colors">
+                              <td className="p-3 font-bold text-text/80 whitespace-nowrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span>{item.data ? item.data.split('-').reverse().join('/') : '-'}</span>
+                                  {isItemUnificado && (
+                                    <span className="inline-flex items-center rounded bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[9px] font-extrabold text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                      🟣 Unificado
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-text/40 text-[10px] font-normal block">
+                                  {item.turno
+                                    ? item.turno.charAt(0).toUpperCase() + item.turno.slice(1)
+                                    : ''}
+                                </span>
+                              </td>
+                              <td className="p-3 font-bold text-primary whitespace-nowrap">
+                                {item.pdv_nome}
+                              </td>
+                              <td className="p-3 text-text/70">{item.vendedor_nome || '-'}</td>
+                              <td className="p-3 text-right font-mono text-emerald-600 font-bold">
+                                R$ {item.valor_dinheiro_gaveta.toFixed(2)}
+                              </td>
+                              <td className="p-3 text-right font-mono text-cyan-600 font-bold">
+                                R$ {pixExibir.toFixed(2)}
+                                {isItemUnificado && fech && (
+                                  <span className="block text-[9px] font-sans font-normal text-text/40">
+                                    (Total Unificado)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-right font-mono text-purple-600 font-bold">
+                                R$ {cartaoExibir.toFixed(2)}
+                                {isItemUnificado && fech && (
+                                  <span className="block text-[9px] font-sans font-normal text-text/40">
+                                    (Total Unificado)
+                                  </span>
+                                )}
+                              </td>
+                              <td
+                                className={`p-3 text-right font-mono font-bold ${
+                                  item.diferenca_auditoria < 0
+                                    ? 'text-rose-600'
+                                    : item.diferenca_auditoria > 0
+                                      ? 'text-emerald-600'
+                                      : 'text-text/60'
                                 }`}
                               >
-                                {item.status === 'auditado'
-                                  ? 'Auditado'
-                                  : item.status === 'encerrado'
-                                    ? 'Encerrado'
-                                    : item.status === 'dinheiro_informado'
-                                      ? Number(item.valor_dinheiro_gaveta || 0) > 0
-                                        ? 'Gaveta / Dinheiro OK (Pix/Cartão Pendente)'
-                                        : 'Fechamento Parcial (Pix/Cartão Pendente)'
-                                      : 'Aberto'}
-                              </span>
-                            </td>
-                            <td className="p-3 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleReabrirFechamento(item.data)}
-                                className="inline-flex items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-900 hover:bg-amber-100 transition-all"
-                              >
-                                <Unlock className="h-3.5 w-3.5" /> Reabrir / Editar
-                              </button>
-                            </td>
-                          </tr>
-                        ))
+                                R$ {item.diferenca_auditoria.toFixed(2)}
+                              </td>
+                              <td className="p-3 text-center">
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase ${
+                                    item.status === 'auditado'
+                                      ? isItemUnificado
+                                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-700'
+                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                      : item.status === 'encerrado'
+                                        ? 'bg-cyan-100 text-cyan-800 border border-cyan-300'
+                                        : item.status === 'dinheiro_informado'
+                                          ? 'bg-amber-500/20 text-amber-900 border border-amber-400 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700 font-extrabold'
+                                          : 'bg-amber-100 text-amber-800 border border-amber-300'
+                                  }`}
+                                >
+                                  {item.status === 'auditado'
+                                    ? isItemUnificado
+                                      ? 'Auditado (Unificado)'
+                                      : 'Auditado'
+                                    : item.status === 'encerrado'
+                                      ? 'Encerrado'
+                                      : item.status === 'dinheiro_informado'
+                                        ? Number(item.valor_dinheiro_gaveta || 0) > 0
+                                          ? 'Gaveta / Dinheiro OK (Pix/Cartão Pendente)'
+                                          : 'Fechamento Parcial (Pix/Cartão Pendente)'
+                                        : 'Aberto'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-center">
+                                <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                  {isItemUnificado && fech && (
+                                    <button
+                                      type="button"
+                                      onClick={() => abrirModalFinanceiro(fech)}
+                                      title="Ver financeiro detalhado do fechamento unificado"
+                                      className="inline-flex items-center gap-1 rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/40 px-2.5 py-1 text-xs font-bold text-purple-900 dark:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-900/60 transition-all shadow-2xs"
+                                    >
+                                      <Eye className="h-3.5 w-3.5" /> Ver Financeiro
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReabrirFechamento(item.data)}
+                                    className="inline-flex items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-900 hover:bg-amber-100 transition-all"
+                                  >
+                                    <Unlock className="h-3.5 w-3.5" /> Reabrir / Editar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -1889,12 +2309,9 @@ export default function FechamentoDiarioPage() {
                 <BRLCurrencyInput
                   value={editingRecord.taxa_cartao_reais || 0}
                   onChange={(val) => {
-                    const cartao = Number(editingRecord.valor_cartao_declarado || 0);
-                    const pct = cartao > 0 ? Number(((val / cartao) * 100).toFixed(2)) : 0;
                     setEditingRecord({
                       ...editingRecord,
                       taxa_cartao_reais: val,
-                      taxa_cartao_percentual: pct,
                     });
                   }}
                   placeholder="R$ 0,00"
@@ -1950,6 +2367,324 @@ export default function FechamentoDiarioPage() {
         cancelText="Cancelar"
         variant="danger"
       />
+
+      {/* Modal de Detalhamento Financeiro do Fechamento Unificado */}
+      {modalDetalhesUnificado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-3xl my-8 space-y-5 rounded-3xl border border-purple-300 dark:border-purple-800 bg-background p-6 shadow-2xl animate-in fade-in zoom-in-95">
+            {/* Cabeçalho */}
+            <div className="flex items-start justify-between border-b border-primary/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-md">
+                  <Receipt className="h-6 w-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-extrabold text-text/90">
+                      Detalhamento Financeiro do Fechamento Unificado
+                    </h2>
+                    <span className="rounded-full bg-purple-100 dark:bg-purple-950/60 border border-purple-300 dark:border-purple-700 px-2.5 py-0.5 text-[10px] font-black uppercase text-purple-800 dark:text-purple-300">
+                      {modalDetalhesUnificado.status || 'AUDITADO'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-text/50 mt-0.5">
+                    Data de Fechamento:{' '}
+                    <strong className="text-primary font-bold">
+                      {modalDetalhesUnificado.data
+                        ? modalDetalhesUnificado.data.split('-').reverse().join('/')
+                        : '-'}
+                    </strong>{' '}
+                    • Conciliação consolidada de todos os PDVs e turnos
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalDetalhesUnificado(null)}
+                className="rounded-xl p-2 text-text/40 hover:bg-primary/10 hover:text-text transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Grid de KPIs Financeiros Executivos */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-2xl border border-primary/15 bg-primary/5 p-3.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-text/50">
+                  Faturamento Esperado
+                </span>
+                <p className="mt-1 font-mono text-base font-black text-text/90">
+                  R${' '}
+                  {Number(
+                    modalDetalhesUnificado.total_faturamento_bruto ||
+                      modalDetalhesUnificado.total_faturamento_liquido ||
+                      0
+                  ).toFixed(2)}
+                </p>
+                <span className="text-[10px] text-text/40">Vendas apuradas</span>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-300/80 bg-emerald-50/60 dark:bg-emerald-950/30 p-3.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                  Recebido Bruto
+                </span>
+                <p className="mt-1 font-mono text-base font-black text-emerald-600 dark:text-emerald-400">
+                  R${' '}
+                  {Number(
+                    modalDetalhesUnificado.total_recebido ||
+                      Number(modalDetalhesUnificado.total_dinheiro_informado || 0) +
+                        Number(modalDetalhesUnificado.total_pix_declarado || 0) +
+                        Number(modalDetalhesUnificado.total_cartao_debito_declarado || 0) +
+                        Number(modalDetalhesUnificado.total_cartao_credito_declarado || 0) +
+                        Number(modalDetalhesUnificado.total_outros_declarado || 0)
+                  ).toFixed(2)}
+                </p>
+                <span className="text-[10px] text-emerald-700/60 dark:text-emerald-400/60">
+                  Dinheiro + Pix + Cartões
+                </span>
+              </div>
+
+              <div className="rounded-2xl border border-rose-300/80 bg-rose-50/60 dark:bg-rose-950/30 p-3.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                  Taxas Financeiras
+                </span>
+                <p className="mt-1 font-mono text-base font-black text-rose-600 dark:text-rose-400">
+                  R$ {Number(modalDetalhesUnificado.total_taxas_operacionais || 0).toFixed(2)}
+                </p>
+                <span className="text-[10px] text-rose-700/60 dark:text-rose-400/60">
+                  {(() => {
+                    const dig =
+                      Number(modalDetalhesUnificado.total_pix_declarado || 0) +
+                      Number(modalDetalhesUnificado.total_cartao_debito_declarado || 0) +
+                      Number(modalDetalhesUnificado.total_cartao_credito_declarado || 0);
+                    const tx = Number(modalDetalhesUnificado.total_taxas_operacionais || 0);
+                    return dig > 0
+                      ? `${((tx / dig) * 100).toFixed(2)}% sobre digitais`
+                      : 'Taxa operacional';
+                  })()}
+                </span>
+              </div>
+
+              <div className="rounded-2xl border border-purple-300/80 bg-purple-50/60 dark:bg-purple-950/30 p-3.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-800 dark:text-purple-300">
+                  Líquido em Conta
+                </span>
+                <p className="mt-1 font-mono text-base font-black text-purple-700 dark:text-purple-300">
+                  R${' '}
+                  {Number(
+                    modalDetalhesUnificado.total_liquido_apos_taxas ||
+                      (Number(modalDetalhesUnificado.total_recebido || 0) ||
+                        Number(modalDetalhesUnificado.total_dinheiro_informado || 0) +
+                          Number(modalDetalhesUnificado.total_pix_declarado || 0) +
+                          Number(modalDetalhesUnificado.total_cartao_debito_declarado || 0) +
+                          Number(modalDetalhesUnificado.total_cartao_credito_declarado || 0)) -
+                        Number(modalDetalhesUnificado.total_taxas_operacionais || 0)
+                  ).toFixed(2)}
+                </p>
+                <span className="text-[10px] text-purple-700/60 dark:text-purple-300/60">
+                  Após descontar taxas
+                </span>
+              </div>
+            </div>
+
+            {/* Raio-X Detalhado dos Fundos */}
+            <div className="rounded-2xl border border-primary/15 bg-background p-4 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-text/70 flex items-center gap-1.5">
+                <DollarSign className="h-4 w-4 text-primary" /> Raio-X dos Meios de Pagamento Conciliados
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                {/* Coluna 1: Caixa Físico */}
+                <div className="p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/30 dark:bg-emerald-950/20 space-y-2">
+                  <span className="font-extrabold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5 text-xs">
+                    <Banknote className="h-4 w-4 text-emerald-600" /> Caixa Físico (Dinheiro em Gaveta)
+                  </span>
+                  <div className="flex justify-between items-center py-1 border-b border-emerald-200/50 dark:border-emerald-800/50">
+                    <span className="text-text/70">Total Recolhido em Dinheiro:</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                      R$ {Number(modalDetalhesUnificado.total_dinheiro_informado || 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-text/50">
+                    Soma do dinheiro físico recolhido nas gavetas de todos os atendentes/turnos do dia.
+                  </p>
+                </div>
+
+                {/* Coluna 2: Operações Digitais */}
+                <div className="p-3.5 rounded-xl border border-purple-200 dark:border-purple-900 bg-purple-50/30 dark:bg-purple-950/20 space-y-2">
+                  <span className="font-extrabold text-purple-900 dark:text-purple-200 flex items-center gap-1.5 text-xs">
+                    <CreditCard className="h-4 w-4 text-purple-600" /> Operações Digitais (Extratos & Maquininhas)
+                  </span>
+
+                  <div className="flex justify-between items-center py-0.5 border-b border-purple-200/50 dark:border-purple-800/50">
+                    <span className="text-text/70 flex items-center gap-1">
+                      <QrCode className="h-3.5 w-3.5 text-cyan-600" /> Pix (Extrato Bancário):
+                    </span>
+                    <span className="font-mono font-bold text-cyan-700 dark:text-cyan-400">
+                      R$ {Number(modalDetalhesUnificado.total_pix_declarado || 0).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-0.5 border-b border-purple-200/50 dark:border-purple-800/50">
+                    <span className="text-text/70">Cartão de Débito:</span>
+                    <span className="font-mono font-bold text-purple-700 dark:text-purple-300">
+                      R$ {Number(modalDetalhesUnificado.total_cartao_debito_declarado || 0).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-0.5 border-b border-purple-200/50 dark:border-purple-800/50">
+                    <span className="text-text/70">Cartão de Crédito:</span>
+                    <span className="font-mono font-bold text-purple-700 dark:text-purple-300">
+                      R$ {Number(modalDetalhesUnificado.total_cartao_credito_declarado || 0).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-0.5 font-bold border-b border-purple-300 dark:border-purple-700">
+                    <span className="text-text/90">Subtotal Cartões (Débito + Crédito):</span>
+                    <span className="font-mono text-purple-800 dark:text-purple-200">
+                      R${' '}
+                      {(
+                        Number(modalDetalhesUnificado.total_cartao_debito_declarado || 0) +
+                        Number(modalDetalhesUnificado.total_cartao_credito_declarado || 0)
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-0.5 text-rose-600 dark:text-rose-400 font-bold">
+                    <span>Taxas Financeiras Descontadas:</span>
+                    <span className="font-mono">
+                      −R$ {Number(modalDetalhesUnificado.total_taxas_operacionais || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Resultado Comercial / Diferença de Caixa */}
+              <div className="p-3 rounded-xl border border-primary/10 bg-primary/5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {Math.abs(Number(modalDetalhesUnificado.diferenca_caixa || 0)) < 0.01 ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0" />
+                  )}
+                  <div>
+                    <span className="font-bold text-text/80 text-xs">
+                      Resultado da Conciliação de Caixa:
+                    </span>
+                    <p className="text-[11px] text-text/50">
+                      {Math.abs(Number(modalDetalhesUnificado.diferenca_caixa || 0)) < 0.01
+                        ? 'Caixa 100% conferido sem nenhuma divergência entre vendas apuradas e recebimentos brutos.'
+                        : `Divergência detectada entre faturamento apurado e valores recebidos.`}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`font-mono font-black text-sm px-2.5 py-1 rounded-lg ${
+                    Math.abs(Number(modalDetalhesUnificado.diferenca_caixa || 0)) < 0.01
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                      : Number(modalDetalhesUnificado.diferenca_caixa || 0) < 0
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                        : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                  }`}
+                >
+                  {Number(modalDetalhesUnificado.diferenca_caixa || 0) < 0
+                    ? `Furo: -R$ ${Math.abs(Number(modalDetalhesUnificado.diferenca_caixa || 0)).toFixed(2)}`
+                    : Number(modalDetalhesUnificado.diferenca_caixa || 0) > 0
+                      ? `Sobra: +R$ ${Number(modalDetalhesUnificado.diferenca_caixa || 0).toFixed(2)}`
+                      : 'R$ 0,00 (Exato)'}
+                </span>
+              </div>
+
+              {/* Justificativa / Observações se houver */}
+              {modalDetalhesUnificado.justificativa && (
+                <div className="p-3 rounded-xl border border-amber-300/80 bg-amber-50/60 dark:bg-amber-950/30 text-xs">
+                  <span className="font-bold text-amber-900 dark:text-amber-200 block mb-1">
+                    Observações / Justificativa da Auditoria:
+                  </span>
+                  <p className="text-amber-800 dark:text-amber-300 font-medium">
+                    {modalDetalhesUnificado.justificativa}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Turnos / PDVs Vinculados */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-text/70 flex items-center justify-between">
+                <span>PDVs e Turnos Participantes ({modalDetalhesUnificado.turnos?.length || 0})</span>
+              </h4>
+
+              {carregandoDetalhesUnificado ? (
+                <div className="p-6 text-center text-xs text-text/50">
+                  Carregando detalhes dos turnos...
+                </div>
+              ) : !modalDetalhesUnificado.turnos || modalDetalhesUnificado.turnos.length === 0 ? (
+                <div className="p-4 text-center text-xs text-text/50 border border-primary/10 rounded-xl">
+                  Nenhum registro de turno vinculado diretamente localizado.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-primary/10">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-primary/5 text-text/50 font-bold border-b border-primary/10">
+                      <tr>
+                        <th className="p-2.5">PDV / Loja</th>
+                        <th className="p-2.5">Turno</th>
+                        <th className="p-2.5">Atendente</th>
+                        <th className="p-2.5 text-center">Env / Sob / Vend</th>
+                        <th className="p-2.5 text-right">Fat. Esperado</th>
+                        <th className="p-2.5 text-right text-emerald-600">Dinheiro Gaveta</th>
+                        <th className="p-2.5 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-primary/5">
+                      {modalDetalhesUnificado.turnos.map((t: any) => {
+                        const vend = Math.max(
+                          0,
+                          (t.qtd_total_enviada || 0) - (t.qtd_total_retorno || 0)
+                        );
+                        return (
+                          <tr key={t.id} className="hover:bg-primary/5">
+                            <td className="p-2.5 font-bold text-text/80">{t.locais?.nome || 'PDV'}</td>
+                            <td className="p-2.5 capitalize text-text/60">{t.turno || 'Integral'}</td>
+                            <td className="p-2.5 text-text/60">{t.vendedor_nome || '—'}</td>
+                            <td className="p-2.5 text-center font-mono">
+                              <span className="text-text/40">{t.qtd_total_enviada || 0}</span> /{' '}
+                              <span className="text-amber-600">{t.qtd_total_retorno || 0}</span> /{' '}
+                              <span className="font-bold text-primary">{vend}</span>
+                            </td>
+                            <td className="p-2.5 text-right font-mono font-bold text-text/80">
+                              R$ {Number(t.faturamento_liquido_esperado || 0).toFixed(2)}
+                            </td>
+                            <td className="p-2.5 text-right font-mono font-bold text-emerald-600">
+                              R$ {Number(t.valor_dinheiro_gaveta || 0).toFixed(2)}
+                            </td>
+                            <td className="p-2.5 text-center">
+                              <span className="rounded-full px-2 py-0.5 text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 capitalize">
+                                {t.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé com Ações */}
+            <div className="flex items-center justify-end gap-2 border-t border-primary/10 pt-4">
+              <button
+                type="button"
+                onClick={() => setModalDetalhesUnificado(null)}
+                className="rounded-xl border border-primary/20 bg-background px-4 py-2 text-xs font-bold text-text/70 hover:bg-primary/10 hover:text-text transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

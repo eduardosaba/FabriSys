@@ -22,6 +22,10 @@ import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import KPIsMetas from '@/components/dashboard/KPIsMetas';
 import {
+  calcularTaxaPercentualEquivalente,
+  classificarResultadoCaixa,
+} from '@/lib/services/fechamento-pdv-calc';
+import {
   WIDGET_REGISTRY as WIDGETS,
   DEFAULT_LAYOUT_BY_ROLE as DEFAULT_BY_ROLE,
 } from '@/components/dashboard';
@@ -125,14 +129,24 @@ export default function DashboardPage() {
   // --- ESTADOS DE DADOS (KPIs) ---
   const [kpis, setKpis] = useState({
     faturamentoEstimado: 0,
+    vendasBrutas: 0,
+    vendasLiquidas: 0,
+    perdasDoacoes: 0,
     gastoCompras: 0,
     ordensAtivas: 0,
     itensCriticos: 0,
     mercadoriasCirculacao: 0,
     recebimentoBruto: 0,
     taxasOperacionais: 0,
+    taxasPercentualFormatado: '0,00%',
     recebimentoLiquido: 0,
     diferencaCaixa: 0,
+    resultadoCaixa: {
+      status: 'conferido' as 'conferido' | 'furo' | 'sobra',
+      rotulo: 'Caixa Conferido',
+      diferenca_absoluta: 0,
+      is_perfeito: true,
+    },
   });
 
   // KPI Meta
@@ -333,7 +347,9 @@ export default function DashboardPage() {
         }
       }
 
-      let totalFat = 0;
+      let totalVendasBrutas = 0;
+      let totalPerdasDoacoes = 0;
+      let totalVendasLiquidas = 0;
       let totalMercadoriasCirculacao = 0;
       let totalDinheiroRecebido = 0;
       let totalPixRecebido = 0;
@@ -343,10 +359,6 @@ export default function DashboardPage() {
 
       if (remessas && remessas.length > 0) {
         remessas.forEach((reg: any) => {
-          // Registros históricos legados: 36 registros (17 principais com totais consolidados e 19 secundários com faturamento zerado).
-          // As grades de itens (itens_grade) são individuais por turno e somam exatamente o faturamento apurado.
-          // Os valores financeiros digitais dos secundários já estão zerados no banco, garantindo ausência de duplicidade.
-
           // Apenas registros com status 'auditado' ou 'conferido' geram faturamento realizado e vendas reais
           const isAuditado = reg.status === 'auditado' || reg.status === 'conferido';
 
@@ -364,17 +376,21 @@ export default function DashboardPage() {
             return;
           }
 
+          let regBruto = 0;
+          let regPerdas = Number(reg.total_descontos_perdas || 0);
+
           // Se tiver grade de itens detalhada e conferida
           if (Array.isArray(reg.itens_grade) && reg.itens_grade.length > 0) {
             reg.itens_grade.forEach((item: any) => {
               const env = Number(item.qtd_sobra_anterior || 0) + Number(item.qtd_enviada || 0);
               const temSobra = item.qtd_retorno !== null && item.qtd_retorno !== undefined;
               const ret = temSobra ? Number(item.qtd_retorno) : 0;
-              const vend = Math.max(0, env - ret);
+              const perdasItem = Number(item.qtd_perda || 0);
+              const vend = Math.max(0, env - ret - perdasItem);
               const preco = Number(item.preco_unitario || item.preco_venda || 0);
               const subtotal = vend * preco;
 
-              totalFat += subtotal;
+              regBruto += subtotal;
 
               const nome = item.nome_produto || item.nome || item.produto_nome || 'Desconhecido';
               if (!mapaProdutos[nome]) mapaProdutos[nome] = { nome, quantidade: 0, faturamento: 0 };
@@ -383,14 +399,20 @@ export default function DashboardPage() {
             });
           } else {
             // Se for um fechamento geral consolidado
-            const fatReg =
+            regBruto =
+              Number(reg.faturamento_bruto_teorico || 0) ||
               Number(reg.faturamento_liquido_esperado || 0) ||
               Number(reg.valor_dinheiro_gaveta || 0) +
                 Number(reg.valor_pix_declarado || 0) +
-                Number(reg.valor_cartao_declarado || 0) ||
-              Number(reg.faturamento_bruto_teorico || 0);
-            totalFat += fatReg;
+                Number(reg.valor_cartao_declarado || 0);
           }
+
+          totalVendasBrutas += regBruto;
+          totalPerdasDoacoes += regPerdas;
+          const regLiquido = Number(
+            reg.faturamento_liquido_esperado || Math.max(0, regBruto - regPerdas)
+          );
+          totalVendasLiquidas += regLiquido;
 
           // Acumula valores financeiros confirmados da auditoria
           totalDinheiroRecebido += Number(reg.valor_dinheiro_gaveta || 0);
@@ -438,7 +460,12 @@ export default function DashboardPage() {
         0,
         Math.round((totalRecebidoBruto - totalTaxasFinanceiras) * 100) / 100
       );
-      const diferencaCaixa = Math.round((totalRecebidoBruto - totalFat) * 100) / 100;
+      const taxaPctInfo = calcularTaxaPercentualEquivalente(
+        totalTaxasFinanceiras,
+        totalPixRecebido + totalCartaoRecebido
+      );
+      const resultadoCaixa = classificarResultadoCaixa(totalRecebidoBruto, totalVendasLiquidas);
+      const diferencaCaixa = Math.round((totalRecebidoBruto - totalVendasLiquidas) * 100) / 100;
 
       const lista = Object.values(mapaProdutos);
       setRankingQtd([...lista].sort((a, b) => b.quantidade - a.quantidade).slice(0, 5));
@@ -468,15 +495,20 @@ export default function DashboardPage() {
         .lt('estoque_atual', 5);
 
       setKpis({
-        faturamentoEstimado: totalFat,
+        faturamentoEstimado: totalVendasLiquidas,
+        vendasBrutas: totalVendasBrutas,
+        vendasLiquidas: totalVendasLiquidas,
+        perdasDoacoes: totalPerdasDoacoes,
         gastoCompras: totalCompras,
         ordensAtivas: countOrdens || 0,
         itensCriticos: countCriticos || 0,
         mercadoriasCirculacao: totalMercadoriasCirculacao,
         recebimentoBruto: totalRecebidoBruto,
         taxasOperacionais: totalTaxasFinanceiras,
+        taxasPercentualFormatado: taxaPctInfo.formatado,
         recebimentoLiquido: totalRecebidoLiquido,
         diferencaCaixa: diferencaCaixa,
+        resultadoCaixa: resultadoCaixa,
       });
 
       // Carregar Meta
@@ -819,30 +851,41 @@ export default function DashboardPage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
-          {/* 1. Faturamento Vendas */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 text-xs">
+          {/* 1. Vendas Brutas */}
           <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block">
-              Vendas Auditadas
+              Vendas Brutas
             </span>
             <span className="font-mono font-black text-base text-slate-900 dark:text-slate-100">
-              R$ {kpis.faturamentoEstimado.toFixed(2)}
+              R$ {kpis.vendasBrutas.toFixed(2)}
             </span>
-            <span className="text-[9px] text-slate-400 block mt-0.5">Dias auditados</span>
+            <span className="text-[9px] text-slate-400 block mt-0.5">Apuração física total</span>
           </div>
 
-          {/* 2. Mercadorias em Circulação */}
-          <div className="bg-amber-50/50 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-200 dark:border-amber-800/60">
-            <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase block">
-              Em Aberto / Circulação
+          {/* 2. Vendas Líquidas Comerciais */}
+          <div className="bg-indigo-50/50 dark:bg-indigo-950/20 p-3 rounded-xl border border-indigo-200 dark:border-indigo-800/60">
+            <span className="text-[10px] text-indigo-700 dark:text-indigo-400 font-bold uppercase block">
+              Vendas Líquidas
             </span>
-            <span className="font-mono font-black text-base text-amber-800 dark:text-amber-300">
-              R$ {kpis.mercadoriasCirculacao.toFixed(2)}
+            <span className="font-mono font-black text-base text-indigo-900 dark:text-indigo-200">
+              R$ {kpis.vendasLiquidas.toFixed(2)}
             </span>
-            <span className="text-[9px] text-amber-600/70 block mt-0.5">Aguardando auditoria</span>
+            <span className="text-[9px] text-indigo-600/70 block mt-0.5">Comercial auditado</span>
           </div>
 
-          {/* 3. Recebimentos Brutos */}
+          {/* 3. Perdas / Doações / Avarias */}
+          <div className="bg-orange-50/50 dark:bg-orange-950/20 p-3 rounded-xl border border-orange-200 dark:border-orange-800/60">
+            <span className="text-[10px] text-orange-700 dark:text-orange-400 font-bold uppercase block">
+              Perdas / Doações
+            </span>
+            <span className="font-mono font-black text-base text-orange-800 dark:text-orange-300">
+              R$ {kpis.perdasDoacoes.toFixed(2)}
+            </span>
+            <span className="text-[9px] text-orange-600/70 block mt-0.5">Saídas não comerciais</span>
+          </div>
+
+          {/* 4. Recebido Bruto */}
           <div className="bg-cyan-50/50 dark:bg-cyan-950/20 p-3 rounded-xl border border-cyan-200 dark:border-cyan-800/60">
             <span className="text-[10px] text-cyan-700 dark:text-cyan-400 font-bold uppercase block">
               Recebido Bruto
@@ -855,52 +898,61 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          {/* 4. Taxas Financeiras */}
+          {/* 5. Taxas Financeiras */}
           <div className="bg-rose-50/50 dark:bg-rose-950/20 p-3 rounded-xl border border-rose-200 dark:border-rose-800/60">
-            <span className="text-[10px] text-rose-700 dark:text-rose-400 font-bold uppercase block">
-              Taxas Financeiras
-            </span>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] text-rose-700 dark:text-rose-400 font-bold uppercase block">
+                Taxas Financeiras
+              </span>
+              <span className="text-[9px] font-mono font-bold text-rose-600 bg-rose-100 dark:bg-rose-900/40 px-1 rounded">
+                {kpis.taxasPercentualFormatado}
+              </span>
+            </div>
             <span className="font-mono font-black text-base text-rose-800 dark:text-rose-300">
               -R$ {kpis.taxasOperacionais.toFixed(2)}
             </span>
             <span className="text-[9px] text-rose-600/70 block mt-0.5">
-              Encargos de maquininhas
+              Encargos operadoras
             </span>
           </div>
 
-          {/* 5. Recebimento Líquido */}
+          {/* 6. Líquido Após Taxas */}
           <div className="bg-emerald-50/50 dark:bg-emerald-950/20 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800/60">
             <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase block">
-              Líquido em Conta
+              Líquido Após Taxas
             </span>
             <span className="font-mono font-black text-base text-emerald-800 dark:text-emerald-300">
               R$ {kpis.recebimentoLiquido.toFixed(2)}
             </span>
-            <span className="text-[9px] text-emerald-600/70 block mt-0.5">Bruto − Taxas</span>
+            <span className="text-[9px] text-emerald-600/70 block mt-0.5">Recebido bruto − Taxas</span>
           </div>
 
-          {/* 6. Diferença de Caixa */}
+          {/* 7. Resultado de Caixa */}
           <div
             className={`p-3 rounded-xl border ${
-              Math.abs(kpis.diferencaCaixa) > 0.05
-                ? kpis.diferencaCaixa < 0
+              kpis.resultadoCaixa.is_perfeito
+                ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                : kpis.resultadoCaixa.status === 'furo'
                   ? 'bg-rose-100/60 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
-                  : 'bg-emerald-100/60 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
-                : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                  : 'bg-amber-100/60 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
             }`}
           >
             <span className="text-[10px] font-bold uppercase block opacity-80">
-              Diferença Caixa
+              Resultado de Caixa
             </span>
-            <span className="font-mono font-black text-base">
-              {kpis.diferencaCaixa < 0
-                ? `-R$ ${Math.abs(kpis.diferencaCaixa).toFixed(2)}`
-                : kpis.diferencaCaixa > 0
-                  ? `+R$ ${kpis.diferencaCaixa.toFixed(2)}`
-                  : 'R$ 0,00'}
+            <span className="font-mono font-black text-base block">
+              {kpis.resultadoCaixa.is_perfeito
+                ? 'Caixa Conferido'
+                : kpis.resultadoCaixa.status === 'furo'
+                  ? `Furo: R$ ${kpis.resultadoCaixa.diferenca_absoluta.toFixed(2)}`
+                  : `Sobra: R$ ${kpis.resultadoCaixa.diferenca_absoluta.toFixed(2)}`}
             </span>
             <span className="text-[9px] opacity-70 block mt-0.5">
-              {Math.abs(kpis.diferencaCaixa) <= 0.05 ? 'Caixa batido' : 'Diferença comercial'}
+              {kpis.resultadoCaixa.is_perfeito
+                ? '100% conferido com vendas'
+                : kpis.resultadoCaixa.status === 'furo'
+                  ? 'Não reduz faturamento'
+                  : 'Não aumenta faturamento'}
             </span>
           </div>
         </div>

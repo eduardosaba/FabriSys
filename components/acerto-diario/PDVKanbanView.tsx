@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Truck,
   Trash2,
+  Unlock,
   X,
   LayoutGrid,
   AlignJustify,
@@ -46,6 +47,8 @@ import ReciboEModaDetalhamentoModal, { ReciboRegistroData } from './ReciboEModaD
 import {
   apurarFechamentoUnificado,
   calcularItemIndividual,
+  calcularTaxaPercentualEquivalente,
+  classificarResultadoCaixa,
   ItemMovimentacaoPDV,
   TurnoFechamentoInput,
 } from '@/lib/services/fechamento-pdv-calc';
@@ -102,7 +105,6 @@ interface RemessaKanban {
   valor_pix_declarado: number;
   valor_cartao_declarado: number;
   taxa_cartao_reais?: number;
-  taxa_cartao_percentual?: number;
   diferenca_auditoria: number;
   observacoes?: string | null;
   status: string;
@@ -240,8 +242,8 @@ function KanbanCard({
   const faturamento = isAberto
     ? 0
     : Number(registro.faturamento_liquido_esperado) ||
-      Number(registro.faturamento_bruto_teorico) ||
-      dinheiro + pix + cartao;
+    Number(registro.faturamento_bruto_teorico) ||
+    dinheiro + pix + cartao;
   const taxaSobra = isAberto ? 0 : calcTaxaSobra(enviado, retorno);
   const caixaBatido = Math.abs(faturamento - (dinheiro + pix + cartao)) < 1;
 
@@ -349,13 +351,12 @@ function KanbanCard({
               </span>
             )}
             <span
-              className={`font-mono font-bold ${
-                taxaSobra > 30
+              className={`font-mono font-bold ${taxaSobra > 30
                   ? 'text-rose-600 dark:text-rose-400'
                   : taxaSobra > 15
                     ? 'text-amber-600 dark:text-amber-400'
                     : 'text-emerald-600 dark:text-emerald-400'
-              }`}
+                }`}
             >
               {taxaSobra.toFixed(1)}% sobra
             </span>
@@ -408,9 +409,8 @@ function KanbanCard({
             <button
               type="button"
               onClick={onAction}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-xs font-bold transition-all active:scale-[0.97] ${
-                actionColor || 'bg-primary text-white hover:opacity-90'
-              }`}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-xs font-bold transition-all active:scale-[0.97] ${actionColor || 'bg-primary text-white hover:opacity-90'
+                }`}
             >
               {ActionIcon && <ActionIcon className="h-4 w-4 shrink-0" />}
               {actionLabel}
@@ -729,11 +729,10 @@ function RegistrarSobrasModal({
                             )
                           );
                         }}
-                        className={`w-18 rounded-lg border px-2 py-1 text-center text-sm font-mono font-bold outline-none focus:ring-2 ${
-                          item.qtd_retorno === null || item.qtd_retorno === undefined
+                        className={`w-18 rounded-lg border px-2 py-1 text-center text-sm font-mono font-bold outline-none focus:ring-2 ${item.qtd_retorno === null || item.qtd_retorno === undefined
                             ? 'border-amber-400 bg-amber-100/50 text-amber-900 placeholder:text-amber-500 focus:ring-amber-400'
                             : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 focus:ring-emerald-400'
-                        }`}
+                          }`}
                       />
                     </div>
                   </div>
@@ -940,13 +939,12 @@ function LancarPixCartaoModal({
           </div>
 
           {/* Conciliação de Caixa */}
-          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
-            caixaBatido
+          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${caixaBatido
               ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
               : diferencaCaixa < 0
                 ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
                 : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
-          }`}>
+            }`}>
             <span>{caixaBatido ? '✓ Caixa 100% Batido' : diferencaCaixa < 0 ? '⚠ Quebra de Caixa / Falta' : '⚠ Sobra no Caixa'}</span>
             <span className="font-mono font-bold">
               {diferencaCaixa === 0 ? 'R$ 0,00' : `${diferencaCaixa > 0 ? '+' : ''}R$ ${diferencaCaixa.toFixed(2)}`}
@@ -973,8 +971,6 @@ function LancarPixCartaoModal({
         valor_dinheiro_gaveta: valorDinheiro,
         valor_pix_declarado: valorPix,
         valor_cartao_declarado: valorCartao,
-        taxa_cartao_reais: taxaCartaoReais,
-        taxa_cartao_percentual: Number(taxaCartaoPercentual.toFixed(2)),
         pix_cartao_esperado: pixCartaoEsperado,
         diferenca_auditoria: diferencaCaixa,
         observacoes: justificativa
@@ -1128,13 +1124,12 @@ function LancarPixCartaoModal({
               </span>
             </div>
             <div
-              className={`flex justify-between font-bold pt-1 border-t border-slate-700 ${
-                diferencaDigital < -0.05
+              className={`flex justify-between font-bold pt-1 border-t border-slate-700 ${diferencaDigital < -0.05
                   ? 'text-rose-400'
                   : diferencaDigital > 0.05
                     ? 'text-emerald-400'
                     : 'text-cyan-300'
-              }`}
+                }`}
             >
               <span>Diferença Digital:</span>
               <span className="font-mono">
@@ -1143,9 +1138,8 @@ function LancarPixCartaoModal({
             </div>
             {Math.abs(diferencaCaixa) > 0.05 && (
               <div
-                className={`flex justify-between font-bold pt-1 border-t border-slate-700 ${
-                  diferencaCaixa < 0 ? 'text-rose-400' : 'text-emerald-400'
-                }`}
+                className={`flex justify-between font-bold pt-1 border-t border-slate-700 ${diferencaCaixa < 0 ? 'text-rose-400' : 'text-emerald-400'
+                  }`}
               >
                 <span>{diferencaCaixa < 0 ? 'Furo de Caixa:' : 'Sobra no Caixa:'}</span>
                 <span className="font-mono">R$ {Math.abs(diferencaCaixa).toFixed(2)}</span>
@@ -1457,13 +1451,11 @@ function NovoEnvioModal({
                   key={pdv.id}
                   type="button"
                   onClick={() => setLocalId(pdv.id)}
-                  className={`flex flex-col items-center justify-center rounded-xl border overflow-hidden transition-all ${
-                    pdv.logo_url ? 'p-0' : 'p-2 gap-1.5'
-                  } ${
-                    localId === pdv.id
+                  className={`flex flex-col items-center justify-center rounded-xl border overflow-hidden transition-all ${pdv.logo_url ? 'p-0' : 'p-2 gap-1.5'
+                    } ${localId === pdv.id
                       ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/30'
                       : 'border-primary/15 bg-background text-text/70 hover:border-primary/40'
-                  }`}
+                    }`}
                 >
                   {pdv.logo_url ? (
                     <img
@@ -1674,6 +1666,8 @@ function PDVGroupCard({
   onAction,
   onOpenRecibo,
   onRevert,
+  onReabrirAuditoria,
+  fechamentoUnificado,
 }: {
   local: LocalPDV;
   records: RemessaKanban[];
@@ -1683,16 +1677,35 @@ function PDVGroupCard({
   onAction?: () => void;
   onOpenRecibo?: (data: ReciboRegistroData) => void;
   onRevert?: () => void;
+  onReabrirAuditoria?: () => void;
+  fechamentoUnificado?: any;
 }) {
   const [expanded, setExpanded] = useState(false);
   const pdvNome = local.nome || 'PDV';
   const logoUrl = local.logo_url;
   const hasLogo = Boolean(logoUrl);
 
+  const isAuditado = records.some((r) => r.status === 'auditado' || r.status === 'conferido');
+  const isUnificado =
+    records.some((r) => r.fechamento_unificado_id || r.tipo_fechamento === 'unificado') ||
+    Boolean(fechamentoUnificado && isAuditado);
+
   const dinheiro = records.reduce((acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0), 0);
-  const pix = records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
-  const cartao = records.reduce((acc, r) => acc + (Number(r.valor_cartao_declarado) || 0), 0);
-  const taxaReais = records.reduce((acc, r) => acc + (Number(r.taxa_cartao_reais) || 0), 0);
+  const pix =
+    isUnificado && fechamentoUnificado
+      ? Number(fechamentoUnificado.total_pix_declarado || 0)
+      : records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
+  const cartao =
+    isUnificado && fechamentoUnificado
+      ? Number(fechamentoUnificado.total_cartao_debito_declarado || 0) +
+      Number(fechamentoUnificado.total_cartao_credito_declarado || 0) +
+      Number(fechamentoUnificado.total_outros_declarado || 0)
+      : records.reduce((acc, r) => acc + (Number(r.valor_cartao_declarado) || 0), 0);
+  const taxaReais =
+    isUnificado && fechamentoUnificado
+      ? Number(fechamentoUnificado.total_taxas_operacionais || 0)
+      : records.reduce((acc, r) => acc + (Number(r.taxa_cartao_reais) || 0), 0);
+
   const faturamento = records.reduce((acc, r) => {
     if (r.itens_grade && Array.isArray(r.itens_grade) && r.itens_grade.length > 0) {
       const somaItens = r.itens_grade.reduce((sum, it) => {
@@ -1709,8 +1722,13 @@ function PDVGroupCard({
     );
   }, 0);
 
-  const dif = records.reduce((acc, r) => acc + (Number(r.diferenca_auditoria) || 0), 0);
-  const isAuditado = records.some((r) => r.status === 'auditado' || r.status === 'conferido');
+  const dif =
+    isUnificado && fechamentoUnificado
+      ? Number(fechamentoUnificado.diferenca_caixa || 0)
+      : records.reduce((acc, r) => acc + (Number(r.diferenca_auditoria) || 0), 0);
+
+  const totalRecebido = dinheiro + pix + cartao;
+  const totalLiquido = totalRecebido - taxaReais;
 
   const handleOpenReciboData = () => {
     if (!onOpenRecibo) return;
@@ -1722,8 +1740,8 @@ function PDVGroupCard({
       turno: records.map((r) => r.turno).join(' + '),
       vendedor_nome: primaryRecord?.vendedor_nome || undefined,
       pdvNome: pdvNome,
-      status: primaryRecord?.status || 'encerrado',
-      tipo_fechamento: primaryRecord?.tipo_fechamento,
+      status: primaryRecord?.status || (isAuditado ? 'auditado' : 'encerrado'),
+      tipo_fechamento: isUnificado ? 'unificado' : primaryRecord?.tipo_fechamento,
       valor_dinheiro_gaveta: dinheiro,
       valor_pix_declarado: pix,
       valor_cartao_declarado: cartao,
@@ -1731,7 +1749,7 @@ function PDVGroupCard({
       faturamento_bruto_teorico: faturamento,
       faturamento_liquido_esperado: faturamento,
       diferenca_auditoria: dif,
-      observacoes: primaryRecord?.observacoes || undefined,
+      observacoes: primaryRecord?.observacoes || fechamentoUnificado?.justificativa || undefined,
       itens_grade: gradeItensConsolidada,
     };
     onOpenRecibo(reciboData);
@@ -1752,8 +1770,15 @@ function PDVGroupCard({
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold text-text/90 truncate">{pdvNome}</p>
-          <div className="flex items-center gap-2 text-[10px] text-text/50 font-medium">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-xs font-bold text-text/90 truncate">{pdvNome}</p>
+            {isUnificado && (
+              <span className="rounded bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[9px] font-extrabold text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                🟣 Unificado
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-text/50 font-medium mt-0.5">
             <span className="inline-flex items-center gap-0.5">
               <Layers className="h-3 w-3" />
               {records.length} turno(s)
@@ -1766,40 +1791,59 @@ function PDVGroupCard({
         <div className="rounded-xl bg-slate-900 dark:bg-slate-950 p-2.5 space-y-1.5 text-[11px]">
           <div className="flex justify-between text-slate-300">
             <span className="flex items-center gap-1">
-              <Banknote className="h-3 w-3 text-emerald-400" /> Dinheiro Decl.
+              <Banknote className="h-3 w-3 text-emerald-400" /> Dinheiro Gaveta:
             </span>
             <span className="font-mono font-bold text-emerald-400">R$ {dinheiro.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-slate-300">
             <span className="flex items-center gap-1">
-              <Smartphone className="h-3 w-3 text-purple-400" /> Pix Decl.
+              <Smartphone className="h-3 w-3 text-purple-400" /> Pix {isUnificado ? '(Unificado)' : 'Decl.'}:
             </span>
             <span className="font-mono font-bold text-purple-400">R$ {pix.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-slate-300">
             <span className="flex items-center gap-1">
-              <CreditCard className="h-3 w-3 text-cyan-400" /> Cartão Decl.
+              <CreditCard className="h-3 w-3 text-cyan-400" /> Cartão {isUnificado ? '(Unificado)' : 'Decl.'}:
             </span>
             <span className="font-mono font-bold text-cyan-400">R$ {cartao.toFixed(2)}</span>
           </div>
           {taxaReais > 0 && (
-            <div className="flex justify-between text-amber-300 font-bold border-t border-slate-800 pt-1">
-              <span>Taxa Cartão:</span>
+            <div className="flex justify-between text-rose-300 font-bold border-t border-slate-800 pt-1">
+              <span>Taxas Operacionais:</span>
               <span className="font-mono">-R$ {taxaReais.toFixed(2)}</span>
             </div>
           )}
+          {isAuditado && (
+            <div className="flex justify-between text-emerald-300 font-bold border-t border-slate-800 pt-1">
+              <span>Líquido em Conta:</span>
+              <span className="font-mono">R$ {totalLiquido.toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex justify-between border-t border-slate-700 pt-1.5 text-white">
-            <span className="font-bold">Faturamento Total</span>
+            <span className="font-bold">Faturamento Total:</span>
             <span className="font-mono font-black text-primary">R$ {faturamento.toFixed(2)}</span>
           </div>
         </div>
-        {isAuditado && dif !== 0 && (
-          <div
-            className={`flex items-center justify-between gap-2 text-[10px] px-2 py-1.5 rounded-lg border ${dif < 0 ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}
-          >
-            <span className="font-bold">Diferença de Caixa:</span>
-            <span className="font-mono font-black">R$ {dif.toFixed(2)}</span>
-          </div>
+
+        {isAuditado && (
+          dif !== 0 ? (
+            <div
+              className={`flex items-center justify-between gap-2 text-[10px] px-2 py-1.5 rounded-lg border ${dif < 0
+                  ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300'
+                  : 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300'
+                }`}
+            >
+              <span className="font-bold">{dif < 0 ? 'Furo de Caixa:' : 'Sobra de Caixa:'}</span>
+              <span className="font-mono font-black">R$ {dif.toFixed(2)}</span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between text-[10px] px-2 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold">
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Caixa 100% Conferido
+              </span>
+              <span className="font-mono">R$ 0,00</span>
+            </div>
+          )
         )}
 
         <button
@@ -1863,9 +1907,8 @@ function PDVGroupCard({
           <button
             type="button"
             onClick={onAction}
-            className={`flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-bold transition-all active:scale-[0.97] ${
-              actionColor || 'bg-primary text-white hover:opacity-90'
-            }`}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-bold transition-all active:scale-[0.97] ${actionColor || 'bg-primary text-white hover:opacity-90'
+              }`}
           >
             {ActionIcon && <ActionIcon className="h-4 w-4 shrink-0" />}
             {actionLabel}
@@ -1883,14 +1926,40 @@ function PDVGroupCard({
           </button>
         )}
 
-        <button
-          type="button"
-          onClick={handleOpenReciboData}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 transition-all active:scale-[0.97]"
-        >
-          <Eye className="h-3.5 w-3.5 text-primary shrink-0" />
-          Ver Detalhes / Recibo
-        </button>
+        {isAuditado && (
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={handleOpenReciboData}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2 text-xs font-bold shadow-xs transition-all active:scale-[0.97]"
+            >
+              <Eye className="h-3.5 w-3.5 shrink-0" />
+              Ver Fechamento Auditado
+            </button>
+
+            {onReabrirAuditoria && (
+              <button
+                type="button"
+                onClick={onReabrirAuditoria}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500/10 border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 py-1.5 text-xs font-bold transition-all active:scale-[0.97]"
+              >
+                <Unlock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                Reabrir / Editar
+              </button>
+            )}
+          </div>
+        )}
+
+        {!isAuditado && (
+          <button
+            type="button"
+            onClick={handleOpenReciboData}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 transition-all active:scale-[0.97]"
+          >
+            <Eye className="h-3.5 w-3.5 text-primary shrink-0" />
+            Ver Detalhes / Recibo
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1911,6 +1980,10 @@ function AuditarPDVModal({
   const confirmDialog = useConfirm();
   const pdvNome = local.nome;
   const [salvando, setSalvando] = useState(false);
+
+  const isUnificado = records.some(
+    (r) => r.tipo_fechamento === 'unificado' || Boolean(r.fechamento_unificado_id)
+  );
 
   const dinheiro = records.reduce((acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0), 0);
   const pixDeclarado = records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
@@ -1933,8 +2006,8 @@ function AuditarPDVModal({
   const qtdVendidaTotal = Math.max(0, qtdEnviadaTotal - qtdRetornoTotal);
   const taxaDevolucao = qtdEnviadaTotal > 0 ? (qtdRetornoTotal / qtdEnviadaTotal) * 100 : 0;
 
-  const totalRecebidoReal = dinheiro + pixReal + cartaoReal;
-  const diferenca = totalRecebidoReal - faturamento;
+  const totalRecebidoReal = isUnificado ? dinheiro : dinheiro + pixReal + cartaoReal;
+  const diferenca = isUnificado ? 0 : totalRecebidoReal - faturamento;
 
   const handleDevolver = async () => {
     const confirmou = await confirmDialog.confirm({
@@ -2009,13 +2082,12 @@ function AuditarPDVModal({
           </div>
 
           {/* Status Auditoria / Diferença */}
-          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
-            diferenca === 0
+          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${diferenca === 0
               ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
               : diferenca < 0
                 ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
                 : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
-          }`}>
+            }`}>
             <span>{diferenca === 0 ? '✓ Auditoria 100% Batida' : diferenca < 0 ? '⚠ Diferença Negativa / Falta' : '⚠ Sobra no Caixa'}</span>
             <span className="font-mono font-bold">
               {diferenca === 0 ? 'R$ 0,00' : `${diferenca > 0 ? '+' : ''}R$ ${diferenca.toFixed(2)}`}
@@ -2035,6 +2107,58 @@ function AuditarPDVModal({
       variant: diferenca < 0 ? 'danger' : 'info',
     });
     if (!confirmou) return;
+
+    if (isUnificado) {
+      setSalvando(true);
+      try {
+        const nowIso = new Date().toISOString();
+        for (const r of records) {
+          const obsAtual = r.observacoes || '';
+          const obsNova = justificativa
+            ? obsAtual
+              ? `${obsAtual}\nAuditoria: ${justificativa}`
+              : `Auditoria: ${justificativa}`
+            : obsAtual;
+
+          const { error: errRemessa } = await supabase
+            .from('remessas_cargas_pdv')
+            .update({
+              status: 'auditado',
+              diferenca_auditoria: 0,
+              observacoes: obsNova,
+              updated_at: nowIso,
+            })
+            .eq('id', r.id);
+          if (errRemessa) throw errRemessa;
+        }
+
+        toast({
+          title: 'PDV Auditado!',
+          description: `Mercadorias e dinheiro de gaveta de ${pdvNome} conferidos com sucesso.`,
+          variant: 'success',
+        });
+
+        const updatedRecords = records.map((r) => ({
+          ...r,
+          diferenca_auditoria: 0,
+          status: 'auditado',
+          observacoes: justificativa
+            ? r.observacoes
+              ? `${r.observacoes}\nAuditoria: ${justificativa}`
+              : `Auditoria: ${justificativa}`
+            : r.observacoes,
+          updated_at: nowIso,
+        }));
+
+        onSave(updatedRecords);
+        onClose();
+      } catch (err: any) {
+        toast({ title: 'Erro ao auditar', description: err.message, variant: 'error' });
+      } finally {
+        setSalvando(false);
+      }
+      return;
+    }
 
     setSalvando(true);
     try {
@@ -2185,46 +2309,60 @@ function AuditarPDVModal({
             </div>
           )}
 
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold text-purple-700 dark:text-purple-400 mb-1 block">
-                  Pix Extrato Bancário
-                </label>
-                <BRLCurrencyInput
-                  value={pixReal}
-                  onChange={(val) => setPixReal(val)}
-                  className="w-full rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20 px-3 py-2 font-mono text-sm font-bold text-purple-800 dark:text-purple-200 outline-none focus:ring-2 focus:ring-purple-400"
-                />
+          {isUnificado ? (
+            <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-3 space-y-1.5">
+              <div className="flex items-center gap-2 text-blue-800 dark:text-blue-300 font-bold text-xs">
+                <Layers className="h-4 w-4 shrink-0 text-blue-600" />
+                Valores digitais centralizados no fechamento unificado
               </div>
-              <div>
-                <label className="text-xs font-bold text-cyan-700 dark:text-cyan-400 mb-1 block">
-                  Cartão Maquininha
-                </label>
-                <BRLCurrencyInput
-                  value={cartaoReal}
-                  onChange={(val) => setCartaoReal(val)}
-                  className="w-full rounded-xl border border-cyan-300 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 px-3 py-2 font-mono text-sm font-bold text-cyan-800 dark:text-cyan-200 outline-none focus:ring-2 focus:ring-cyan-400"
-                />
+              <p className="text-[11px] text-blue-700/80 dark:text-blue-400">
+                Os valores de Pix, Cartão Débito, Cartão Crédito, Outros e Taxas deste dia foram informados de forma centralizada no <strong>Fechamento Unificado</strong>. Não há rateio artificial por PDV/turno. Esta conferência valida o balanço físico e o dinheiro de gaveta deste PDV. Para a conciliação digital consolidada, utilize a <strong>Auditoria Consolidada</strong>.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-purple-700 dark:text-purple-400 mb-1 block">
+                    Pix Extrato Bancário
+                  </label>
+                  <BRLCurrencyInput
+                    value={pixReal}
+                    onChange={(val) => setPixReal(val)}
+                    className="w-full rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20 px-3 py-2 font-mono text-sm font-bold text-purple-800 dark:text-purple-200 outline-none focus:ring-2 focus:ring-purple-400"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-cyan-700 dark:text-cyan-400 mb-1 block">
+                    Cartão Maquininha
+                  </label>
+                  <BRLCurrencyInput
+                    value={cartaoReal}
+                    onChange={(val) => setCartaoReal(val)}
+                    className="w-full rounded-xl border border-cyan-300 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 px-3 py-2 font-mono text-sm font-bold text-cyan-800 dark:text-cyan-200 outline-none focus:ring-2 focus:ring-cyan-400"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="rounded-xl bg-slate-900 dark:bg-slate-950 p-3 text-xs space-y-1">
             <div className="flex justify-between text-slate-300">
-              <span>Total Recebido:</span>
-              <span className="font-mono font-bold text-white">
+              <span>{isUnificado ? 'Dinheiro Físico deste PDV:' : 'Total Recebido:'}</span>
+              <span className="font-mono font-bold text-emerald-400">
                 R$ {totalRecebidoReal.toFixed(2)}
               </span>
             </div>
-            <div className="flex justify-between border-t border-slate-700 pt-1 mt-1">
-              <span className="font-bold text-white">Diferença de Caixa:</span>
-              <span
-                className={`font-mono font-black ${diferenca < 0 ? 'text-rose-500 bg-rose-500/20 px-2 py-0.5 rounded' : diferenca > 0 ? 'text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded' : 'text-emerald-400'}`}
-              >
-                R$ {diferenca.toFixed(2)} {diferenca === 0 && '✅'}
-              </span>
-            </div>
+            {!isUnificado && (
+              <div className="flex justify-between border-t border-slate-700 pt-1 mt-1">
+                <span className="font-bold text-white">Diferença de Caixa:</span>
+                <span
+                  className={`font-mono font-black ${diferenca < 0 ? 'text-rose-500 bg-rose-500/20 px-2 py-0.5 rounded' : diferenca > 0 ? 'text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded' : 'text-emerald-400'}`}
+                >
+                  R$ {diferenca.toFixed(2)} {diferenca === 0 && '✅'}
+                </span>
+              </div>
+            )}
           </div>
 
           {diferenca !== 0 && (
@@ -2355,10 +2493,14 @@ function AuditarPDVModal({
 
 function AuditarTodosPDVsModal({
   allPdvs,
+  dataAcerto,
+  profile,
   onClose,
   onSave,
 }: {
   allPdvs: { local: LocalPDV; records: RemessaKanban[] }[];
+  dataAcerto: string;
+  profile: any;
   onClose: () => void;
   onSave: (updated: RemessaKanban[]) => void;
 }) {
@@ -2366,7 +2508,11 @@ function AuditarTodosPDVsModal({
   const confirmDialog = useConfirm();
   const [salvando, setSalvando] = useState(false);
 
-  // Todos os PDVs começam selecionados.
+  // Consulta à entidade fechamentos_unificados_pdv do dia
+  const [fechamentoUnificado, setFechamentoUnificado] = useState<any>(null);
+  const [carregandoFechamento, setCarregandoFechamento] = useState(true);
+
+  // Todos os PDVs começam selecionados
   const [selectedPdvIds, setSelectedPdvIds] = useState<Set<string>>(
     () => new Set(allPdvs.map((p) => p.local.id))
   );
@@ -2374,45 +2520,135 @@ function AuditarTodosPDVsModal({
   const selectedPdvs = allPdvs.filter((p) => selectedPdvIds.has(p.local.id));
   const selectedRecords = selectedPdvs.flatMap((p) => p.records);
 
-  const dinheiroDeclarado = selectedRecords.reduce(
-    (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+  const organizationId = profile?.organization_id || selectedRecords[0]?.organization_id;
+
+  // Carrega fechamento unificado do Supabase
+  useEffect(() => {
+    async function carregarFechamento() {
+      if (!organizationId || !dataAcerto) {
+        setCarregandoFechamento(false);
+        return;
+      }
+      try {
+        setCarregandoFechamento(true);
+        const { data, error } = await supabase
+          .from('fechamentos_unificados_pdv')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .eq('data', dataAcerto)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.warn('Erro ao consultar fechamentos_unificados_pdv:', error);
+        }
+        setFechamentoUnificado(data || null);
+      } catch (e) {
+        console.warn('Exceção ao buscar fechamento unificado:', e);
+      } finally {
+        setCarregandoFechamento(false);
+      }
+    }
+    carregarFechamento();
+  }, [organizationId, dataAcerto]);
+
+  // 1. Apuração de Vendas Comerciais
+  const faturamentoBruto = selectedRecords.reduce(
+    (acc, r) => acc + (Number(r.faturamento_bruto_teorico) || 0),
     0
   );
 
-  const pixDeclarado = selectedRecords.reduce(
-    (acc, r) => acc + (Number(r.valor_pix_declarado) || 0),
+  const descontosPerdas = selectedRecords.reduce(
+    (acc, r) => acc + (Number(r.total_descontos_perdas) || 0),
     0
   );
 
-  const cartaoDeclarado = selectedRecords.reduce(
-    (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
-    0
-  );
-
-  const faturamentoTotal = selectedRecords.reduce(
+  const faturamentoLiquido = selectedRecords.reduce(
     (acc, r) =>
       acc + (Number(r.faturamento_liquido_esperado) || Number(r.faturamento_bruto_teorico) || 0),
     0
   );
 
-  const [pixReal, setPixReal] = useState(pixDeclarado);
-  const [cartaoReal, setCartaoReal] = useState(cartaoDeclarado);
-  const [justificativa, setJustificativa] = useState('');
+  // 2. Dinheiro dos Turnos (Automático)
+  const dinheiroTurnos = selectedRecords.reduce(
+    (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+    0
+  );
 
-  // A assinatura muda mesmo quando sai um PDV e entra outro mantendo a mesma quantidade.
-  const selectionKey = Array.from(selectedPdvIds).sort().join('|');
+  // 3. Recebimentos Declarados: origem no fechamento unificado (ou fallback em remessas legadas)
+  const pixDeclarado = fechamentoUnificado
+    ? Number(fechamentoUnificado.total_pix_declarado || 0)
+    : selectedRecords.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
 
+  const debitoDeclarado = fechamentoUnificado
+    ? Number(fechamentoUnificado.total_cartao_debito_declarado || 0)
+    : 0;
+
+  const creditoDeclarado = fechamentoUnificado
+    ? Number(fechamentoUnificado.total_cartao_credito_declarado || 0)
+    : selectedRecords.reduce((acc, r) => acc + (Number(r.valor_cartao_declarado) || 0), 0);
+
+  const outrosDeclarado = fechamentoUnificado
+    ? Number(fechamentoUnificado.total_outros_declarado || 0)
+    : 0;
+
+  const taxaDeclarada = fechamentoUnificado
+    ? Number(fechamentoUnificado.total_taxas_operacionais || 0)
+    : selectedRecords.reduce((acc, r) => acc + (Number(r.taxa_cartao_reais) || 0), 0);
+
+  // Percentual equivalente da taxa declarada
+  const totalDigitalDeclarado = pixDeclarado + debitoDeclarado + creditoDeclarado;
+  const taxaDeclaradaPct = calcularTaxaPercentualEquivalente(taxaDeclarada, totalDigitalDeclarado);
+
+  // 4. Estados de Conferência Real (Bancária / Maquininhas)
+  const [pixReal, setPixReal] = useState<number>(0);
+  const [debitoReal, setDebitoReal] = useState<number>(0);
+  const [creditoReal, setCreditoReal] = useState<number>(0);
+  const [outrosReal, setOutrosReal] = useState<number>(0);
+  const [taxaReal, setTaxaReal] = useState<number>(0);
+  const [justificativa, setJustificativa] = useState<string>('');
+
+  // Atualiza os valores reais com os declarados ao carregar
   useEffect(() => {
     setPixReal(pixDeclarado);
-    setCartaoReal(cartaoDeclarado);
-    setJustificativa('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectionKey]);
+    setDebitoReal(debitoDeclarado);
+    setCreditoReal(creditoDeclarado);
+    setOutrosReal(outrosDeclarado);
+    setTaxaReal(taxaDeclarada);
+    setJustificativa(fechamentoUnificado?.justificativa || '');
+  }, [
+    fechamentoUnificado,
+    pixDeclarado,
+    debitoDeclarado,
+    creditoDeclarado,
+    outrosDeclarado,
+    taxaDeclarada,
+  ]);
 
-  const totalRecebidoReal = dinheiroDeclarado + pixReal + cartaoReal;
-  const diferenca = totalRecebidoReal - faturamentoTotal;
-  const temDiferenca = Math.abs(diferenca) > 0.05;
-  const caixaPerfeito = !temDiferenca;
+  // 5. Cálculos Financeiros em Tempo Real
+  // Total bruto recebido = Dinheiro físico dos turnos + Pix + Débito + Crédito + Outros
+  const totalDigitalReal = pixReal + debitoReal + creditoReal + outrosReal;
+  const totalBrutoRecebidoReal =
+    Math.round((dinheiroTurnos + totalDigitalReal) * 100) / 100;
+
+  // Total líquido após taxas = Total bruto recebido - Taxa única informada
+  const totalLiquidoAposTaxas =
+    Math.max(0, Math.round((totalBrutoRecebidoReal - taxaReal) * 100) / 100);
+
+  // Diferença de conciliação comercial = Total bruto recebido - Faturamento líquido comercial
+  // (A taxa financeira é despesa operacional e NÃO entra no furo comercial de caixa)
+  const diferencaCaixa = Math.round((totalBrutoRecebidoReal - faturamentoLiquido) * 100) / 100;
+
+  // Percentual equivalente da taxa operacional conferida: (taxa / (pix + debito + credito)) * 100
+  const taxaPercentualReal = calcularTaxaPercentualEquivalente(
+    taxaReal,
+    pixReal + debitoReal + creditoReal
+  );
+
+  // Classificação formal de Furo, Sobra ou Caixa Conferido
+  const resultadoCaixa = classificarResultadoCaixa(totalBrutoRecebidoReal, faturamentoLiquido);
+  const temDiferenca = !resultadoCaixa.is_perfeito;
 
   const togglePdv = (id: string) => {
     setSelectedPdvIds((prev) => {
@@ -2444,78 +2680,94 @@ function AuditarTodosPDVsModal({
     if (temDiferenca && justificativa.trim() === '') {
       toast({
         title: 'Justificativa obrigatória',
-        description: 'Informe o motivo da diferença antes de concluir a auditoria.',
+        description:
+          resultadoCaixa.status === 'furo'
+            ? 'Informe a justificativa do furo de caixa identificado.'
+            : 'Informe a justificativa da sobra de caixa identificada.',
         variant: 'warning',
       });
       return;
     }
 
-    const organizationId = selectedRecords[0]?.organization_id;
-    const dataAuditoria = selectedRecords[0]?.data;
-
-    if (!organizationId || !dataAuditoria) {
-      toast({
-        title: 'Dados incompletos',
-        description: 'Não foi possível identificar a organização ou a data dos registros.',
-        variant: 'error',
-      });
-      return;
-    }
-
     const confirmou = await confirmDialog.confirm({
-      title: `Auditar ${selectedPdvs.length} PDV(s)`,
+      title: `Concluir Auditoria Consolidada (${selectedPdvs.length} PDVs)`,
       size: 'md',
       message: (
         <div className="space-y-3 text-left">
           {/* Header Resumo */}
           <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs border border-slate-200 dark:border-slate-800">
             <div>
-              <span className="text-[10px] text-slate-500 uppercase font-bold block">PDVs Selecionados</span>
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">PDVs Auditados</span>
               <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">{selectedPdvs.length} PDVs</span>
             </div>
             <div>
               <span className="text-[10px] text-slate-500 uppercase font-bold block">Data da Auditoria</span>
-              <span className="font-bold text-slate-700 dark:text-slate-200">{dataAuditoria}</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200">{dataAcerto}</span>
             </div>
           </div>
 
           {/* Resumo Financeiro da Auditoria */}
-          <div className="p-3 bg-slate-900 text-white rounded-xl text-xs space-y-2 shadow-sm">
+          <div className="p-3 bg-slate-900 text-white rounded-xl text-xs space-y-1.5 shadow-sm">
             <div className="flex justify-between items-center text-slate-300">
-              <span>Faturamento Total Esperado:</span>
-              <span className="font-mono font-bold text-slate-200">R$ {faturamentoTotal.toFixed(2)}</span>
+              <span>Faturamento Líquido Comercial:</span>
+              <span className="font-mono font-bold text-slate-200">R$ {faturamentoLiquido.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center text-slate-300">
-              <span className="flex items-center gap-1.5"><Banknote className="h-3.5 w-3.5 text-emerald-400" /> Dinheiro Físico Declarado:</span>
-              <span className="font-mono font-bold text-emerald-400">R$ {dinheiroDeclarado.toFixed(2)}</span>
+              <span>Dinheiro Físico Turnos:</span>
+              <span className="font-mono font-bold text-emerald-400">R$ {dinheiroTurnos.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center text-slate-300">
-              <span className="flex items-center gap-1.5"><Smartphone className="h-3.5 w-3.5 text-purple-400" /> Pix no Extrato Bancário:</span>
+              <span>Pix Conferido (Extrato):</span>
               <span className="font-mono font-bold text-purple-300">R$ {pixReal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center text-slate-300">
-              <span className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-cyan-400" /> Cartão nas Maquininhas:</span>
-              <span className="font-mono font-bold text-cyan-300">R$ {cartaoReal.toFixed(2)}</span>
+              <span>Débito Conferido:</span>
+              <span className="font-mono font-bold text-cyan-300">R$ {debitoReal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-300">
+              <span>Crédito Conferido:</span>
+              <span className="font-mono font-bold text-cyan-300">R$ {creditoReal.toFixed(2)}</span>
+            </div>
+            {outrosReal > 0 && (
+              <div className="flex justify-between items-center text-slate-300">
+                <span>Outros Recebimentos:</span>
+                <span className="font-mono font-bold text-slate-200">R$ {outrosReal.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center border-t border-slate-700 pt-1 text-white font-extrabold">
+              <span>Total Bruto Recebido:</span>
+              <span className="font-mono text-emerald-400 text-sm">R$ {totalBrutoRecebidoReal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-amber-300 text-[11px]">
+              <span>Taxa Financeira Única:</span>
+              <span className="font-mono font-bold">-R$ {taxaReal.toFixed(2)} ({taxaPercentualReal.formatado})</span>
+            </div>
+            <div className="flex justify-between items-center border-t border-slate-700 pt-1 text-slate-200 font-bold">
+              <span>Líquido Após Taxas:</span>
+              <span className="font-mono text-slate-100">R$ {totalLiquidoAposTaxas.toFixed(2)}</span>
             </div>
           </div>
 
-          {/* Status Geral da Conciliação */}
-          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
-            caixaPerfeito
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
-              : diferenca < -0.05
-                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
-                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
-          }`}>
-            <span>{caixaPerfeito ? '✓ Caixa Perfeito e Conciliado' : diferenca < -0.05 ? '⚠ Diferença Geral Negativa' : '⚠ Sobra Geral no Caixa'}</span>
+          {/* Card de Furo / Sobra / Conferido */}
+          <div
+            className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${resultadoCaixa.is_perfeito
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                : resultadoCaixa.status === 'furo'
+                  ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                  : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+              }`}
+          >
+            <span>{resultadoCaixa.rotulo}</span>
             <span className="font-mono font-bold">
-              {diferenca > 0.05 ? '+' : ''}R$ {diferenca.toFixed(2)}
+              {resultadoCaixa.is_perfeito ? '✓ Batido' : `${diferencaCaixa > 0 ? '+' : ''}R$ ${diferencaCaixa.toFixed(2)}`}
             </span>
           </div>
 
           {justificativa.trim() && (
             <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg text-xs text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
-              <span className="font-bold text-slate-700 dark:text-slate-200 block text-[10px] uppercase">Justificativa:</span>
+              <span className="font-bold text-slate-700 dark:text-slate-200 block text-[10px] uppercase">
+                Justificativa da Auditoria:
+              </span>
               "{justificativa.trim()}"
             </div>
           )}
@@ -2523,7 +2775,7 @@ function AuditarTodosPDVsModal({
       ),
       confirmText: 'Auditar e Finalizar',
       cancelText: 'Revisar',
-      variant: diferenca < -0.05 ? 'danger' : 'info',
+      variant: resultadoCaixa.status === 'furo' ? 'danger' : 'info',
     });
 
     if (!confirmou) return;
@@ -2531,42 +2783,51 @@ function AuditarTodosPDVsModal({
     setSalvando(true);
 
     try {
+      const nowIso = new Date().toISOString();
       const remessaIds = selectedRecords.map((r) => r.id);
 
-      const { data, error } = await supabase.rpc('auditar_pdvs_consolidado', {
-        p_organization_id: organizationId,
-        p_data: dataAuditoria,
-        p_remessa_ids: remessaIds,
-        p_pix_real: pixReal,
-        p_cartao_real: cartaoReal,
-        p_justificativa: justificativa.trim() || null,
-      });
+      // 1. Atualiza cabeçalho fechamentos_unificados_pdv se existir
+      if (fechamentoUnificado?.id) {
+        const { error: errFech } = await supabase
+          .from('fechamentos_unificados_pdv')
+          .update({
+            total_pix_declarado: pixReal,
+            total_cartao_debito_declarado: debitoReal,
+            total_cartao_credito_declarado: creditoReal,
+            total_outros_declarado: outrosReal,
+            total_taxas_operacionais: taxaReal,
+            total_recebido: totalBrutoRecebidoReal,
+            total_liquido_apos_taxas: totalLiquidoAposTaxas,
+            diferenca_caixa: diferencaCaixa,
+            justificativa: justificativa.trim() || fechamentoUnificado.justificativa || null,
+            status: 'auditado',
+            updated_at: nowIso,
+          })
+          .eq('id', fechamentoUnificado.id);
 
-      if (error) throw error;
-
-      const result = data as {
-        success?: boolean;
-        auditoria_id?: string;
-        pdvs_auditados?: number;
-        remessas_auditadas?: number;
-        diferenca_total?: number;
-      } | null;
-
-      if (!result?.success) {
-        throw new Error('O Supabase não confirmou a conclusão da auditoria.');
+        if (errFech) throw errFech;
       }
 
-      const updatedAt = new Date().toISOString();
+      // 2. Atualiza remessas_cargas_pdv selecionadas
+      const { error: errRemessas } = await supabase
+        .from('remessas_cargas_pdv')
+        .update({
+          status: 'auditado',
+          diferenca_auditoria: 0,
+          updated_at: nowIso,
+        })
+        .in('id', remessaIds);
 
-      // A diferença consolidada pertence à auditoria, e não a um PDV arbitrário.
+      if (errRemessas) throw errRemessas;
+
       const updatedList: RemessaKanban[] = selectedRecords.map((r) => ({
         ...r,
         diferenca_auditoria: 0,
         status: 'auditado',
-        updated_at: updatedAt,
+        updated_at: nowIso,
       }));
 
-      if (caixaPerfeito) {
+      if (resultadoCaixa.is_perfeito) {
         try {
           void confetti({
             particleCount: 150,
@@ -2574,17 +2835,18 @@ function AuditarTodosPDVsModal({
             origin: { y: 0.6 },
           });
         } catch {
-          // Confetti é apenas visual; nunca deve impedir a auditoria.
+          // Confetti é visual
         }
       }
 
       toast({
-        title: caixaPerfeito ? 'Auditoria Concluída! 🎉' : 'Auditoria Concluída',
-        description: `${selectedPdvs.length} PDV(s) e ${selectedRecords.length} turno(s) foram auditados com sucesso.`,
+        title: resultadoCaixa.is_perfeito ? 'Auditoria Concluída! 🎉' : 'Auditoria Concluída',
+        description: `${selectedPdvs.length} PDV(s) e ${selectedRecords.length} turno(s) auditados com sucesso.`,
         variant: 'success',
       });
 
       onSave(updatedList);
+      onClose();
     } catch (err: any) {
       console.error('Erro na auditoria consolidada:', err);
       toast({
@@ -2629,7 +2891,7 @@ function AuditarTodosPDVsModal({
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-purple-800 dark:text-purple-200 flex items-center gap-1.5">
                 <Store className="h-4 w-4" />
-                Escolha os PDVs
+                PDVs Participantes
               </h4>
 
               <button
@@ -2642,10 +2904,9 @@ function AuditarTodosPDVsModal({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto">
               {allPdvs.map(({ local, records }) => {
                 const isSelected = selectedPdvIds.has(local.id);
-
                 const fatPdv = records.reduce(
                   (acc, r) =>
                     acc +
@@ -2654,7 +2915,6 @@ function AuditarTodosPDVsModal({
                       0),
                   0
                 );
-
                 const dinPdv = records.reduce(
                   (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
                   0
@@ -2666,18 +2926,16 @@ function AuditarTodosPDVsModal({
                     type="button"
                     onClick={() => togglePdv(local.id)}
                     disabled={salvando}
-                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border-2 text-left transition-all disabled:cursor-not-allowed ${
-                      isSelected
+                    className={`flex items-center gap-2.5 p-2 rounded-xl border-2 text-left transition-all disabled:cursor-not-allowed ${isSelected
                         ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/40'
                         : 'border-transparent bg-slate-50 dark:bg-slate-900/50 opacity-50 hover:opacity-80'
-                    }`}
+                      }`}
                   >
                     <div
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
-                        isSelected
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${isSelected
                           ? 'border-purple-600 bg-purple-600 text-white'
                           : 'border-slate-300 bg-background'
-                      }`}
+                        }`}
                     >
                       {isSelected && <CheckCircle2 className="h-3 w-3" />}
                     </div>
@@ -2697,98 +2955,230 @@ function AuditarTodosPDVsModal({
             </div>
           </div>
 
-          {/* Resumo declarado */}
+          {/* Recebimentos informados no fechamento */}
           <div className="rounded-xl bg-slate-900 dark:bg-slate-950 p-3 space-y-1.5 text-xs">
-            <div className="flex justify-between text-slate-300">
-              <span>Faturamento Total Esperado:</span>
-              <span className="font-mono font-bold text-white">
-                R$ {faturamentoTotal.toFixed(2)}
+            <div className="flex justify-between items-center text-slate-300 font-bold border-b border-slate-800 pb-1 mb-1">
+              <span>Recebimentos Declarados:</span>
+              <span className="text-[10px] text-slate-400 font-normal">
+                {fechamentoUnificado ? 'Origem: Fechamento Unificado' : 'Origem: Lançamentos Individuais'}
               </span>
             </div>
 
-            <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
-              <span>Dinheiro Físico Declarado:</span>
+            <div className="flex justify-between text-slate-300">
+              <span className="flex items-center gap-1.5">
+                <Banknote className="h-3.5 w-3.5 text-emerald-400" />
+                Dinheiro Físico (Turnos):
+              </span>
               <span className="font-mono font-bold text-emerald-400">
-                R$ {dinheiroDeclarado.toFixed(2)}
+                R$ {dinheiroTurnos.toFixed(2)}
               </span>
             </div>
 
             <div className="flex justify-between text-slate-300">
-              <span>Pix Declarado:</span>
+              <span className="flex items-center gap-1.5">
+                <Smartphone className="h-3.5 w-3.5 text-purple-400" />
+                Pix Declarado:
+              </span>
               <span className="font-mono font-bold text-purple-300">
                 R$ {pixDeclarado.toFixed(2)}
               </span>
             </div>
 
             <div className="flex justify-between text-slate-300">
-              <span>Cartão Declarado:</span>
+              <span className="flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5 text-cyan-400" />
+                Cartão Débito:
+              </span>
               <span className="font-mono font-bold text-cyan-300">
-                R$ {cartaoDeclarado.toFixed(2)}
+                R$ {debitoDeclarado.toFixed(2)}
+              </span>
+            </div>
+
+            <div className="flex justify-between text-slate-300">
+              <span className="flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5 text-cyan-400" />
+                Cartão Crédito:
+              </span>
+              <span className="font-mono font-bold text-cyan-300">
+                R$ {creditoDeclarado.toFixed(2)}
+              </span>
+            </div>
+
+            {outrosDeclarado > 0 && (
+              <div className="flex justify-between text-slate-300">
+                <span>Outros Recebimentos:</span>
+                <span className="font-mono font-bold text-slate-200">
+                  R$ {outrosDeclarado.toFixed(2)}
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
+              <span>Taxa Única das Operações:</span>
+              <span className="font-mono font-bold text-amber-300">
+                R$ {taxaDeclarada.toFixed(2)}
+                <span className="text-[10px] text-amber-400/80 ml-1">
+                  ({taxaDeclaradaPct.formatado})
+                </span>
               </span>
             </div>
           </div>
 
-          {/* Valores reais bancários */}
+          {/* Conferência Bancária e Maquininhas */}
           <div className="rounded-xl border-2 border-purple-200 dark:border-purple-800 p-3 space-y-3">
             <div>
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-300">
-                Conferência Bancária Geral
+                Conferência Bancária & Maquininhas (Extrato Real)
               </h4>
               <p className="text-[10px] text-text/50 mt-0.5">
-                Informe os totais reais do extrato Pix e das maquininhas para os PDVs selecionados.
+                Confira os valores creditados no extrato Pix e nas operadoras de cartão.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               <div>
-                <label className="text-xs font-bold text-purple-700 dark:text-purple-400 mb-1 block">
+                <label className="text-[11px] font-bold text-purple-700 dark:text-purple-400 mb-1 block">
                   Pix Total — Extrato
                 </label>
                 <BRLCurrencyInput
                   value={pixReal}
                   onChange={(val) => setPixReal(val)}
-                  className="w-full rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20 px-3 py-2 font-mono text-base font-bold text-purple-800 dark:text-purple-200 outline-none focus:ring-2 focus:ring-purple-400"
+                  className="w-full rounded-xl border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20 px-2.5 py-1.5 font-mono text-sm font-bold text-purple-800 dark:text-purple-200 outline-none focus:ring-2 focus:ring-purple-400"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-cyan-700 dark:text-cyan-400 mb-1 block">
-                  Cartão Total — Maquininhas
+                <label className="text-[11px] font-bold text-cyan-700 dark:text-cyan-400 mb-1 block">
+                  Cartão Débito Real
                 </label>
                 <BRLCurrencyInput
-                  value={cartaoReal}
-                  onChange={(val) => setCartaoReal(val)}
-                  className="w-full rounded-xl border border-cyan-300 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 px-3 py-2 font-mono text-base font-bold text-cyan-800 dark:text-cyan-200 outline-none focus:ring-2 focus:ring-cyan-400"
+                  value={debitoReal}
+                  onChange={(val) => setDebitoReal(val)}
+                  className="w-full rounded-xl border border-cyan-300 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 px-2.5 py-1.5 font-mono text-sm font-bold text-cyan-800 dark:text-cyan-200 outline-none focus:ring-2 focus:ring-cyan-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-cyan-700 dark:text-cyan-400 mb-1 block">
+                  Cartão Crédito Real
+                </label>
+                <BRLCurrencyInput
+                  value={creditoReal}
+                  onChange={(val) => setCreditoReal(val)}
+                  className="w-full rounded-xl border border-cyan-300 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 px-2.5 py-1.5 font-mono text-sm font-bold text-cyan-800 dark:text-cyan-200 outline-none focus:ring-2 focus:ring-cyan-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 dark:text-slate-400 mb-1 block">
+                  Outros Recebimentos
+                </label>
+                <BRLCurrencyInput
+                  value={outrosReal}
+                  onChange={(val) => setOutrosReal(val)}
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/20 px-2.5 py-1.5 font-mono text-sm font-bold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-slate-400"
+                />
+              </div>
+
+              <div className="col-span-2">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[11px] font-bold text-amber-700 dark:text-amber-400 block">
+                    Taxa das Operações (R$)
+                  </label>
+                  <span className="text-[10px] font-mono font-bold text-amber-700 bg-amber-100 dark:bg-amber-900/60 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                    Equivalente: {taxaPercentualReal.formatado} sobre R$ {(pixReal + debitoReal + creditoReal).toFixed(2)} digitais
+                  </span>
+                </div>
+                <BRLCurrencyInput
+                  value={taxaReal}
+                  onChange={(val) => setTaxaReal(val)}
+                  className="w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1.5 font-mono text-sm font-bold text-amber-800 dark:text-amber-200 outline-none focus:ring-2 focus:ring-amber-400"
                 />
               </div>
             </div>
           </div>
 
-          {/* Comparativo */}
+          {/* Resumo Financeiro da Auditoria */}
           <div className="rounded-xl bg-slate-900 dark:bg-slate-950 p-3 text-xs space-y-1.5">
             <div className="flex justify-between text-slate-300">
-              <span>Total Real Recebido:</span>
+              <span>Faturamento Bruto das Vendas:</span>
+              <span className="font-mono text-slate-200">R$ {faturamentoBruto.toFixed(2)}</span>
+            </div>
+            {descontosPerdas > 0 && (
+              <div className="flex justify-between text-slate-400">
+                <span>Descontos Comerciais / Perdas:</span>
+                <span className="font-mono text-rose-400">-R$ {descontosPerdas.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-slate-200 font-bold border-t border-slate-800 pt-1">
+              <span>Faturamento Líquido Comercial:</span>
+              <span className="font-mono text-white">R$ {faturamentoLiquido.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-slate-300">
+              <span>Total Bruto Recebido (Dinheiro + Digitais):</span>
+              <span className="font-mono font-bold text-emerald-400">
+                R$ {totalBrutoRecebidoReal.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between text-amber-300 text-[11px]">
+              <span>Taxa das Operações:</span>
+              <span className="font-mono font-bold">-R$ {taxaReal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-slate-300 border-t border-slate-800 pt-1">
+              <span>Total Líquido após Taxas:</span>
               <span className="font-mono font-bold text-white">
-                R$ {totalRecebidoReal.toFixed(2)}
+                R$ {totalLiquidoAposTaxas.toFixed(2)}
               </span>
             </div>
 
-            <div className="flex justify-between border-t border-slate-700 pt-1.5">
-              <span className="font-bold text-white">Diferença Geral:</span>
-              <span
-                className={`font-mono font-black px-2 py-0.5 rounded ${
-                  diferenca < -0.05
-                    ? 'text-rose-400 bg-rose-500/20'
-                    : diferenca > 0.05
-                      ? 'text-amber-300 bg-amber-500/20'
-                      : 'text-emerald-400 bg-emerald-500/20'
+            {/* Resultado de Caixa (Furo / Sobra / Conferido) */}
+            <div
+              className={`flex items-center justify-between p-2.5 rounded-xl border mt-2 ${resultadoCaixa.is_perfeito
+                  ? 'bg-emerald-950/60 border-emerald-700 text-emerald-300'
+                  : resultadoCaixa.status === 'furo'
+                    ? 'bg-rose-950/60 border-rose-700 text-rose-300'
+                    : 'bg-amber-950/60 border-amber-700 text-amber-300'
                 }`}
-              >
-                {diferenca > 0.05 ? '+' : ''}R$ {diferenca.toFixed(2)}
-                {caixaPerfeito && ' ✅ Caixa Perfeito'}
+            >
+              <div>
+                <span className="font-black text-xs block">{resultadoCaixa.rotulo}</span>
+                <span className="text-[10px] text-slate-300 block">
+                  {resultadoCaixa.is_perfeito
+                    ? 'Total bruto recebido igual ao faturamento comercial (100% batido)'
+                    : resultadoCaixa.status === 'furo'
+                      ? 'Diferença financeira negativa comercial (não reduz faturamento)'
+                      : 'Recebido a maior que o faturamento comercial'}
+                </span>
+              </div>
+              <span className="font-mono font-black text-sm">
+                {resultadoCaixa.is_perfeito ? 'R$ 0,00' : `${diferencaCaixa > 0 ? '+' : ''}R$ ${diferencaCaixa.toFixed(2)}`}
               </span>
             </div>
           </div>
+
+          {/* Comparativo de Reauditoria (Antes vs Depois) */}
+          {fechamentoUnificado && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-2.5 text-[11px] grid grid-cols-2 gap-2">
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Antes (Fechamento)</span>
+                <p className="font-mono text-slate-700 dark:text-slate-300">
+                  Rec: R$ {Number(fechamentoUnificado.total_recebido || 0).toFixed(2)}
+                </p>
+                <p className="font-mono text-slate-500 text-[10px]">
+                  Dif: R$ {Number(fechamentoUnificado.diferenca_caixa || 0).toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Depois (Auditoria Recalculada)</span>
+                <p className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                  Rec: R$ {totalBrutoRecebidoReal.toFixed(2)}
+                </p>
+                <p className={`font-mono font-bold text-[10px] ${resultadoCaixa.status === 'furo' ? 'text-rose-500' : resultadoCaixa.status === 'sobra' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                  {resultadoCaixa.rotulo}
+                </p>
+              </div>
+            </div>
+          )}
 
           {temDiferenca && (
             <div className="space-y-1">
@@ -2798,19 +3188,12 @@ function AuditarTodosPDVsModal({
               <textarea
                 value={justificativa}
                 onChange={(e) => setJustificativa(e.target.value)}
-                rows={3}
+                rows={2}
                 className="w-full resize-none rounded-xl border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-900/20 px-3 py-2 text-xs text-text outline-none focus:ring-2 focus:ring-rose-400"
-                placeholder="Informe o motivo da divergência encontrada na conciliação..."
+                placeholder="Informe o motivo da divergência encontrada na conciliação comercial..."
               />
             </div>
           )}
-
-          <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-2.5">
-            <p className="text-[10px] leading-relaxed text-blue-800 dark:text-blue-300">
-              <strong>Importante:</strong> o dinheiro físico permanece conforme o fechamento de cada
-              PDV. Esta etapa confere de forma consolidada os valores digitais de Pix e cartão.
-            </p>
-          </div>
 
           {/* Ações */}
           <div className="flex gap-2 pt-2 border-t border-purple-200 dark:border-purple-800">
@@ -2832,7 +3215,7 @@ function AuditarTodosPDVsModal({
                 selectedRecords.length === 0 ||
                 (temDiferenca && justificativa.trim() === '')
               }
-              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 py-2.5 text-xs font-bold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 py-2.5 text-xs font-bold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.97]"
             >
               {salvando ? (
                 <>
@@ -2842,7 +3225,7 @@ function AuditarTodosPDVsModal({
               ) : (
                 <>
                   <ShieldCheck className="h-3.5 w-3.5" />
-                  Aprovar {selectedPdvs.length} PDV(s)
+                  Auditar e Concluir ({selectedPdvs.length} PDVs)
                 </>
               )}
             </button>
@@ -2862,6 +3245,249 @@ function AuditarTodosPDVsModal({
         size={confirmDialog.options.size}
       />
     </>
+  );
+}
+
+// ─── Modal Reabrir Auditoria (auditado -> encerrado) ─────────────────────────
+
+function ReabrirAuditoriaModal({
+  target,
+  profile,
+  onClose,
+  onSave,
+}: {
+  target: {
+    localNome: string;
+    records: RemessaKanban[];
+    isGeral: boolean;
+  };
+  profile: any;
+  onClose: () => void;
+  onSave: (updated: RemessaKanban[]) => void;
+}) {
+  const { toast } = useToast();
+  const [motivo, setMotivo] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  const userName = profile?.nome || profile?.email || 'Administrador';
+  const dataHoraAtual = new Date().toLocaleString('pt-BR');
+
+  // Valores preservados para exibição
+  const faturamentoTotal = target.records.reduce(
+    (acc, r) =>
+      acc +
+      (Number(r.faturamento_liquido_esperado) || Number(r.faturamento_bruto_teorico) || 0),
+    0
+  );
+  const dinheiroTotal = target.records.reduce(
+    (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+    0
+  );
+
+  const handleConfirmarReabertura = async () => {
+    if (!motivo.trim()) {
+      toast({
+        title: 'Motivo obrigatório',
+        description: 'Informe o motivo detalhado para a reabertura da auditoria.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    setSalvando(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const carimboLog = `[Reabertura Auditoria em ${dataHoraAtual} por ${userName}]: ${motivo.trim()} (Transição: auditado -> encerrado)`;
+
+      // 1. Atualizar remessas selecionadas (auditado -> encerrado)
+      // Preserva intactos: itens_grade, sobras, valor_dinheiro_gaveta, fechamento_unificado_id, faturamentos, etc.
+      for (const r of target.records) {
+        const obsAtual = r.observacoes || '';
+        const obsNova = obsAtual ? `${obsAtual}\n${carimboLog}` : carimboLog;
+
+        const { error: errRem } = await supabase
+          .from('remessas_cargas_pdv')
+          .update({
+            status: 'encerrado',
+            observacoes: obsNova,
+            updated_at: nowIso,
+          })
+          .eq('id', r.id);
+
+        if (errRem) throw errRem;
+      }
+
+      // 2. Se houver fechamentos_unificados_pdv relacionados, reabrir de maneira consistente
+      const fechamentoIds = Array.from(
+        new Set(target.records.map((r) => r.fechamento_unificado_id).filter(Boolean))
+      );
+
+      for (const fechId of fechamentoIds) {
+        const { error: errFech } = await supabase
+          .from('fechamentos_unificados_pdv')
+          .update({
+            status: 'encerrado',
+            updated_at: nowIso,
+          })
+          .eq('id', fechId);
+
+        if (errFech) {
+          console.warn('Erro ao atualizar status do fechamento unificado para encerrado:', errFech);
+        }
+      }
+
+      const updatedRecords: RemessaKanban[] = target.records.map((r) => {
+        const obsAtual = r.observacoes || '';
+        const obsNova = obsAtual ? `${obsAtual}\n${carimboLog}` : carimboLog;
+        return {
+          ...r,
+          status: 'encerrado',
+          observacoes: obsNova,
+          updated_at: nowIso,
+        };
+      });
+
+      toast({
+        title: 'Auditoria Reaberta com Sucesso',
+        description: `${target.isGeral ? 'Todos os PDVs' : target.localNome} retornaram para "Aguardando Auditoria" para conferência e recálculo.`,
+        variant: 'success',
+      });
+
+      onSave(updatedRecords);
+      onClose();
+    } catch (err: any) {
+      console.error('Erro ao reabrir auditoria:', err);
+      toast({
+        title: 'Erro ao reabrir auditoria',
+        description: err?.message || 'Falha ao processar reabertura no banco.',
+        variant: 'error',
+      });
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+      <div className="w-full max-w-lg rounded-2xl border-2 border-amber-400 dark:border-amber-600 bg-background p-5 shadow-2xl space-y-4 animate-scale-up">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-amber-200 dark:border-amber-800 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+              <Unlock className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-amber-900 dark:text-amber-100">
+                Reabrir Auditoria — {target.localNome}
+              </h3>
+              <p className="text-[11px] text-text/50">
+                {target.records.length} turno(s) auditado(s) • Transição administrativa
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={salvando}
+            className="rounded-lg p-1 text-text/40 hover:bg-primary/10 hover:text-text transition-colors disabled:opacity-50"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Informação sobre a transição */}
+        <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-3 space-y-2 text-xs text-amber-900 dark:text-amber-200">
+          <p className="font-semibold leading-relaxed">
+            Esta ação retornará os registros auditados para o estado{' '}
+            <span className="font-black underline">"Aguardando Auditoria" (encerrado)</span>.
+          </p>
+          <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-amber-200/60 dark:border-amber-800/60 font-mono">
+            <div>
+              <span className="text-amber-700 dark:text-amber-400 block font-bold">Status Anterior:</span>
+              <span className="inline-block px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-bold">
+                auditado
+              </span>
+            </div>
+            <div>
+              <span className="text-amber-700 dark:text-amber-400 block font-bold">Novo Status:</span>
+              <span className="inline-block px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200 font-bold">
+                encerrado
+              </span>
+            </div>
+          </div>
+          <p className="text-[10px] text-amber-700 dark:text-amber-400 pt-1">
+            ✓ Sobras físicas, itens da grade, dinheiro de gaveta e valores financeiros são preservados intactos para nova conferência humana.
+          </p>
+        </div>
+
+        {/* Dados Administrativos */}
+        <div className="rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 p-3 space-y-1.5 text-xs">
+          <div className="flex justify-between text-slate-600 dark:text-slate-300">
+            <span>Responsável pela Reabertura:</span>
+            <span className="font-bold text-slate-800 dark:text-slate-100">{userName}</span>
+          </div>
+          <div className="flex justify-between text-slate-600 dark:text-slate-300">
+            <span>Data / Hora:</span>
+            <span className="font-mono text-slate-800 dark:text-slate-100">{dataHoraAtual}</span>
+          </div>
+          <div className="flex justify-between text-slate-600 dark:text-slate-300">
+            <span>Faturamento Preservado:</span>
+            <span className="font-mono font-bold text-slate-800 dark:text-slate-100">
+              R$ {faturamentoTotal.toFixed(2)}
+            </span>
+          </div>
+          <div className="flex justify-between text-slate-600 dark:text-slate-300">
+            <span>Dinheiro em Gaveta Preservado:</span>
+            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+              R$ {dinheiroTotal.toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        {/* Motivo Obrigatório */}
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-text/80 block">
+            Motivo da Reabertura da Auditoria <span className="text-rose-500">*</span>
+          </label>
+          <textarea
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            rows={3}
+            disabled={salvando}
+            placeholder="Descreva obrigatoriamente a razão para reabrir esta auditoria (ex: ajuste de extrato bancário, correção de taxa de cartão, retificação de turno)..."
+            className="w-full resize-none rounded-xl border border-primary/20 bg-background px-3 py-2 text-xs text-text outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
+          />
+        </div>
+
+        {/* Ações */}
+        <div className="flex gap-2 pt-2 border-t border-primary/10">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={salvando}
+            className="flex-1 rounded-xl bg-primary/5 py-2.5 text-xs font-bold text-text/70 hover:bg-primary/10 disabled:opacity-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirmarReabertura}
+            disabled={salvando || !motivo.trim()}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 py-2.5 text-xs font-bold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.97]"
+          >
+            {salvando ? (
+              <>
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Reabrindo...
+              </>
+            ) : (
+              <>
+                <Unlock className="h-3.5 w-3.5" /> Confirmar Reabertura
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -3119,13 +3745,12 @@ function UnificarTodosPDVsModal({
           </div>
 
           {/* Conciliação Comercial Geral */}
-          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
-            !temDiferenca
+          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${!temDiferenca
               ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
               : apuracao.diferenca_caixa < 0
                 ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
                 : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
-          }`}>
+            }`}>
             <span>{!temDiferenca ? '✓ Caixa Geral 100% Batido' : apuracao.diferenca_caixa < 0 ? '⚠ Diferença Geral Negativa' : '⚠ Sobra Geral no Caixa'}</span>
             <span className="font-mono font-bold">
               {apuracao.diferenca_caixa === 0 ? 'R$ 0,00' : `${apuracao.diferenca_caixa > 0 ? '+' : ''}R$ ${apuracao.diferenca_caixa.toFixed(2)}`}
@@ -3329,11 +3954,10 @@ function UnificarTodosPDVsModal({
                 return (
                   <label
                     key={local.id}
-                    className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer select-none transition-all ${
-                      isSelected
+                    className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer select-none transition-all ${isSelected
                         ? 'border-cyan-400 bg-white dark:bg-slate-900 shadow-xs'
                         : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 opacity-60'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <input
@@ -3477,11 +4101,10 @@ function UnificarTodosPDVsModal({
                                           },
                                         }));
                                       }}
-                                      className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none transition-all ${
-                                        isPendente
+                                      className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none transition-all ${isPendente
                                           ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
                                           : 'border-slate-300 dark:border-slate-700 bg-background text-text focus:border-cyan-500'
-                                      }`}
+                                        }`}
                                     />
                                   );
                                 })()}
@@ -3532,11 +4155,10 @@ function UnificarTodosPDVsModal({
                                             },
                                           }));
                                         }}
-                                        className={`w-14 rounded-md border px-1.5 py-0.5 text-center font-mono font-bold text-xs outline-none transition-all ${
-                                          isPendente
+                                        className={`w-14 rounded-md border px-1.5 py-0.5 text-center font-mono font-bold text-xs outline-none transition-all ${isPendente
                                             ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
                                             : 'border-slate-300 dark:border-slate-700 bg-background text-text focus:border-cyan-500'
-                                        }`}
+                                          }`}
                                       />
                                     </div>
                                   );
@@ -3706,13 +4328,19 @@ function UnificarTodosPDVsModal({
                 {/* Taxa Financeira Única em Reais (R$) */}
                 <div className="bg-amber-50/50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-300 dark:border-amber-800 shadow-2xs sm:col-span-2 md:col-span-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <label className="text-xs font-black uppercase text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
-                      <DollarSign className="h-4 w-4 text-amber-600" /> Taxas das Operações /
-                      Maquininha (R$)
-                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-xs font-black uppercase text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                        <DollarSign className="h-4 w-4 text-amber-600" /> Taxas das Operações /
+                        Maquininha (R$)
+                      </label>
+                      <span className="text-[10px] font-mono font-bold text-amber-700 bg-amber-100 dark:bg-amber-900/60 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                        Equivalente: {apuracao.taxa_percentual_formatada} sobre R${' '}
+                        {(globalPix + globalDebito + globalCredito).toFixed(2)} digitais
+                      </span>
+                    </div>
                     <p className="text-[10px] text-text/60 mt-0.5">
                       Valor total único em Reais descontado pelas operadoras no dia (Pix + Cartões).
-                      Não diminui as vendas de mercadorias.
+                      O percentual ao lado é apenas indicador visual somente leitura.
                     </p>
                   </div>
                   <div className="w-full sm:w-48">
@@ -3784,11 +4412,10 @@ function UnificarTodosPDVsModal({
             {/* Status da Divergência */}
             {temDiferenca ? (
               <div
-                className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs font-medium animate-fade-in ${
-                  apuracao.diferenca_caixa < 0
+                className={`p-3 rounded-xl border flex items-start gap-2.5 text-xs font-medium animate-fade-in ${apuracao.diferenca_caixa < 0
                     ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-100'
                     : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-100'
-                }`}
+                  }`}
               >
                 <AlertTriangle
                   className={`h-5 w-5 shrink-0 mt-0.5 ${apuracao.diferenca_caixa < 0 ? 'text-rose-600' : 'text-emerald-600'}`}
@@ -4173,13 +4800,12 @@ function FechamentoUnificadoPDVModal({
           </div>
 
           {/* Status de Caixa / Alerta de Diferença */}
-          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
-            !temDiferenca
+          <div className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${!temDiferenca
               ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
               : apuracao.diferenca_caixa < 0
                 ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
                 : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
-          }`}>
+            }`}>
             <span>{!temDiferenca ? '✓ Caixa Batido' : apuracao.diferenca_caixa < 0 ? '⚠ Sobra Negativa / Quebra de Caixa' : '⚠ Sobra Positiva no Caixa'}</span>
             <span className="font-mono font-bold">
               {apuracao.diferenca_caixa === 0 ? 'R$ 0,00' : `${apuracao.diferenca_caixa > 0 ? '+' : ''}R$ ${apuracao.diferenca_caixa.toFixed(2)}`}
@@ -4436,11 +5062,10 @@ function FechamentoUnificadoPDVModal({
                                     },
                                   }));
                                 }}
-                                className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none ${
-                                  isPendente
+                                className={`w-18 rounded-lg border px-2 py-1 text-center font-mono font-bold text-xs outline-none ${isPendente
                                     ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
                                     : 'border-slate-300 dark:border-slate-700 bg-background text-text'
-                                }`}
+                                  }`}
                               />
                             </div>
                           );
@@ -4485,11 +5110,10 @@ function FechamentoUnificadoPDVModal({
                                       },
                                     }));
                                   }}
-                                  className={`w-14 rounded border px-1 py-0.5 text-center font-mono font-bold text-xs outline-none ${
-                                    isPendente
+                                  className={`w-14 rounded border px-1 py-0.5 text-center font-mono font-bold text-xs outline-none ${isPendente
                                       ? 'border-amber-400 bg-amber-100/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-700/60'
                                       : 'border-slate-300 dark:border-slate-700 bg-background text-text'
-                                  }`}
+                                    }`}
                                 />
                               </div>
                             );
@@ -4546,13 +5170,19 @@ function FechamentoUnificadoPDVModal({
             </div>
 
             {/* Taxa Financeira Única em Reais (R$) */}
-            <div className="bg-amber-50/50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-300 dark:border-amber-800 flex items-center justify-between gap-3">
+            <div className="bg-amber-50/50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-300 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <label className="text-xs font-black uppercase text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
-                  <DollarSign className="h-4 w-4 text-amber-600" /> Taxas das Operações (R$)
-                </label>
-                <p className="text-[10px] text-text/60">
-                  Total único em Reais descontado pelas operadoras no dia
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs font-black uppercase text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                    <DollarSign className="h-4 w-4 text-amber-600" /> Taxas das Operações (R$)
+                  </label>
+                  <span className="text-[10px] font-mono font-bold text-amber-700 bg-amber-100 dark:bg-amber-900/60 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                    Equivalente: {apuracao.taxa_percentual_formatada} sobre R${' '}
+                    {(valorPix + valorCartao).toFixed(2)} digitais
+                  </span>
+                </div>
+                <p className="text-[10px] text-text/60 mt-0.5">
+                  Total único em Reais descontado pelas operadoras no dia (indicador percentual somente leitura)
                 </p>
               </div>
               <div className="w-36">
@@ -4668,6 +5298,162 @@ function FechamentoUnificadoPDVModal({
   );
 }
 
+// ─── Modal Confirmar Reabertura ou Visualizar Auditoria ─────────────────────
+
+function ConfirmarReaberturaModal({
+  target,
+  fechamentoUnificado,
+  onVisualizar,
+  onConfirmarReabertura,
+  onClose,
+}: {
+  target: {
+    localNome: string;
+    records: RemessaKanban[];
+    isGeral: boolean;
+  };
+  fechamentoUnificado?: any;
+  onVisualizar: () => void;
+  onConfirmarReabertura: () => void;
+  onClose: () => void;
+}) {
+  const totalTurnos = target.records.length;
+  const isUnificado =
+    target.records.some(
+      (r) => r.tipo_fechamento === 'unificado' || Boolean(r.fechamento_unificado_id)
+    ) || Boolean(fechamentoUnificado);
+
+  const dinheiro = target.records.reduce(
+    (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+    0
+  );
+  const pix =
+    isUnificado && fechamentoUnificado
+      ? Number(fechamentoUnificado.total_pix_declarado || 0)
+      : target.records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
+  const cartao =
+    isUnificado && fechamentoUnificado
+      ? Number(fechamentoUnificado.total_cartao_debito_declarado || 0) +
+      Number(fechamentoUnificado.total_cartao_credito_declarado || 0) +
+      Number(fechamentoUnificado.total_outros_declarado || 0)
+      : target.records.reduce((acc, r) => acc + (Number(r.valor_cartao_declarado) || 0), 0);
+  const taxaReais =
+    isUnificado && fechamentoUnificado
+      ? Number(fechamentoUnificado.total_taxas_operacionais || 0)
+      : target.records.reduce((acc, r) => acc + (Number(r.taxa_cartao_reais) || 0), 0);
+  const faturamento = target.records.reduce((acc, r) => {
+    return (
+      acc + (Number(r.faturamento_liquido_esperado) || Number(r.faturamento_bruto_teorico) || 0)
+    );
+  }, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-xs p-4 animate-fade-in">
+      <div className="w-full max-w-md rounded-2xl border border-amber-300 dark:border-amber-700 bg-background p-5 shadow-2xl space-y-4 animate-scale-up">
+        {/* Header com Alerta */}
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 shrink-0">
+            <AlertTriangle className="h-6 w-6" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-extrabold text-text">
+              Fechamento Auditado
+            </h3>
+            <p className="text-xs text-text/60 mt-0.5">
+              {target.isGeral
+                ? 'Todos os PDVs deste dia já estão auditados e finalizados.'
+                : `O fechamento de ${target.localNome} já está homologado.`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-text/40 hover:text-text p-1 transition-colors cursor-pointer"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Resumo da Situação Atual */}
+        <div className="rounded-xl bg-slate-900 dark:bg-slate-950 p-3 text-xs space-y-2 text-white">
+          <div className="flex justify-between items-center text-slate-300 pb-1.5 border-b border-slate-800">
+            <span className="font-bold text-slate-200 truncate pr-2">
+              {target.localNome} ({totalTurnos} turno{totalTurnos > 1 ? 's' : ''})
+            </span>
+            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800 shrink-0">
+              <CheckCircle2 className="h-3 w-3" /> Auditado
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[11px] pt-0.5">
+            <div className="text-slate-300">
+              <span className="block text-[10px] text-slate-400">Faturamento:</span>
+              <span className="font-mono font-bold text-white">R$ {faturamento.toFixed(2)}</span>
+            </div>
+            <div className="text-slate-300">
+              <span className="block text-[10px] text-slate-400">Dinheiro Gaveta:</span>
+              <span className="font-mono font-bold text-emerald-400">R$ {dinheiro.toFixed(2)}</span>
+            </div>
+            <div className="text-slate-300">
+              <span className="block text-[10px] text-slate-400">Pix Conferido:</span>
+              <span className="font-mono font-bold text-purple-400">R$ {pix.toFixed(2)}</span>
+            </div>
+            <div className="text-slate-300">
+              <span className="block text-[10px] text-slate-400">Cartão Conferido:</span>
+              <span className="font-mono font-bold text-cyan-400">R$ {cartao.toFixed(2)}</span>
+            </div>
+          </div>
+          {taxaReais > 0 && (
+            <div className="flex justify-between text-[11px] text-amber-300 border-t border-slate-800 pt-1 font-semibold">
+              <span>Taxas Operacionais:</span>
+              <span className="font-mono">-R$ {taxaReais.toFixed(2)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Pergunta de Decisão */}
+        <div className="p-3 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200">
+          <p className="font-bold">O que você deseja fazer?</p>
+          <p className="text-[11px] text-text/70 mt-1">
+            Você pode <strong>abrir para visualizar todos os detalhes</strong> do que foi auditado sem alterar nada, ou <strong>confirmar a reabertura</strong> para editar e retificar lançamentos.
+          </p>
+        </div>
+
+        {/* Botões de Ação */}
+        <div className="space-y-2 pt-1">
+          {/* Opção 1: Visualizar sem alterar */}
+          <button
+            type="button"
+            onClick={onVisualizar}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+          >
+            <Eye className="h-4 w-4" />
+            👁️ Apenas Visualizar Fechamento Auditado
+          </button>
+
+          {/* Opção 2: Confirmar reabertura */}
+          <button
+            type="button"
+            onClick={onConfirmarReabertura}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+          >
+            <Unlock className="h-4 w-4" />
+            🔓 Confirmar Reabertura para Edição
+          </button>
+
+          {/* Cancelar */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full rounded-xl border border-primary/20 bg-primary/5 py-2 text-xs font-semibold text-text/70 hover:bg-primary/10 transition-colors cursor-pointer"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export function PDVKanbanView({
@@ -4679,6 +5465,7 @@ export function PDVKanbanView({
 }: PDVKanbanViewProps) {
   const { toast } = useToast();
   const [registros, setRegistros] = useState<RemessaKanban[]>([]);
+  const [fechamentosUnificados, setFechamentosUnificados] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sobrasAnteriores, setSobrasAnteriores] = useState<ItemGradeKanban[] | null>(null);
   const [viewMode, setViewMode] = useState<'scroll' | 'grid'>('scroll');
@@ -4700,6 +5487,16 @@ export function PDVKanbanView({
     records: RemessaKanban[];
   } | null>(null);
   const [modalAuditarTodos, setModalAuditarTodos] = useState(false);
+  const [modalReabrirAuditoria, setModalReabrirAuditoria] = useState<{
+    localNome: string;
+    records: RemessaKanban[];
+    isGeral: boolean;
+  } | null>(null);
+  const [confirmarReaberturaTarget, setConfirmarReaberturaTarget] = useState<{
+    localNome: string;
+    records: RemessaKanban[];
+    isGeral: boolean;
+  } | null>(null);
   const [modalReciboData, setModalReciboData] = useState<ReciboRegistroData | null>(null);
 
   // Fetch registros for the selected date
@@ -4716,6 +5513,20 @@ export function PDVKanbanView({
 
       if (error) throw error;
       setRegistros((data || []) as RemessaKanban[]);
+
+      // Carrega fechamentos unificados do dia para obter dados financeiros consolidados (Pix, Cartão, Taxas)
+      const { data: fechamentosData, error: fechError } = await supabase
+        .from('fechamentos_unificados_pdv')
+        .select('*')
+        .eq('organization_id', profile.organization_id)
+        .eq('data', dataAcerto)
+        .order('created_at', { ascending: false });
+
+      if (!fechError && fechamentosData) {
+        setFechamentosUnificados(fechamentosData);
+      } else {
+        setFechamentosUnificados([]);
+      }
 
       const { data: prevData } = await supabase
         .from('remessas_cargas_pdv')
@@ -4796,8 +5607,7 @@ export function PDVKanbanView({
         valor_dinheiro_gaveta: 0,
         valor_pix_declarado: 0,
         valor_cartao_declarado: 0,
-        taxa_cartao_reais: 0,
-        taxa_cartao_percentual: 0,
+        fechamento_unificado_id: null,
         qtd_total_retorno: 0,
         faturamento_bruto_teorico: 0,
         faturamento_liquido_esperado: 0,
@@ -4925,8 +5735,8 @@ export function PDVKanbanView({
     const fat =
       Number(r.faturamento_liquido_esperado) ||
       (Number(r.valor_dinheiro_gaveta) || 0) +
-        (Number(r.valor_pix_declarado) || 0) +
-        (Number(r.valor_cartao_declarado) || 0) ||
+      (Number(r.valor_pix_declarado) || 0) +
+      (Number(r.valor_cartao_declarado) || 0) ||
       Number(r.faturamento_bruto_teorico) ||
       0;
     return acc + fat;
@@ -4949,6 +5759,9 @@ export function PDVKanbanView({
     setModalAuditoriaPDV(null);
     setModalAuditarTodos(false);
     setModalNovoEnvio(false);
+    setModalReabrirAuditoria(null);
+    setConfirmarReaberturaTarget(null);
+    carregarRegistros();
   };
 
   // Grupos por PDV
@@ -4978,6 +5791,123 @@ export function PDVKanbanView({
       return { local, records };
     })
     .filter(Boolean) as { local: LocalPDV; records: RemessaKanban[] }[];
+
+  // Helper para vincular um fechamento unificado às remessas do PDV
+  const getFechamentoUnificadoParaRecords = useCallback(
+    (records: RemessaKanban[]) => {
+      const unificadoId = records.find((r) => r.fechamento_unificado_id)?.fechamento_unificado_id;
+      if (unificadoId) {
+        const found = fechamentosUnificados.find((f) => f.id === unificadoId);
+        if (found) return found;
+      }
+      const localId = records[0]?.local_id;
+      if (localId) {
+        const foundByLocal = fechamentosUnificados.find((f) => f.local_id === localId);
+        if (foundByLocal) return foundByLocal;
+      }
+      if (fechamentosUnificados.length === 1) {
+        return fechamentosUnificados[0];
+      }
+      return null;
+    },
+    [fechamentosUnificados]
+  );
+
+  // Resumo financeiro consolidado de todos os PDVs e turnos auditados
+  const resumoFinanceiroAuditados = useMemo(() => {
+    if (agrupadosAuditados.length === 0) return null;
+
+    let faturamentoTotal = 0;
+    let dinheiroTotal = 0;
+    let pixTotal = 0;
+    let cartaoTotal = 0;
+    let taxasTotal = 0;
+    let diferencaTotal = 0;
+    let totalPecasVendidas = 0;
+
+    const fechamentosProcessados = new Set<string>();
+
+    for (const { records } of agrupadosAuditados) {
+      records.forEach((r) => {
+        dinheiroTotal += Number(r.valor_dinheiro_gaveta) || 0;
+        const env = Number(r.qtd_total_enviada) || 0;
+        const ret = Number(r.qtd_total_retorno) || 0;
+        totalPecasVendidas += Math.max(0, env - ret);
+
+        if (r.itens_grade && Array.isArray(r.itens_grade) && r.itens_grade.length > 0) {
+          const somaItens = r.itens_grade.reduce((s, it) => {
+            const itemEnv = (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0);
+            const itemRet = Number(it.qtd_retorno) || 0;
+            const vend = Math.max(0, itemEnv - itemRet);
+            return s + vend * (Number(it.preco_unitario) || 0);
+          }, 0);
+          if (somaItens > 0) {
+            faturamentoTotal += somaItens;
+            return;
+          }
+        }
+        faturamentoTotal +=
+          Number(r.faturamento_liquido_esperado) || Number(r.faturamento_bruto_teorico) || 0;
+      });
+
+      const unificado = getFechamentoUnificadoParaRecords(records);
+      if (unificado && unificado.id) {
+        if (!fechamentosProcessados.has(unificado.id)) {
+          fechamentosProcessados.add(unificado.id);
+          pixTotal += Number(unificado.total_pix_declarado || 0);
+          cartaoTotal +=
+            Number(unificado.total_cartao_debito_declarado || 0) +
+            Number(unificado.total_cartao_credito_declarado || 0) +
+            Number(unificado.total_outros_declarado || 0);
+          taxasTotal += Number(unificado.total_taxas_operacionais || 0);
+          diferencaTotal += Number(unificado.diferenca_caixa || 0);
+        }
+      } else {
+        records.forEach((r) => {
+          pixTotal += Number(r.valor_pix_declarado) || 0;
+          cartaoTotal += Number(r.valor_cartao_declarado) || 0;
+          taxasTotal += Number(r.taxa_cartao_reais) || 0;
+          diferencaTotal += Number(r.diferenca_auditoria) || 0;
+        });
+      }
+    }
+
+    if (fechamentosProcessados.size === 0 && fechamentosUnificados.length > 0) {
+      const f0 = fechamentosUnificados[0];
+      pixTotal = Number(f0.total_pix_declarado || 0);
+      cartaoTotal =
+        Number(f0.total_cartao_debito_declarado || 0) +
+        Number(f0.total_cartao_credito_declarado || 0) +
+        Number(f0.total_outros_declarado || 0);
+      taxasTotal = Number(f0.total_taxas_operacionais || 0);
+      diferencaTotal = Number(f0.diferenca_caixa || 0);
+    }
+
+    const totalBrutoRecebido = dinheiroTotal + pixTotal + cartaoTotal;
+    const totalLiquidoEmConta = totalBrutoRecebido - taxasTotal;
+
+    return {
+      faturamentoTotal,
+      dinheiroTotal,
+      pixTotal,
+      cartaoTotal,
+      taxasTotal,
+      totalBrutoRecebido,
+      totalLiquidoEmConta,
+      diferencaTotal,
+      totalPecasVendidas,
+      totalPdvs: agrupadosAuditados.length,
+      totalTurnos: registrosAuditados.length,
+    };
+  }, [agrupadosAuditados, registrosAuditados, fechamentosUnificados, getFechamentoUnificadoParaRecords]);
+
+  const handleSolicitarReabertura = (target: {
+    localNome: string;
+    records: RemessaKanban[];
+    isGeral: boolean;
+  }) => {
+    setConfirmarReaberturaTarget(target);
+  };
 
   // Apenas PDVs com fechamento em andamento na etapa de Sobras & Caixa (colParcial)
   const pdvsPendentesAgrupados = locaisCompletos
@@ -5414,6 +6344,7 @@ export function PDVKanbanView({
                   key={local.id}
                   local={local}
                   records={records}
+                  fechamentoUnificado={getFechamentoUnificadoParaRecords(records)}
                   onAction={() => setModalAuditoriaPDV({ local, records })}
                   onOpenRecibo={(reciboData) => setModalReciboData(reciboData)}
                   onRevert={() => handleReverterAguardandoAuditoria(records, local.nome)}
@@ -5439,6 +6370,113 @@ export function PDVKanbanView({
             bgClass="bg-emerald-100/50 dark:bg-emerald-900/30"
             borderClass="border-emerald-300 dark:border-emerald-700"
           />
+
+          {/* RESUMO FINANCEIRO AUDITADO NO TOPO DA COLUNA 5 */}
+          {resumoFinanceiroAuditados && (
+            <div className="p-3 pb-0">
+              <div className="rounded-2xl bg-slate-900 dark:bg-slate-950 p-3 text-xs space-y-2 text-white border border-emerald-500/30 shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="flex items-center gap-1.5 font-extrabold text-[11px] uppercase tracking-wider text-emerald-400">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" /> Resumo Financeiro Auditado
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">
+                    {resumoFinanceiroAuditados.totalPdvs} PDV(s) • {resumoFinanceiroAuditados.totalPecasVendidas} peças
+                  </span>
+                </div>
+
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex justify-between text-slate-300">
+                    <span className="flex items-center gap-1">
+                      <Banknote className="h-3 w-3 text-emerald-400" /> Dinheiro Gaveta:
+                    </span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      R$ {resumoFinanceiroAuditados.dinheiroTotal.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span className="flex items-center gap-1">
+                      <Smartphone className="h-3 w-3 text-purple-400" /> Pix Conferido:
+                    </span>
+                    <span className="font-mono font-bold text-purple-400">
+                      R$ {resumoFinanceiroAuditados.pixTotal.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span className="flex items-center gap-1">
+                      <CreditCard className="h-3 w-3 text-cyan-400" /> Cartões (Déb/Créd):
+                    </span>
+                    <span className="font-mono font-bold text-cyan-400">
+                      R$ {resumoFinanceiroAuditados.cartaoTotal.toFixed(2)}
+                    </span>
+                  </div>
+                  {resumoFinanceiroAuditados.taxasTotal > 0 && (
+                    <div className="flex justify-between text-amber-300 font-semibold border-t border-slate-800/80 pt-1">
+                      <span className="flex items-center gap-1">
+                        <DollarSign className="h-3 w-3 text-amber-400" /> Taxas Operacionais:
+                      </span>
+                      <span className="font-mono">-R$ {resumoFinanceiroAuditados.taxasTotal.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-emerald-300 font-bold border-t border-slate-800/80 pt-1">
+                    <span>Total Líquido em Conta:</span>
+                    <span className="font-mono text-sm">
+                      R$ {resumoFinanceiroAuditados.totalLiquidoEmConta.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-white font-extrabold border-t border-slate-800 pt-1">
+                    <span>Faturamento Bruto:</span>
+                    <span className="font-mono text-primary">
+                      R$ {resumoFinanceiroAuditados.faturamentoTotal.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Status do Caixa Auditado */}
+                <div className="pt-1">
+                  {resumoFinanceiroAuditados.diferencaTotal === 0 ? (
+                    <div className="flex items-center justify-between text-[10px] px-2 py-1 rounded-lg border border-emerald-500/40 bg-emerald-950/60 text-emerald-300 font-bold">
+                      <span className="flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Caixa 100% Conferido
+                      </span>
+                      <span className="font-mono">R$ 0,00</span>
+                    </div>
+                  ) : resumoFinanceiroAuditados.diferencaTotal < 0 ? (
+                    <div className="flex items-center justify-between text-[10px] px-2 py-1 rounded-lg border border-rose-500/40 bg-rose-950/60 text-rose-300 font-bold">
+                      <span>⚠ Furo de Caixa Geral:</span>
+                      <span className="font-mono">-R$ {Math.abs(resumoFinanceiroAuditados.diferencaTotal).toFixed(2)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-[10px] px-2 py-1 rounded-lg border border-blue-500/40 bg-blue-950/60 text-blue-300 font-bold">
+                      <span>⚠ Sobra de Caixa Geral:</span>
+                      <span className="font-mono">+R$ {resumoFinanceiroAuditados.diferencaTotal.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* BOTÃO FIXO NO TOPO DA COLUNA 5 */}
+          {agrupadosAuditados.length >= 1 && (
+            <div className="p-3 pb-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const allAuditados = agrupadosAuditados.flatMap((p) => p.records);
+                  handleSolicitarReabertura({
+                    localNome: 'Geral (Todos os PDVs)',
+                    records: allAuditados,
+                    isGeral: true,
+                  });
+                }}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 font-extrabold text-xs py-2 shadow-xs transition-all active:scale-[0.97]"
+              >
+                <Unlock className="h-4 w-4 text-amber-600" /> Reabrir Auditoria Geral (
+                {agrupadosAuditados.length} PDVs)
+              </button>
+            </div>
+          )}
+
           <div className="p-3 space-y-3 flex-1 overflow-y-auto">
             {loading ? (
               <div className="flex flex-col items-center gap-2 py-6 text-text/40">
@@ -5455,6 +6493,14 @@ export function PDVKanbanView({
                   key={local.id}
                   local={local}
                   records={records}
+                  fechamentoUnificado={getFechamentoUnificadoParaRecords(records)}
+                  onReabrirAuditoria={() =>
+                    handleSolicitarReabertura({
+                      localNome: local.nome,
+                      records: records,
+                      isGeral: false,
+                    })
+                  }
                   onOpenRecibo={(reciboData) => setModalReciboData(reciboData)}
                 />
               ))
@@ -5464,6 +6510,114 @@ export function PDVKanbanView({
       </div>
 
       {/* Modals */}
+      {confirmarReaberturaTarget && (
+        <ConfirmarReaberturaModal
+          target={confirmarReaberturaTarget}
+          fechamentoUnificado={getFechamentoUnificadoParaRecords(confirmarReaberturaTarget.records)}
+          onClose={() => setConfirmarReaberturaTarget(null)}
+          onVisualizar={() => {
+            const target = confirmarReaberturaTarget;
+            setConfirmarReaberturaTarget(null);
+            const fech = getFechamentoUnificadoParaRecords(target.records);
+            const isUnif =
+              target.records.some(
+                (r) => r.tipo_fechamento === 'unificado' || Boolean(r.fechamento_unificado_id)
+              ) || Boolean(fech);
+
+            const din = target.records.reduce(
+              (acc, r) => acc + (Number(r.valor_dinheiro_gaveta) || 0),
+              0
+            );
+            const px =
+              isUnif && fech
+                ? Number(fech.total_pix_declarado || 0)
+                : target.records.reduce((acc, r) => acc + (Number(r.valor_pix_declarado) || 0), 0);
+            const cart =
+              isUnif && fech
+                ? Number(fech.total_cartao_debito_declarado || 0) +
+                Number(fech.total_cartao_credito_declarado || 0) +
+                Number(fech.total_outros_declarado || 0)
+                : target.records.reduce(
+                  (acc, r) => acc + (Number(r.valor_cartao_declarado) || 0),
+                  0
+                );
+            const tx =
+              isUnif && fech
+                ? Number(fech.total_taxas_operacionais || 0)
+                : target.records.reduce((acc, r) => acc + (Number(r.taxa_cartao_reais) || 0), 0);
+            const difCaixa =
+              isUnif && fech
+                ? Number(fech.diferenca_caixa || 0)
+                : target.records.reduce(
+                  (acc, r) => acc + (Number(r.diferenca_auditoria) || 0),
+                  0
+                );
+
+            const fatur = target.records.reduce((acc, r) => {
+              if (r.itens_grade && Array.isArray(r.itens_grade) && r.itens_grade.length > 0) {
+                const soma = r.itens_grade.reduce((s, it) => {
+                  const env =
+                    (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0);
+                  const ret = Number(it.qtd_retorno) || 0;
+                  return s + Math.max(0, env - ret) * (Number(it.preco_unitario) || 0);
+                }, 0);
+                if (soma > 0) return acc + soma;
+              }
+              return (
+                acc +
+                (Number(r.faturamento_liquido_esperado) ||
+                  Number(r.faturamento_bruto_teorico) ||
+                  0)
+              );
+            }, 0);
+
+            const itensConsolidadosMap = new Map<string, any>();
+            target.records.forEach((r) => {
+              (r.itens_grade || []).forEach((it) => {
+                if (!itensConsolidadosMap.has(it.produto_id)) {
+                  itensConsolidadosMap.set(it.produto_id, { ...it });
+                } else {
+                  const cur = itensConsolidadosMap.get(it.produto_id)!;
+                  cur.qtd_enviada = (Number(cur.qtd_enviada) || 0) + (Number(it.qtd_enviada) || 0);
+                  cur.qtd_sobra_anterior =
+                    (Number(cur.qtd_sobra_anterior) || 0) + (Number(it.qtd_sobra_anterior) || 0);
+                  cur.qtd_retorno =
+                    (Number(cur.qtd_retorno) || 0) + (Number(it.qtd_retorno) || 0);
+                }
+              });
+            });
+
+            const primaryRecord = target.records[target.records.length - 1] || target.records[0];
+            setModalReciboData({
+              id: primaryRecord?.id || 'auditoria-visualizar',
+              data: primaryRecord?.data || dataAcerto,
+              turno: target.isGeral
+                ? 'Todos os Turnos'
+                : target.records.map((r) => formatTurno(r.turno)).join(' + '),
+              vendedor_nome: target.isGeral
+                ? 'Consolidado Geral'
+                : primaryRecord?.vendedor_nome || undefined,
+              pdvNome: target.localNome,
+              status: 'auditado',
+              tipo_fechamento: isUnif ? 'unificado' : primaryRecord?.tipo_fechamento,
+              valor_dinheiro_gaveta: din,
+              valor_pix_declarado: px,
+              valor_cartao_declarado: cart,
+              taxa_cartao_reais: tx,
+              faturamento_bruto_teorico: fatur,
+              faturamento_liquido_esperado: fatur,
+              diferenca_auditoria: difCaixa,
+              observacoes: primaryRecord?.observacoes || fech?.justificativa || undefined,
+              itens_grade: Array.from(itensConsolidadosMap.values()),
+            });
+          }}
+          onConfirmarReabertura={() => {
+            const target = confirmarReaberturaTarget;
+            setConfirmarReaberturaTarget(null);
+            setModalReabrirAuditoria(target);
+          }}
+        />
+      )}
       {modalSobras && (
         <RegistrarSobrasModal
           registro={modalSobras}
@@ -5509,7 +6663,17 @@ export function PDVKanbanView({
       {modalAuditarTodos && agrupadosAguardandoAuditoria.length > 0 && (
         <AuditarTodosPDVsModal
           allPdvs={agrupadosAguardandoAuditoria}
+          dataAcerto={dataAcerto}
+          profile={profile}
           onClose={() => setModalAuditarTodos(false)}
+          onSave={handleRegistroUpdated}
+        />
+      )}
+      {modalReabrirAuditoria && (
+        <ReabrirAuditoriaModal
+          target={modalReabrirAuditoria}
+          profile={profile}
+          onClose={() => setModalReabrirAuditoria(null)}
           onSave={handleRegistroUpdated}
         />
       )}

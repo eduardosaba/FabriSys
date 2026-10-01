@@ -68,10 +68,97 @@ export interface FechamentoConsolidadoResult {
   total_bruto_recebido: number;
   total_taxas_operacionais: number;
   total_liquido_apos_taxas: number;
+  taxa_percentual_equivalente: number; // Percentual informativo calculado: (taxa / totalDigital) * 100
+  taxa_percentual_formatada: string; // Ex: '2,50%' ou '0,00%'
+  resultado_caixa: ResultadoCaixaConciliacao; // Classificação formal de Furo, Sobra ou Conferido
   total_recebido: number; // Mantido para compatibilidade retroativa (= total_bruto_recebido)
   diferenca_caixa: number; // Conciliação comercial: total_bruto_recebido - faturamento_liquido_esperado
   tem_pendencias: boolean;
   pendencias: PendenciaFechamento[];
+}
+
+export type StatusResultadoCaixa = 'conferido' | 'furo' | 'sobra';
+
+export interface ResultadoCaixaConciliacao {
+  diferenca: number;
+  diferenca_absoluta: number;
+  status: StatusResultadoCaixa;
+  rotulo: string;
+  furo_valor: number;
+  sobra_valor: number;
+  is_perfeito: boolean;
+}
+
+/**
+ * Calcula o percentual equivalente da taxa única sobre o total de operações digitais.
+ * Exibido exclusivamente como indicador visual para o usuário.
+ * Não altera a taxa financeira persistida (total_taxas_operacionais em R$).
+ */
+export function calcularTaxaPercentualEquivalente(
+  taxaReais: number,
+  totalDigital: number
+): { percentual: number; valor_numerico: number; formatado: string } {
+  const taxa = Number(taxaReais) || 0;
+  const digital = Number(totalDigital) || 0;
+  if (digital <= 0 || taxa <= 0) {
+    return { percentual: 0, valor_numerico: 0, formatado: '0,00%' };
+  }
+  const pct = Math.round((taxa / digital) * 10000) / 100;
+  return {
+    percentual: pct,
+    valor_numerico: pct,
+    formatado: `${pct.toFixed(2).replace('.', ',')}%`,
+  };
+}
+
+/**
+ * Formaliza a classificação do resultado financeiro de caixa:
+ * Diferença = Total Bruto Recebido - Faturamento Líquido Comercial
+ * - Diferença < -0.05: Furo de Caixa (|diferença|)
+ * - Diferença > 0.05: Sobra de Caixa (diferença)
+ * - Diferença entre -0.05 e 0.05: Caixa Conferido
+ * A taxa financeira não entra no furo comercial e furo/sobra não alteram faturamento.
+ */
+export function classificarResultadoCaixa(
+  totalBrutoRecebido: number,
+  faturamentoLiquido: number
+): ResultadoCaixaConciliacao {
+  const bruto = Math.round((Number(totalBrutoRecebido) || 0) * 100) / 100;
+  const fat = Math.round((Number(faturamentoLiquido) || 0) * 100) / 100;
+  const dif = Math.round((bruto - fat) * 100) / 100;
+
+  if (dif < -0.05) {
+    const furo = Math.abs(dif);
+    return {
+      diferenca: dif,
+      diferenca_absoluta: furo,
+      status: 'furo',
+      rotulo: `Furo de Caixa: R$ ${furo.toFixed(2).replace('.', ',')}`,
+      furo_valor: furo,
+      sobra_valor: 0,
+      is_perfeito: false,
+    };
+  } else if (dif > 0.05) {
+    return {
+      diferenca: dif,
+      diferenca_absoluta: dif,
+      status: 'sobra',
+      rotulo: `Sobra de Caixa: R$ ${dif.toFixed(2).replace('.', ',')}`,
+      furo_valor: 0,
+      sobra_valor: dif,
+      is_perfeito: false,
+    };
+  } else {
+    return {
+      diferenca: 0,
+      diferenca_absoluta: 0,
+      status: 'conferido',
+      rotulo: 'Caixa Conferido',
+      furo_valor: 0,
+      sobra_valor: 0,
+      is_perfeito: true,
+    };
+  }
 }
 
 /**
@@ -346,6 +433,8 @@ export function apurarFechamentoUnificado(
   // A diferença de conciliação comercial compara o faturamento líquido de vendas com o total bruto recebido
   // (A taxa é despesa operacional/bancária e não falta de dinheiro no caixa)
   const diferencaCaixa = Math.round((totalBrutoRecebido - faturamentoLiquido) * 100) / 100;
+  const taxaCalculada = calcularTaxaPercentualEquivalente(taxasValidas, pix + debito + credito);
+  const resultadoCaixa = classificarResultadoCaixa(totalBrutoRecebido, faturamentoLiquido);
 
   return {
     itens_consolidados: itensCalculados,
@@ -362,6 +451,9 @@ export function apurarFechamentoUnificado(
     total_bruto_recebido: totalBrutoRecebido,
     total_taxas_operacionais: Math.round(taxasValidas * 100) / 100,
     total_liquido_apos_taxas: totalLiquidoAposTaxas,
+    taxa_percentual_equivalente: taxaCalculada.percentual,
+    taxa_percentual_formatada: taxaCalculada.formatado,
+    resultado_caixa: resultadoCaixa,
     total_recebido: totalBrutoRecebido, // Mantido para compatibilidade retroativa
     diferenca_caixa: diferencaCaixa,
     tem_pendencias: pendencias.length > 0,

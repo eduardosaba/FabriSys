@@ -917,13 +917,13 @@ export default function AuditoriaPDVPage() {
 
     // A) Somatório a partir dos Fechamentos Unificados (sem duplicidade)
     fechamentosFiltrados.forEach((fu) => {
+      const recordsFu = registrosAuditados.filter((r) => r.fechamento_unificado_id === fu.id);
+      
       // Só soma se tiver pelo menos um registro auditado vinculado
-      if (!fechamentoIdsSet.has(fu.id)) return;
+      if (recordsFu.length === 0) return;
 
       const fatTotalFu = Number(fu.total_faturamento_liquido || 0);
-      const fatPdvNoFech = registrosAuditados
-        .filter((r) => r.fechamento_unificado_id === fu.id)
-        .reduce((s, r) => s + Number(r.faturamento_liquido_esperado || 0), 0);
+      const fatPdvNoFech = recordsFu.reduce((s, r) => s + Number(r.faturamento_liquido_esperado || 0), 0);
 
       let proporcao = 1;
       // Calcula a proporção baseada no faturamento auditado vs faturamento total

@@ -916,38 +916,29 @@ export default function AuditoriaPDVPage() {
     let taxas = 0;
 
     // A) Somatório a partir dos Fechamentos Unificados (sem duplicidade)
-    if (filtroPDV === 'todos') {
-      fechamentosFiltrados.forEach((fu) => {
-        pix += Number(fu.total_pix_declarado || 0);
-        debito += Number(fu.total_cartao_debito_declarado || 0);
-        credito += Number(fu.total_cartao_credito_declarado || 0);
-        outros += Number(fu.total_outros_declarado || 0);
-        taxas += Number(fu.total_taxas_operacionais || 0);
-      });
-    } else {
-      fechamentosFiltrados.forEach((fu) => {
-        if (fu.qtd_pdvs <= 1) {
-          pix += Number(fu.total_pix_declarado || 0);
-          debito += Number(fu.total_cartao_debito_declarado || 0);
-          credito += Number(fu.total_cartao_credito_declarado || 0);
-          outros += Number(fu.total_outros_declarado || 0);
-          taxas += Number(fu.total_taxas_operacionais || 0);
-        } else {
-          const fatTotalFu = Number(fu.total_faturamento_liquido || 0);
-          const fatPdvNoFech = registrosAuditados
-            .filter((r) => r.fechamento_unificado_id === fu.id)
-            .reduce((s, r) => s + Number(r.faturamento_liquido_esperado || 0), 0);
-          const proporcao =
-            fatTotalFu > 0 ? Math.min(1, Math.max(0, fatPdvNoFech / fatTotalFu)) : 1 / fu.qtd_pdvs;
+    fechamentosFiltrados.forEach((fu) => {
+      // Só soma se tiver pelo menos um registro auditado vinculado
+      if (!fechamentoIdsSet.has(fu.id)) return;
 
-          pix += Number(fu.total_pix_declarado || 0) * proporcao;
-          debito += Number(fu.total_cartao_debito_declarado || 0) * proporcao;
-          credito += Number(fu.total_cartao_credito_declarado || 0) * proporcao;
-          outros += Number(fu.total_outros_declarado || 0) * proporcao;
-          taxas += Number(fu.total_taxas_operacionais || 0) * proporcao;
-        }
-      });
-    }
+      const fatTotalFu = Number(fu.total_faturamento_liquido || 0);
+      const fatPdvNoFech = registrosAuditados
+        .filter((r) => r.fechamento_unificado_id === fu.id)
+        .reduce((s, r) => s + Number(r.faturamento_liquido_esperado || 0), 0);
+
+      let proporcao = 1;
+      // Calcula a proporção baseada no faturamento auditado vs faturamento total
+      if (fatTotalFu > 0) {
+        proporcao = Math.min(1, Math.max(0, fatPdvNoFech / fatTotalFu));
+      } else if (fu.qtd_pdvs > 1 && filtroPDV !== 'todos') {
+        proporcao = 1 / fu.qtd_pdvs;
+      }
+
+      pix += Number(fu.total_pix_declarado || 0) * proporcao;
+      debito += Number(fu.total_cartao_debito_declarado || 0) * proporcao;
+      credito += Number(fu.total_cartao_credito_declarado || 0) * proporcao;
+      outros += Number(fu.total_outros_declarado || 0) * proporcao;
+      taxas += Number(fu.total_taxas_operacionais || 0) * proporcao;
+    });
 
     // B) Somatório de registros legados / individuais (sem fechamento_unificado_id)
     registrosAuditados.forEach((r) => {

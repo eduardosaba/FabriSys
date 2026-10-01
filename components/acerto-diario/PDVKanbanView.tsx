@@ -722,7 +722,7 @@ function RegistrarSobrasModal({
                         onChange={(e) => {
                           const raw = e.target.value;
                           const val =
-                            raw === '' ? null : Math.max(0, Math.min(disponivel, Number(raw)));
+                            raw === '' ? 0 : Math.max(0, Math.min(disponivel, Number(raw)));
                           setGradeItens((prev) =>
                             prev.map((it) =>
                               it.produto_id === item.produto_id ? { ...it, qtd_retorno: val } : it
@@ -3561,7 +3561,7 @@ function UnificarTodosPDVsModal({
         ) {
           map[r.id][it.produto_id] = Number(it.qtd_retorno);
         } else {
-          map[r.id][it.produto_id] = null;
+          map[r.id][it.produto_id] = 0;
         }
       });
     });
@@ -4091,7 +4091,7 @@ function UnificarTodosPDVsModal({
                                       onChange={(e) => {
                                         const val =
                                           e.target.value === ''
-                                            ? null
+                                            ? 0
                                             : Math.max(0, Math.min(disp, Number(e.target.value)));
                                         setSobrasPorRemessa((prev) => ({
                                           ...prev,
@@ -4145,7 +4145,7 @@ function UnificarTodosPDVsModal({
                                         onChange={(e) => {
                                           const val =
                                             e.target.value === ''
-                                              ? null
+                                              ? 0
                                               : Math.max(0, Math.min(disp, Number(e.target.value)));
                                           setSobrasPorRemessa((prev) => ({
                                             ...prev,
@@ -4648,7 +4648,7 @@ function FechamentoUnificadoPDVModal({
         ) {
           map[r.id][it.produto_id] = Number(it.qtd_retorno);
         } else {
-          map[r.id][it.produto_id] = null;
+          map[r.id][it.produto_id] = 0;
         }
       });
     });
@@ -5052,7 +5052,7 @@ function FechamentoUnificadoPDVModal({
                                 onChange={(e) => {
                                   const val =
                                     e.target.value === ''
-                                      ? null
+                                      ? 0
                                       : Math.max(0, Math.min(disp, Number(e.target.value)));
                                   setSobrasPorTurno((prev) => ({
                                     ...prev,
@@ -5100,7 +5100,7 @@ function FechamentoUnificadoPDVModal({
                                   onChange={(e) => {
                                     const val =
                                       e.target.value === ''
-                                        ? null
+                                        ? 0
                                         : Math.max(0, Math.min(disp, Number(e.target.value)));
                                     setSobrasPorTurno((prev) => ({
                                       ...prev,

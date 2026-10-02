@@ -69,10 +69,6 @@ const DEFAULT_PERMISSOES: Record<string, string[]> = {
     'ranking_produtos',
     'produtos',
     'agenda',
-    'configuracoes_lojas',
-    'pdv',
-    'pdv_caixa',
-    'pdv_controle_caixa',
     'ajuda',
   ],
   pdv_simples: [
@@ -550,83 +546,77 @@ export default function Sidebar({ isOpen, onClose, logoUrl }: SidebarProps) {
     (item: SidebarItem) => {
       // 'admin'/'master' elevated privileges; compare as string to avoid TS literal type issues
       const roleStr = String(profile?.role ?? '');
-      if (roleStr === 'express' || roleStr === 'pdv_simples') {
-        const basePerms = DEFAULT_PERMISSOES[profile?.role ?? ''] || [
-          'acertos_rapidos',
-          'lancar_turno',
-          'fechamento_diario',
-          'auditoria_geral',
-          'produtos',
-          'agenda',
-          'ajuda',
-        ];
-        const customPerms = permissoes[profile?.role ?? ''] || [];
-        const rolePerms = Array.from(new Set([...basePerms, ...customPerms]));
-        const directMatch = rolePerms.includes(item.id || '') || item.id === 'agenda';
-        if (directMatch) return true;
-        if (item.children?.length) {
-          return item.children.some((child) => rolePerms.includes(child.id || ''));
-        }
-        return false;
-      }
       if (item.adminOnly) return roleStr === 'master';
       if (roleStr === 'admin' || roleStr === 'master') return true;
-      if (item.allowedRoles && !item.allowedRoles.includes(profile?.role ?? '')) return false;
+      if (item.allowedRoles && !item.allowedRoles.includes(roleStr)) return false;
 
       const rolePerms =
-        permissoes[profile?.role ?? ''] || DEFAULT_PERMISSOES[profile?.role ?? ''] || [];
+        permissoes[roleStr] !== undefined ? permissoes[roleStr] : DEFAULT_PERMISSOES[roleStr] || [];
       if (rolePerms.includes('all')) return true;
 
       const moduleId = item.id || item.href.split('/').pop() || '';
+      const hasDirectAccess = rolePerms.includes(moduleId);
 
-      const hasModuleAccess = (id: string | undefined, allowedRoles?: string[]) => {
-        if (!id) return false;
-        if (allowedRoles && !allowedRoles.includes(profile?.role ?? '')) return false;
-        return rolePerms.includes(id);
-      };
-
-      if (hasModuleAccess(moduleId, item.allowedRoles)) return true;
-
-      if (item.children?.length) {
-        return item.children.some((child) => {
+      if (item.children && item.children.length > 0) {
+        const hasVisibleChild = item.children.some((child) => {
+          if (child.allowedRoles && !child.allowedRoles.includes(roleStr)) return false;
           const childId = child.id || child.href.split('/').pop() || '';
-          return hasModuleAccess(childId, child.allowedRoles);
+          return rolePerms.includes(childId);
         });
+
+        // Caso o módulo pai 'pdv' esteja desmarcado nas permissões, nunca deve aparecer no menu
+        if (moduleId === 'pdv') {
+          return hasDirectAccess && hasVisibleChild;
+        }
+
+        return hasDirectAccess || hasVisibleChild;
       }
 
-      return false;
+      return hasDirectAccess;
     },
     [permissoes, profile?.role]
   );
 
   const visibleMenu = useMemo(() => {
-    return sidebarItems.filter(hasAccess).map((item) => {
-      const filteredChildren = item.children?.filter((child) => {
+    return sidebarItems
+      .filter(hasAccess)
+      .map((item) => {
         const roleStr = String(profile?.role ?? '');
-        if (roleStr === 'admin' || roleStr === 'master') return true;
-        if (child.allowedRoles && !child.allowedRoles.includes(profile?.role ?? '')) return false;
         const rolePerms =
-          permissoes[profile?.role ?? ''] || DEFAULT_PERMISSOES[profile?.role ?? ''] || [];
-        if (rolePerms.includes('all')) return true;
-        const childId = child.id || child.href.split('/').pop() || '';
-        return rolePerms.includes(childId);
+          permissoes[roleStr] !== undefined
+            ? permissoes[roleStr]
+            : DEFAULT_PERMISSOES[roleStr] || [];
+
+        const filteredChildren = item.children?.filter((child) => {
+          if (roleStr === 'admin' || roleStr === 'master') return true;
+          if (child.allowedRoles && !child.allowedRoles.includes(roleStr)) return false;
+          if (rolePerms.includes('all')) return true;
+          const childId = child.id || child.href.split('/').pop() || '';
+          return rolePerms.includes(childId);
+        });
+
+        let effectiveHref = item.href;
+        if (
+          filteredChildren &&
+          filteredChildren.length > 0 &&
+          (roleStr === 'express' || roleStr === 'pdv_simples')
+        ) {
+          effectiveHref = filteredChildren[0].href;
+        }
+
+        return {
+          ...item,
+          href: effectiveHref,
+          children: filteredChildren,
+        };
+      })
+      .filter((item) => {
+        // Se o item tem filhos na estrutura mas todos foram filtrados pelas permissões, esconde o menu pai
+        if (item.children && item.children.length === 0) {
+          return false;
+        }
+        return true;
       });
-
-      let effectiveHref = item.href;
-      if (
-        filteredChildren &&
-        filteredChildren.length > 0 &&
-        (profile?.role === 'express' || profile?.role === 'pdv_simples')
-      ) {
-        effectiveHref = filteredChildren[0].href;
-      }
-
-      return {
-        ...item,
-        href: effectiveHref,
-        children: filteredChildren,
-      };
-    });
   }, [hasAccess, profile?.role, permissoes]);
 
   const handleNavClick = () => {

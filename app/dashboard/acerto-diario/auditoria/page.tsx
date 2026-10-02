@@ -12,6 +12,10 @@ import { useToast } from '@/hooks/useToast';
 import Link from 'next/link';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import {
+  calcularResultadoOperacionalLiquido,
+  calcularFluxoSobrasOperacional,
+} from '@/lib/services/fechamento-pdv-calc';
+import {
   AlertCircle,
   AlertOctagon,
   AlertTriangle,
@@ -30,6 +34,7 @@ import {
   Eye,
   Filter,
   Flame,
+  Info,
   Landmark,
   LayoutGrid,
   AlignJustify,
@@ -42,6 +47,7 @@ import {
   QrCode,
   Receipt,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   ShoppingBag,
   Smartphone,
@@ -503,10 +509,10 @@ export default function AuditoriaPDVPage() {
       'Atendente',
       'Tipo Fechamento',
       'Enviados',
-      'Sobras',
+      'Retorno do Turno',
       'Vendidos',
       'Faturamento Bruto (R$)',
-      'Faturamento Liquido Comercial (R$)',
+      'Faturamento Liquido Real (R$)',
       'Dinheiro Gaveta (R$)',
       'Pix/Cartao Esperado (R$)',
       'Pix Declarado (R$)',
@@ -524,7 +530,8 @@ export default function AuditoriaPDVPage() {
           : r.tipo_fechamento === 'semanal'
             ? 'Semanal'
             : 'Diario Padrao';
-      const bruto = Number(r.faturamento_bruto_teorico || 0) || Number(r.faturamento_liquido_esperado || 0);
+      const bruto =
+        Number(r.faturamento_bruto_teorico || 0) || Number(r.faturamento_liquido_esperado || 0);
       return [
         r.data,
         `"${(r.locais?.nome || 'PDV Geral').replace(/"/g, '""')}"`,
@@ -636,6 +643,11 @@ export default function AuditoriaPDVPage() {
           </div>
 
           <div class="kpis">
+            <div class="kpi-card" style="border: 2px solid #059669; background: #ecfdf5;">
+              <div class="kpi-title" style="color: #065f46; font-weight: 900;">Faturamento Líquido Real</div>
+              <div class="kpi-value" style="color: #047857;">R$ ${resultadoOperacional.resultadoLiquidoOperacional.toFixed(2)}</div>
+              <div style="font-size: 10px; color: #065f46; font-weight: 700; margin-top: 2px;">${resultadoOperacional.percentualLiquidoFormatado} líquido (Bruto: R$ ${resultadoOperacional.faturamentoBruto.toFixed(2)})</div>
+            </div>
             <div class="kpi-card">
               <div class="kpi-title">Faturamento Bruto</div>
               <div class="kpi-value">R$ ${faturamentoBrutoAuditado.toFixed(2)}</div>
@@ -643,32 +655,36 @@ export default function AuditoriaPDVPage() {
             </div>
             <div class="kpi-card">
               <div class="kpi-title">Mercadoria Vendida</div>
-              <div class="kpi-value" style="color: #8b5cf6;">${totalVendidosGeral} un</div>
+              <div class="kpi-value" style="color: #8b5cf6;">${fluxoSobras.totalVendidos} un</div>
+              <div style="font-size: 10px; color: #6b21a8; margin-top: 2px;">Aproveitamento: ${fluxoSobras.taxaAproveitamento.toFixed(1)}%</div>
             </div>
             <div class="kpi-card">
-              <div class="kpi-title">Total de Sobras</div>
-              <div class="kpi-value" style="color: #f59e0b;">${totalRetornoGeral} un</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-title">${resultadoCaixa.titulo}</div>
-              <div class="kpi-value" style="color: ${resultadoCaixa.tipo === 'furo' ? '#dc2626' : '#059669'}">
-                R$ ${resultadoCaixa.valor.toFixed(2)}
-              </div>
+              <div class="kpi-title">Sobra Física Final</div>
+              <div class="kpi-value" style="color: #f59e0b;">${fluxoSobras.sobraFisicaFinal} un</div>
+              <div style="font-size: 10px; color: #b45309; margin-top: 2px;">Taxa sobra: ${fluxoSobras.taxaSobraFinal.toFixed(1)}%</div>
             </div>
           </div>
 
           <div class="kpis-sub">
             <div class="kpi-card">
-              <div class="kpi-title">Taxas Financeiras (${taxaEfetivaFormatada})</div>
-              <div class="kpi-value" style="color: #dc2626;">R$ ${totalTaxasFinanceiras.toFixed(2)}</div>
+              <div class="kpi-title">Taxas de Cartão (${taxaEfetivaFormatada})</div>
+              <div class="kpi-value" style="color: #dc2626;">-R$ ${totalTaxasFinanceiras.toFixed(2)}</div>
             </div>
             <div class="kpi-card">
-              <div class="kpi-title">Líquido após Taxas</div>
-              <div class="kpi-value" style="color: #2563eb;">R$ ${totalLiquidoAposTaxas.toFixed(2)}</div>
+              <div class="kpi-title">${resultadoCaixa.tipo === 'furo' ? 'Furo de Caixa' : resultadoCaixa.tipo === 'sobra' ? 'Sobra de Caixa' : 'Caixa Conferido'}</div>
+              <div class="kpi-value" style="color: ${resultadoCaixa.tipo === 'furo' ? '#dc2626' : '#059669'};">
+                ${resultadoCaixa.tipo === 'furo' ? `-R$ ${resultadoCaixa.valor.toFixed(2)}` : resultadoCaixa.tipo === 'sobra' ? `+R$ ${resultadoCaixa.valor.toFixed(2)}` : 'R$ 0,00 (Batido)'}
+              </div>
             </div>
             <div class="kpi-card">
-              <div class="kpi-title">Total Digital (Pix + Cartões)</div>
-              <div class="kpi-value" style="color: #6366f1;">R$ ${totalDigitalDeclarado.toFixed(2)}</div>
+              <div class="kpi-title">Movimentações de Retorno</div>
+              <div class="kpi-value" style="color: #2563eb;">${fluxoSobras.movimentacoesRetorno} mov.</div>
+              <div style="font-size: 10px; color: #1e40af; margin-top: 2px;">Histórico de turnos</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">Perdas / Descarte</div>
+              <div class="kpi-value" style="color: #ea580c;">${fluxoSobras.totalPerdasUnidades} un</div>
+              <div style="font-size: 10px; color: #9a3412; margin-top: 2px;">R$ ${totalDescontosPerdasGeral.toFixed(2)}</div>
             </div>
           </div>
 
@@ -767,7 +783,7 @@ export default function AuditoriaPDVPage() {
 
       // Buscar fechamentos unificados do período para consolidação das taxas e recebimentos digitais
       try {
-        let queryFech = supabase
+        const queryFech = supabase
           .from('fechamentos_unificados_pdv')
           .select('*')
           .eq('organization_id', profile.organization_id)
@@ -918,12 +934,15 @@ export default function AuditoriaPDVPage() {
     // A) Somatório a partir dos Fechamentos Unificados (sem duplicidade)
     fechamentosFiltrados.forEach((fu) => {
       const recordsFu = registrosAuditados.filter((r) => r.fechamento_unificado_id === fu.id);
-      
+
       // Só soma se tiver pelo menos um registro auditado vinculado
       if (recordsFu.length === 0) return;
 
       const fatTotalFu = Number(fu.total_faturamento_liquido || 0);
-      const fatPdvNoFech = recordsFu.reduce((s, r) => s + Number(r.faturamento_liquido_esperado || 0), 0);
+      const fatPdvNoFech = recordsFu.reduce(
+        (s, r) => s + Number(r.faturamento_liquido_esperado || 0),
+        0
+      );
 
       let proporcao = 1;
       // Calcula a proporção baseada no faturamento auditado vs faturamento total
@@ -994,14 +1013,13 @@ export default function AuditoriaPDVPage() {
       : null;
 
   const taxaEfetivaFormatada =
-    taxaEfetivaPercentual !== null
-      ? `${taxaEfetivaPercentual.toFixed(2).replace('.', ',')}%`
-      : '—';
+    taxaEfetivaPercentual !== null ? `${taxaEfetivaPercentual.toFixed(2).replace('.', ',')}%` : '—';
 
   // 4. Resultado de Caixa (Diferença Comercial entre Total Bruto Recebido e Faturamento Líquido Comercial)
   // Regra: Diferença = Total Bruto Recebido - Faturamento Líquido Comercial
   // Taxa financeira NÃO é furo e NÃO entra neste cálculo.
-  const diferencaCaixaGeral = Math.round((totalRecebidoBruto - faturamentoLiquidoTotal) * 100) / 100;
+  const diferencaCaixaGeral =
+    Math.round((totalRecebidoBruto - faturamentoLiquidoTotal) * 100) / 100;
 
   const resultadoCaixa = useMemo(() => {
     if (Math.abs(diferencaCaixaGeral) <= 0.05) {
@@ -1012,8 +1030,10 @@ export default function AuditoriaPDVPage() {
         subtexto: 'Caixas 100% batidos',
         badgeClasse: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
         valorClasse: 'text-emerald-600 dark:text-emerald-400',
-        cardClasse: 'border-emerald-200 from-emerald-50/50 to-background dark:border-emerald-800/50',
-        iconBgClasse: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300',
+        cardClasse:
+          'border-emerald-200 from-emerald-50/50 to-background dark:border-emerald-800/50',
+        iconBgClasse:
+          'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300',
       };
     } else if (diferencaCaixaGeral < -0.05) {
       const furo = Math.abs(diferencaCaixaGeral);
@@ -1024,7 +1044,8 @@ export default function AuditoriaPDVPage() {
         subtexto: 'Falta apurada nas conferências',
         badgeClasse: 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300',
         valorClasse: 'text-rose-600 dark:text-rose-400',
-        cardClasse: 'border-rose-300 from-rose-50/70 to-background dark:border-rose-900 dark:from-rose-950/30',
+        cardClasse:
+          'border-rose-300 from-rose-50/70 to-background dark:border-rose-900 dark:from-rose-950/30',
         iconBgClasse: 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300',
       };
     } else {
@@ -1035,18 +1056,39 @@ export default function AuditoriaPDVPage() {
         subtexto: 'Sobra física apurada no caixa',
         badgeClasse: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300',
         valorClasse: 'text-cyan-600 dark:text-cyan-400',
-        cardClasse: 'border-cyan-300 from-cyan-50/70 to-background dark:border-cyan-900 dark:from-cyan-950/30',
+        cardClasse:
+          'border-cyan-300 from-cyan-50/70 to-background dark:border-cyan-900 dark:from-cyan-950/30',
         iconBgClasse: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/60 dark:text-cyan-300',
       };
     }
   }, [diferencaCaixaGeral]);
 
-  const taxaSobraPercentual =
-    totalEnviadoAuditado > 0 ? (totalRetornoGeral / totalEnviadoAuditado) * 100 : 0;
-  const taxaGiroPercentual =
-    totalEnviadoAuditado > 0 ? (totalVendidosGeral / totalEnviadoAuditado) * 100 : 0;
+  // ─── APURAÇÃO FINANCEIRA OPERACIONAL & FLUXO DE SOBRAS (SEM DUPLA CONTAGEM) ───
+  const resultadoOperacional = useMemo(() => {
+    return calcularResultadoOperacionalLiquido({
+      faturamentoBruto: faturamentoBrutoAuditado,
+      taxasFinanceiras: totalTaxasFinanceiras,
+      diferencaCaixa: diferencaCaixaGeral,
+      descontosPerdas: totalDescontosPerdasGeral,
+    });
+  }, [
+    faturamentoBrutoAuditado,
+    totalTaxasFinanceiras,
+    diferencaCaixaGeral,
+    totalDescontosPerdasGeral,
+  ]);
+
+  const fluxoSobras = useMemo(() => {
+    return calcularFluxoSobrasOperacional(registrosAuditados);
+  }, [registrosAuditados]);
+
+  const sobraFisicaFinalGeral = fluxoSobras.sobraFisicaFinal;
+  const totalMovimentacoesRetornoGeral = fluxoSobras.movimentacoesRetorno;
+  const totalPerdasUnidades = fluxoSobras.totalPerdasUnidades;
+  const taxaSobraPercentual = fluxoSobras.taxaSobraFinal;
+  const taxaGiroPercentual = fluxoSobras.taxaAproveitamento;
   const ticketMedioUnitario =
-    totalVendidosGeral > 0 ? faturamentoLiquidoTotal / totalVendidosGeral : 0;
+    fluxoSobras.totalVendidos > 0 ? faturamentoBrutoAuditado / fluxoSobras.totalVendidos : 0;
 
   // Divergência / Furo acumulado (mantido para compatibilidade interna)
   const totalFurosDeCaixa = diferencaCaixaGeral;
@@ -1066,54 +1108,20 @@ export default function AuditoriaPDVPage() {
 
   // --- PREPARAÇÃO DE DADOS PARA GRÁFICOS ---
 
-  // 1. Ranking dos Produtos Mais Vendidos & Análise de Giro (Apenas registros auditados)
-  const rankingMap: Record<string, RankingItem> = {};
-  registrosAuditados.forEach((reg) => {
-    // Ignora registros secundários de fechamento unificado para não duplicar somas
-    const isSecundarioUnificado =
-      reg.observacoes?.includes('Unificado no registro principal') ||
-      (reg.tipo_fechamento === 'unificado' &&
-        Number(reg.faturamento_bruto_teorico || 0) === 0 &&
-        Number(reg.qtd_total_enviada || 0) === 0);
+  // 1. Ranking dos Produtos Mais Vendidos & Análise de Giro (Baseado no fluxo deduplicado)
+  const rankingProdutos: RankingItem[] = useMemo(() => {
+    return fluxoSobras.produtos.map((p) => ({
+      nome: p.nome,
+      qtdVendida: p.qtdVendida,
+      qtdEnviada: p.totalNovoDisponibilizado,
+      faturamentoTotal: p.faturamentoTotal,
+      giroRate: p.taxaGiro,
+      sobraRate: p.taxaSobraFinal,
+    }));
+  }, [fluxoSobras.produtos]);
 
-    if (isSecundarioUnificado) return;
-
-    if (reg.itens_grade && Array.isArray(reg.itens_grade)) {
-      reg.itens_grade.forEach((item) => {
-        const env = (item.qtd_sobra_anterior || 0) + (item.qtd_enviada || 0);
-        const ret = Number(item.qtd_retorno || 0);
-        const vend = Math.max(0, env - ret);
-        if (vend > 0 || env > 0) {
-          if (!rankingMap[item.nome]) {
-            rankingMap[item.nome] = {
-              nome: item.nome,
-              qtdVendida: 0,
-              qtdEnviada: 0,
-              faturamentoTotal: 0,
-              giroRate: 0,
-              sobraRate: 0,
-            };
-          }
-          rankingMap[item.nome].qtdVendida += vend;
-          rankingMap[item.nome].qtdEnviada += env;
-          rankingMap[item.nome].faturamentoTotal += vend * (item.preco_unitario || 0);
-        }
-      });
-    }
-  });
-
-  const rankingProdutos = Object.values(rankingMap)
-    .map((p) => {
-      const giroRate = p.qtdEnviada > 0 ? (p.qtdVendida / p.qtdEnviada) * 100 : 0;
-      const sobraRate = p.qtdEnviada > 0 ? ((p.qtdEnviada - p.qtdVendida) / p.qtdEnviada) * 100 : 0;
-      return { ...p, giroRate, sobraRate };
-    })
-    .sort((a, b) => b.qtdVendida - a.qtdVendida);
-
-  // Produtos com Alta Devolução (> 25% de Sobra)
-  const produtosAlertaSobra = rankingProdutos
-    .filter((p) => p.qtdEnviada >= 10 && p.sobraRate >= 25)
-    .sort((a, b) => b.sobraRate - a.sobraRate);
+  // Produtos com Alta Devolução (> 25% de Sobra Real sobre o lote disponibilizado)
+  const produtosAlertaSobra = fluxoSobras.produtosAlertaSobra;
 
   // 2. Resumo por PDV (Considerando apenas vendas auditadas)
   const resumoPDVMap: Record<string, ResumoPDV> = {};
@@ -1129,8 +1137,10 @@ export default function AuditoriaPDVPage() {
     const localId = reg.locais?.id || 'geral';
     const localNome = reg.locais?.nome || 'PDV Geral';
     const isAudit = reg.status === 'auditado' || reg.status === 'conferido';
-    const vend = isAudit ? Math.max(0, (reg.qtd_total_enviada || 0) - (reg.qtd_total_retorno || 0)) : 0;
-    const ret = isAudit ? (reg.qtd_total_retorno || 0) : 0;
+    const vend = isAudit
+      ? Math.max(0, (reg.qtd_total_enviada || 0) - (reg.qtd_total_retorno || 0))
+      : 0;
+    const ret = isAudit ? reg.qtd_total_retorno || 0 : 0;
 
     if (!resumoPDVMap[localId]) {
       resumoPDVMap[localId] = {
@@ -1424,13 +1434,14 @@ export default function AuditoriaPDVPage() {
         </div>
       )}
 
-      {/* BLOCO 2: CARDS DE KPIS EM DUAS CAMADAS (OPERACIONAL & FINANCEIRA) */}
+      {/* BLOCO 2: CARDS DE KPIS EM DUAS CAMADAS (RESULTADO E EFICIÊNCIA OPERACIONAL) */}
       <div className="space-y-4">
-        {/* CAMADA 1: OPERACIONAL */}
+        {/* LINHA 1: DESTAQUES PRINCIPAIS (RESULTADO LÍQUIDO, BRUTO, VENDAS E SOBRA FÍSICA FINAL) */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-text/60 flex items-center gap-1.5">
-              <ShoppingBag className="h-3.5 w-3.5 text-primary" /> Apuração Operacional & Mercadorias
+              <Sparkles className="h-3.5 w-3.5 text-primary" /> Visão Executiva & Resultado
+              Operacional
             </span>
             <span className="text-[10px] font-bold text-text/40">
               Auditado ({turnosAuditados} de {totalTurnos} lançamento(s))
@@ -1438,20 +1449,88 @@ export default function AuditoriaPDVPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {/* KPI 1: Faturamento Bruto */}
-            <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-background dark:border-emerald-800/60 dark:from-emerald-950/30 p-4 sm:p-5 shadow-sm space-y-2.5">
+            {/* KPI 1: Faturamento Líquido Real (Resultado Líquido Operacional) - GRANDE DESTAQUE */}
+            <div className="rounded-2xl border-2 border-emerald-500/80 bg-gradient-to-br from-emerald-500/10 via-background to-emerald-500/5 dark:from-emerald-950/40 dark:via-background dark:to-emerald-950/20 p-4 sm:p-5 shadow-sm space-y-2.5 relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                <div
+                  className="flex items-center gap-1.5 cursor-help"
+                  title="Valor das vendas após taxas financeiras e divergências de caixa controladas pelo sistema. Não representa lucro."
+                >
+                  <span className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                    Faturamento Líquido Real
+                  </span>
+                  <div className="group relative inline-flex items-center">
+                    <Info className="h-3.5 w-3.5 text-emerald-700/70 hover:text-emerald-900 dark:text-emerald-300/70" />
+                    <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 hidden w-64 rounded-lg bg-slate-900 p-2 text-[10px] font-normal normal-case text-white shadow-xl group-hover:block z-50">
+                      Valor das vendas após taxas financeiras e divergências de caixa controladas
+                      pelo sistema. Não representa lucro.
+                    </div>
+                  </div>
+                </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
+                  <Wallet className="h-5 w-5" />
+                </div>
+              </div>
+
+              {/* Valor Principal em Grande Destaque com % do bruto */}
+              <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                <p className="font-mono text-2xl sm:text-3xl font-black text-emerald-700 dark:text-emerald-300">
+                  R${' '}
+                  {resultadoOperacional.resultadoLiquidoOperacional.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-mono border border-emerald-300 dark:border-emerald-700">
+                  {resultadoOperacional.percentualLiquidoFormatado} do bruto
+                </span>
+              </div>
+
+              {/* Subtítulo: Faturamento Bruto e Deduções Financeiras Estritas */}
+              <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40 space-y-1 text-[11px]">
+                <div className="flex items-center justify-between text-text/70">
+                  <span>Bruto:</span>
+                  <strong className="font-mono font-bold text-text">
+                    R${' '}
+                    {resultadoOperacional.faturamentoBruto.toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </strong>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] text-text/60 pt-0.5">
+                  <span className="text-rose-600 dark:text-rose-400 font-semibold font-mono">
+                    Taxas: − R${' '}
+                    {resultadoOperacional.taxasFinanceiras.toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                  <span
+                    className={`font-semibold font-mono ${resultadoOperacional.furosCaixa > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+                  >
+                    {resultadoOperacional.furosCaixa > 0
+                      ? `Furos: − R$ ${resultadoOperacional.furosCaixa.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : 'Furos: R$ 0,00'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI 2: Faturamento Bruto */}
+            <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50/70 to-background dark:border-slate-800/80 dark:from-slate-900/40 p-4 sm:p-5 shadow-sm space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-200">
                   Faturamento Bruto
                 </span>
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
                   <DollarSign className="h-5 w-5" />
                 </div>
               </div>
 
-              {/* Valor Principal com Indicador */}
               <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                <p className="font-mono text-2xl sm:text-3xl font-black text-emerald-700 dark:text-emerald-300">
+                <p className="font-mono text-2xl sm:text-3xl font-black text-slate-800 dark:text-slate-100">
                   R${' '}
                   {faturamentoBrutoAuditado.toLocaleString('pt-BR', {
                     minimumFractionDigits: 2,
@@ -1459,49 +1538,34 @@ export default function AuditoriaPDVPage() {
                   })}
                 </p>
                 {turnosAuditados < totalTurnos && (
-                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 font-mono">
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 font-mono">
                     Auditado
                   </span>
                 )}
               </div>
 
-              {/* Detalhamento de Auditado vs Pendente quando houver lançamentos pendentes */}
               {turnosAuditados < totalTurnos ? (
-                <div className="space-y-1.5 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40">
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div className="bg-emerald-100/60 dark:bg-emerald-950/40 p-2 rounded-xl border border-emerald-200/80 dark:border-emerald-800/60">
-                      <span className="text-[9px] font-bold text-emerald-800 dark:text-emerald-300 uppercase block">
-                        Auditado ({turnosAuditados})
-                      </span>
-                      <p className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-xs mt-0.5">
-                        R$ {faturamentoBrutoAuditado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </p>
-                    </div>
-                    <div className="bg-amber-100/60 dark:bg-amber-950/40 p-2 rounded-xl border border-amber-200/80 dark:border-amber-800/60">
-                      <span className="text-[9px] font-bold text-amber-800 dark:text-amber-300 uppercase block">
-                        Pendente ({turnosPendentes})
-                      </span>
-                      <p className="font-mono font-black text-amber-700 dark:text-amber-300 text-xs mt-0.5">
-                        R$ {faturamentoBrutoPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-text/70 px-0.5 pt-0.5">
-                    <span>Total do Período ({totalTurnos} lançamentos):</span>
-                    <strong className="font-mono text-emerald-900 dark:text-emerald-200 font-extrabold">
-                      R$ {faturamentoBrutoGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 text-[11px] space-y-1">
+                  <div className="flex justify-between text-text/60">
+                    <span>Pendente ({turnosPendentes}):</span>
+                    <strong className="font-mono text-amber-600">
+                      R$ {faturamentoBrutoPendente.toFixed(2)}
                     </strong>
+                  </div>
+                  <div className="flex justify-between text-text/80 font-bold">
+                    <span>Total Período:</span>
+                    <strong className="font-mono">R$ {faturamentoBrutoGeral.toFixed(2)}</strong>
                   </div>
                 </div>
               ) : (
-                <p className="text-[11px] font-semibold text-emerald-800/70 dark:text-emerald-400/80 flex items-center gap-1">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                  Todos os {totalTurnos} lançamento(s) auditados e conferidos
+                <p className="text-[11px] font-semibold text-text/50 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />{' '}
+                  Total apurado de vendas realizadas
                 </p>
               )}
             </div>
 
-            {/* KPI 2: Mercadoria Vendida */}
+            {/* KPI 3: Mercadoria Vendida */}
             <div className="rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50/60 to-background dark:border-purple-800/60 dark:from-purple-950/30 p-4 sm:p-5 shadow-sm space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-purple-800 dark:text-purple-300">
@@ -1512,143 +1576,212 @@ export default function AuditoriaPDVPage() {
                 </div>
               </div>
               <p className="font-mono text-2xl sm:text-3xl font-black text-purple-700 dark:text-purple-300">
-                {totalVendidosGeral.toLocaleString('pt-BR')}{' '}
-                <span className="text-sm font-bold text-purple-800/60">un</span>
+                {fluxoSobras.totalVendidos.toLocaleString('pt-BR')}{' '}
+                <span className="text-sm font-bold text-purple-800/60">un.</span>
               </p>
-              <p className="text-[11px] font-semibold text-purple-800/70 dark:text-purple-400/80">
-                Giro auditado: <strong className="font-mono">{taxaGiroPercentual.toFixed(1)}%</strong> da carga
-              </p>
+              <div className="pt-1.5 border-t border-purple-200/60 dark:border-purple-800/40 flex items-center justify-between text-[11px] font-semibold text-purple-800/70 dark:text-purple-400/80">
+                <span>
+                  {fluxoSobras.isPeriodoMultiplo ? (
+                    'Total apurado no período'
+                  ) : (
+                    <>
+                      Aproveitamento:{' '}
+                      <strong className="font-mono">
+                        {fluxoSobras.taxaAproveitamento.toFixed(1)}%
+                      </strong>
+                    </>
+                  )}
+                </span>
+                <span className="text-purple-900 dark:text-purple-200 font-mono">
+                  Méd: R$ {ticketMedioUnitario.toFixed(2)}
+                </span>
+              </div>
             </div>
 
-            {/* KPI 3: Total de Sobras */}
+            {/* KPI 4: Sobra Física Final / Estoque Remanescente */}
             <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/60 to-background dark:border-amber-800/60 dark:from-amber-950/30 p-4 sm:p-5 shadow-sm space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                  Total de Sobras
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                    {fluxoSobras.isPeriodoMultiplo ? 'Estoque Remanescente' : 'Sobra Física Final'}
+                  </span>
+                  <div className="group relative inline-flex items-center">
+                    <Info className="h-3.5 w-3.5 text-amber-700/70 hover:text-amber-900 dark:text-amber-300/70 cursor-help" />
+                    <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 hidden w-64 rounded-lg bg-slate-900 p-2 text-[10px] font-normal normal-case text-white shadow-xl group-hover:block z-50">
+                      {fluxoSobras.isPeriodoMultiplo
+                        ? 'Saldo de estoque físico em custódia nos PDVs no encerramento da data final do período.'
+                        : 'Saldo não vendido no encerramento de hoje.'}
+                    </div>
+                  </div>
+                </div>
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
                   <Package className="h-5 w-5" />
                 </div>
               </div>
-              <p className="font-mono text-2xl sm:text-3xl font-black text-amber-700 dark:text-amber-300">
-                {totalRetornoGeral.toLocaleString('pt-BR')}{' '}
-                <span className="text-sm font-bold text-amber-800/60">un</span>
-              </p>
-              <p className="text-[11px] font-semibold text-amber-800/70 dark:text-amber-400/80">
-                Devolução auditada: <strong className="font-mono">{taxaSobraPercentual.toFixed(1)}%</strong>
-              </p>
-            </div>
-
-            {/* KPI 4: Resultado de Caixa */}
-            <div
-              className={`rounded-2xl border p-4 sm:p-5 shadow-sm space-y-2 bg-gradient-to-br ${resultadoCaixa.cardClasse}`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-text/80">
-                  {resultadoCaixa.titulo}
-                </span>
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-xl ${resultadoCaixa.iconBgClasse}`}
-                >
-                  {resultadoCaixa.tipo === 'conferido' ? (
-                    <CheckCircle2 className="h-5 w-5" />
-                  ) : resultadoCaixa.tipo === 'furo' ? (
-                    <AlertTriangle className="h-5 w-5" />
-                  ) : (
-                    <TrendingUp className="h-5 w-5" />
-                  )}
-                </div>
+              <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                <p className="font-mono text-2xl sm:text-3xl font-black text-amber-700 dark:text-amber-300">
+                  {fluxoSobras.estoqueRemanescente.toLocaleString('pt-BR')}{' '}
+                  <span className="text-sm font-bold text-amber-800/60">un.</span>
+                </p>
+                {!fluxoSobras.isPeriodoMultiplo && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-mono">
+                    {fluxoSobras.taxaSobraFinal.toFixed(1)}% sobra
+                  </span>
+                )}
               </div>
-              <p className={`font-mono text-2xl sm:text-3xl font-black ${resultadoCaixa.valorClasse}`}>
-                R${' '}
-                {resultadoCaixa.valor.toLocaleString('pt-BR', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </p>
-              <p className="text-[11px] font-semibold text-text/60">
-                {resultadoCaixa.subtexto}
+              <p className="text-[11px] font-semibold text-amber-800/70 dark:text-amber-400/80 pt-1.5 border-t border-amber-200/60 dark:border-amber-800/40">
+                {fluxoSobras.isPeriodoMultiplo
+                  ? 'Saldo físico existente ao final do período selecionado'
+                  : 'Saldo não vendido no encerramento de hoje'}
               </p>
             </div>
           </div>
         </div>
 
-        {/* CAMADA 2: FINANCEIRA */}
+        {/* LINHA 2: EFICIÊNCIA, DEDUÇÕES OPERACIONAIS & AUDITORIA */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-text/60 flex items-center gap-1.5">
-              <Landmark className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" /> Fluxo Financeiro, Taxas & Liquidez
+              <Landmark className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" /> Eficiência
+              Operacional, Taxas & Perdas
             </span>
             <span className="text-[10px] font-bold text-text/40">
-              Taxa efetiva apurada sobre operações digitais
+              Taxas financeiras, quebras e unidades retornadas
             </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {/* KPI 6: Taxas Financeiras */}
-            <div className="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50/50 to-background dark:border-rose-900/60 dark:from-rose-950/20 p-4 sm:p-5 shadow-sm space-y-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {/* KPI 5: Taxas de Cartão */}
+            <div className="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50/50 to-background dark:border-rose-900/60 dark:from-rose-950/20 p-4 shadow-sm space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-rose-800 dark:text-rose-300">
-                  Taxas Financeiras
+                  Taxas de Cartão
                 </span>
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300">
-                  <Receipt className="h-5 w-5" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300">
+                  <Receipt className="h-4 w-4" />
                 </div>
               </div>
               <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                <p className="font-mono text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400">
-                  R${' '}
+                <p className="font-mono text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400">
+                  − R${' '}
                   {totalTaxasFinanceiras.toLocaleString('pt-BR', {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
                 </p>
-                <span className="inline-flex items-center text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 font-mono">
-                  Taxa efetiva: {taxaEfetivaFormatada}
+                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 font-mono">
+                  {taxaEfetivaFormatada}
                 </span>
               </div>
-              <p className="text-[11px] font-semibold text-rose-800/70 dark:text-rose-400/80">
-                Taxas de Pix e cartões
+              <p className="text-[10px] text-rose-800/70 dark:text-rose-400/80">
+                Encargos de débito, crédito e Pix
               </p>
             </div>
 
-            {/* KPI 7: Líquido após Taxas */}
-            <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/60 to-background dark:border-blue-800/60 dark:from-blue-950/30 p-4 sm:p-5 shadow-sm space-y-2">
+            {/* KPI 6: Furos de Caixa */}
+            <div
+              className={`rounded-2xl border p-4 shadow-sm space-y-1.5 bg-gradient-to-br ${
+                resultadoCaixa.tipo === 'conferido'
+                  ? 'border-emerald-200 from-emerald-50/50 to-background dark:border-emerald-800/50 text-emerald-900'
+                  : resultadoCaixa.tipo === 'furo'
+                    ? 'border-rose-300 from-rose-50/70 to-background dark:border-rose-900 text-rose-900'
+                    : 'border-cyan-300 from-cyan-50/70 to-background dark:border-cyan-900 text-cyan-900'
+              }`}
+            >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-blue-800 dark:text-blue-300">
-                  Líquido após Taxas
+                <span className="text-xs font-extrabold uppercase tracking-wider opacity-80">
+                  Furos de Caixa
                 </span>
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-900/60 text-blue-300">
-                  <Wallet className="h-5 w-5" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/70 dark:bg-slate-800/80 shadow-2xs">
+                  {resultadoCaixa.tipo === 'conferido' ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  ) : resultadoCaixa.tipo === 'furo' ? (
+                    <AlertTriangle className="h-4 w-4 text-rose-600" />
+                  ) : (
+                    <TrendingUp className="h-4 w-4 text-cyan-600" />
+                  )}
                 </div>
               </div>
-              <p className="font-mono text-2xl sm:text-3xl font-black text-blue-700 dark:text-blue-300">
-                R${' '}
-                {totalLiquidoAposTaxas.toLocaleString('pt-BR', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+              <p
+                className={`font-mono text-xl sm:text-2xl font-black ${resultadoCaixa.valorClasse}`}
+              >
+                {resultadoCaixa.tipo === 'conferido'
+                  ? 'Caixa Batido'
+                  : resultadoCaixa.tipo === 'furo'
+                    ? `− R$ ${resultadoCaixa.valor.toFixed(2)}`
+                    : `+ R$ ${resultadoCaixa.valor.toFixed(2)}`}
               </p>
-              <p className="text-[11px] font-semibold text-blue-800/70 dark:text-blue-400/80">
-                Valor após taxas financeiras
+              <p className="text-[10px] opacity-70">
+                {resultadoCaixa.tipo === 'conferido'
+                  ? '100% conferido com vendas'
+                  : resultadoCaixa.tipo === 'furo'
+                    ? 'Divergência negativa apurada'
+                    : 'Sobra física apurada no caixa'}
               </p>
             </div>
 
-            {/* KPI 8: Taxa Efetiva % */}
-            <div className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50/60 to-background dark:border-indigo-800/60 dark:from-indigo-950/30 p-4 sm:p-5 shadow-sm space-y-2">
+            {/* KPI 7: Unidades Retornadas */}
+            <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/60 to-background dark:border-blue-800/60 dark:from-blue-950/30 p-4 shadow-sm space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-800 dark:text-indigo-300">
-                  Taxa Efetiva %
-                </span>
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 text-indigo-300">
-                  <Percent className="h-5 w-5" />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-blue-800 dark:text-blue-300">
+                    Unidades Retornadas
+                  </span>
+                  <div className="group relative inline-flex items-center">
+                    <Info className="h-3.5 w-3.5 text-blue-700/70 hover:text-blue-900 dark:text-blue-300/70 cursor-help" />
+                    <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 hidden w-64 rounded-lg bg-slate-900 p-2 text-[10px] font-normal normal-case text-white shadow-xl group-hover:block z-50">
+                      Volume operacional de unidades movimentadas em devoluções. Uma mesma unidade
+                      pode aparecer em mais de um retorno.
+                    </div>
+                  </div>
+                </div>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/60 text-blue-300">
+                  <RotateCcw className="h-4 w-4" />
                 </div>
               </div>
-              <p className="font-mono text-2xl sm:text-3xl font-black text-indigo-700 dark:text-indigo-300">
-                {taxaEfetivaFormatada}
+              <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                <p className="font-mono text-xl sm:text-2xl font-black text-blue-700 dark:text-blue-300">
+                  {fluxoSobras.unidadesRetornadas.toLocaleString('pt-BR')}{' '}
+                  <span className="text-xs font-bold text-blue-800/60">un.</span>
+                </p>
+              </div>
+              <p className="text-[10px] text-blue-800/70 dark:text-blue-400/80">
+                em {fluxoSobras.eventosRetorno}{' '}
+                {fluxoSobras.eventosRetorno === 1 ? 'evento de retorno' : 'eventos de retorno'}
               </p>
-              <p className="text-[11px] font-semibold text-indigo-800/70 dark:text-indigo-400/80 truncate">
-                Sobre R$ {totalDigitalDeclarado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} digital
+            </div>
+
+            {/* KPI 8: Perdas / Descarte (Estoque / Custo) */}
+            <div className="rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50/60 to-background dark:border-orange-800/60 dark:from-orange-950/30 p-4 shadow-sm space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-orange-800 dark:text-orange-300">
+                  Perdas / Descarte
+                </span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100 text-orange-700 dark:bg-orange-900/60 text-orange-300">
+                  <Trash2 className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                {fluxoSobras.perdasApuradasRegistradas && fluxoSobras.totalPerdasUnidades > 0 ? (
+                  <>
+                    <p className="font-mono text-xl sm:text-2xl font-black text-orange-700 dark:text-orange-300">
+                      {fluxoSobras.totalPerdasUnidades}{' '}
+                      <span className="text-xs font-bold text-orange-800/60">un.</span>
+                    </p>
+                    {fluxoSobras.totalPerdasCustoEstimado > 0 && (
+                      <span className="font-mono text-xs font-bold text-orange-600 dark:text-orange-400">
+                        R$ {fluxoSobras.totalPerdasCustoEstimado.toFixed(2)} em custo
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm sm:text-base font-bold text-text/60 italic">Não apurado</p>
+                )}
+              </div>
+              <p className="text-[10px] text-orange-800/70 dark:text-orange-400/80">
+                {fluxoSobras.perdasApuradasRegistradas && fluxoSobras.totalPerdasUnidades > 0
+                  ? 'Perda de estoque/custo (não deduzida do faturamento)'
+                  : 'Aguardando registro de descarte no retorno à fábrica'}
               </p>
             </div>
           </div>
@@ -1796,25 +1929,33 @@ export default function AuditoriaPDVPage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div className="space-y-0.5">
-                <span className="text-[10px] font-bold text-text/50 uppercase block">Taxas Financeiras</span>
+                <span className="text-[10px] font-bold text-text/50 uppercase block">
+                  Taxas Financeiras
+                </span>
                 <p className="font-mono font-black text-sm text-rose-600 dark:text-rose-400">
                   R$ {totalTaxasFinanceiras.toFixed(2)}
                 </p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-[10px] font-bold text-text/50 uppercase block">Líquido após Taxas</span>
+                <span className="text-[10px] font-bold text-text/50 uppercase block">
+                  Líquido após Taxas
+                </span>
                 <p className="font-mono font-black text-sm text-blue-700 dark:text-blue-300">
                   R$ {totalLiquidoAposTaxas.toFixed(2)}
                 </p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-[10px] font-bold text-text/50 uppercase block">Taxa Efetiva</span>
+                <span className="text-[10px] font-bold text-text/50 uppercase block">
+                  Taxa Efetiva
+                </span>
                 <p className="font-mono font-black text-sm text-purple-700 dark:text-purple-300">
                   {taxaEfetivaFormatada}
                 </p>
               </div>
               <div className="space-y-0.5 col-span-2 sm:col-span-1">
-                <span className="text-[10px] font-bold text-text/50 uppercase block">Resultado de Caixa</span>
+                <span className="text-[10px] font-bold text-text/50 uppercase block">
+                  Resultado de Caixa
+                </span>
                 <p className={`font-mono font-black text-sm ${resultadoCaixa.valorClasse}`}>
                   {resultadoCaixa.tipo === 'conferido'
                     ? 'Caixa Conferido'
@@ -1913,37 +2054,79 @@ export default function AuditoriaPDVPage() {
             <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-rose-900 dark:text-rose-200">
               <TrendingDown className="h-4 w-4 text-rose-600" /> Alerta de Sobra (Atenção Produção)
             </h2>
-            <AlertOctagon className="h-4 w-4 text-rose-600 animate-pulse" />
+            <div className="flex items-center gap-2">
+              {produtosAlertaSobra.length > 0 && (
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    produtosAlertaSobra[0].tipoAlerta === 'tendencia_recorrente'
+                      ? 'bg-rose-200 text-rose-900 dark:bg-rose-900/60 dark:text-rose-200'
+                      : 'bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200'
+                  }`}
+                >
+                  {produtosAlertaSobra[0].tipoAlerta === 'tendencia_recorrente'
+                    ? `Tendência (${fluxoSobras.diasAnalisados} dias)`
+                    : 'Variação Pontual'}
+                </span>
+              )}
+              <AlertOctagon className="h-4 w-4 text-rose-600 animate-pulse" />
+            </div>
           </div>
 
           {produtosAlertaSobra.length > 0 ? (
             <div className="space-y-3">
-              <div className="rounded-xl border border-rose-300 bg-background p-3 shadow-xs space-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">
-                  Alta Devolução ({produtosAlertaSobra[0].sobraRate.toFixed(1)}% sobra)
+              <div className="rounded-xl border border-rose-300 bg-background p-3 shadow-xs space-y-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 block">
+                  Alta Devolução ({produtosAlertaSobra[0].taxaSobraFinal.toFixed(1)}% sobra física
+                  final)
                 </span>
                 <h4 className="text-base font-black text-text/90">{produtosAlertaSobra[0].nome}</h4>
                 <p className="font-mono text-sm font-bold text-rose-600">
-                  {produtosAlertaSobra[0].qtdEnviada - produtosAlertaSobra[0].qtdVendida} un
-                  sobraram de {produtosAlertaSobra[0].qtdEnviada} enviadas
+                  {produtosAlertaSobra[0].sobraFisicaFinal} un sobraram no encerramento (de{' '}
+                  {produtosAlertaSobra[0].totalSaidasApuradas} un em saídas apuradas)
                 </p>
+                <div className="flex items-center justify-between text-[11px] font-semibold text-text/60 pt-1 border-t border-rose-100 dark:border-rose-900/40">
+                  <span>
+                    Vendeu:{' '}
+                    <strong className="text-emerald-700 dark:text-emerald-400 font-mono">
+                      {produtosAlertaSobra[0].qtdVendida} un
+                    </strong>{' '}
+                    ({produtosAlertaSobra[0].taxaGiro.toFixed(0)}%)
+                  </span>
+                  <span>
+                    Retornos:{' '}
+                    <strong className="text-blue-700 dark:text-blue-400 font-mono">
+                      {produtosAlertaSobra[0].unidadesRetornadas} un (
+                      {produtosAlertaSobra[0].eventosRetorno}{' '}
+                      {produtosAlertaSobra[0].eventosRetorno === 1 ? 'retorno' : 'retornos'})
+                    </strong>
+                  </span>
+                </div>
               </div>
 
-              <div className="rounded-xl bg-amber-100/90 dark:bg-amber-950/60 p-3 border border-amber-300 text-xs text-amber-900 dark:text-amber-200 font-medium space-y-1">
-                <p className="font-bold flex items-center gap-1 text-amber-900 dark:text-amber-100">
-                  💡 Ação Gerencial Recomendada:
+              <div
+                className={`rounded-xl p-3 border text-xs font-medium space-y-1 ${
+                  produtosAlertaSobra[0].tipoAlerta === 'tendencia_recorrente'
+                    ? 'bg-rose-100/90 dark:bg-rose-950/60 border-rose-300 text-rose-900 dark:text-rose-200'
+                    : 'bg-amber-100/90 dark:bg-amber-950/60 border-amber-300 text-amber-900 dark:text-amber-200'
+                }`}
+              >
+                <p className="font-bold flex items-center gap-1">💡 Ação Gerencial Recomendada:</p>
+                <p className="leading-relaxed">
+                  {produtosAlertaSobra[0].mensagemRecomendacao ||
+                    (produtosAlertaSobra[0].tipoAlerta === 'tendencia_recorrente'
+                      ? `Sobra persistente confirmada em ${fluxoSobras.diasAnalisados} dias. Calibrar fornada de ${produtosAlertaSobra[0].nome} ou redistribuir lotes entre PDVs.`
+                      : `Fotografia pontual de hoje. Acompanhar tendência por 3 a 7 dias antes de calibrar fornada na cozinha.`)}
                 </p>
-                <p>
-                  Sinalizar para a cozinha{' '}
-                  <strong>reduzir a fornada de {produtosAlertaSobra[0].nome}</strong> ou remanejar a
-                  carga para um quiosque com maior demanda.
+                <p className="text-[10px] opacity-75 pt-1 border-t border-current/20">
+                  * Conservação de estoque: transferências e recirculações entre turnos/PDVs não
+                  contam como nova produção.
                 </p>
               </div>
             </div>
           ) : (
             <div className="flex h-40 items-center justify-center text-center text-xs text-emerald-800 dark:text-emerald-300 font-semibold p-4">
               ✅ Nenhuma sobra excessiva registrada no período! Giro de estoque 100% eficiente na
-              produção.
+              produção (recirculações concluídas com venda).
             </div>
           )}
         </div>
@@ -2266,7 +2449,6 @@ export default function AuditoriaPDVPage() {
 
       {/* DETALHAMENTO DE RELATÓRIOS FINANCEIROS — CARDS ou LISTA */}
       <div className="overflow-hidden rounded-2xl border border-primary/10 bg-background shadow-sm w-full">
-
         {/* Cabeçalho com toggle de visualização */}
         <div className="border-b border-primary/10 bg-primary/5 p-3 sm:p-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -2333,31 +2515,42 @@ export default function AuditoriaPDVPage() {
                   className="rounded-2xl border border-primary/10 bg-background shadow-sm hover:shadow-md transition-all overflow-hidden"
                 >
                   {/* Card Header */}
-                  <div className={`px-4 py-3 border-b border-primary/10 flex items-center justify-between gap-2 ${
-                    isAudit ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : 'bg-primary/3'
-                  }`}>
+                  <div
+                    className={`px-4 py-3 border-b border-primary/10 flex items-center justify-between gap-2 ${
+                      isAudit ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : 'bg-primary/3'
+                    }`}
+                  >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-extrabold text-text/90 truncate">
                           {reg.locais?.nome || 'PDV Geral'}
                         </span>
                         {reg.tipo_fechamento === 'unificado' && (
-                          <span className="rounded bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 text-[9px] font-bold">⚡</span>
+                          <span className="rounded bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 text-[9px] font-bold">
+                            ⚡
+                          </span>
                         )}
                       </div>
                       <p className="text-[10px] text-text/50 font-medium mt-0.5">
-                        {reg.data.split('-').reverse().join('/')} • <span className="capitalize">{reg.turno || 'Integral'}</span>
+                        {reg.data.split('-').reverse().join('/')} •{' '}
+                        <span className="capitalize">{reg.turno || 'Integral'}</span>
                         {reg.vendedor_nome ? ` • ${reg.vendedor_nome}` : ''}
                       </p>
                     </div>
-                    <span className={`shrink-0 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${
-                      isAudit
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
+                    <span
+                      className={`shrink-0 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                        isAudit
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
+                          : reg.status === 'encerrado'
+                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+                      }`}
+                    >
+                      {isAudit
+                        ? '✓ Auditado'
                         : reg.status === 'encerrado'
-                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
-                    }`}>
-                      {isAudit ? '✓ Auditado' : reg.status === 'encerrado' ? 'Ag. Auditoria' : 'Em Venda'}
+                          ? 'Ag. Auditoria'
+                          : 'Em Venda'}
                     </span>
                   </div>
 
@@ -2366,17 +2559,25 @@ export default function AuditoriaPDVPage() {
                     {/* Qtd Operacional */}
                     <div className="grid grid-cols-3 gap-1.5 text-center">
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-900/50 py-2">
-                        <span className="block text-[10px] font-bold text-text/50 uppercase">Enviado</span>
-                        <span className="block font-mono font-black text-base text-text/80">{reg.qtd_total_enviada || 0}</span>
+                        <span className="block text-[10px] font-bold text-text/50 uppercase">
+                          Enviado
+                        </span>
+                        <span className="block font-mono font-black text-base text-text/80">
+                          {reg.qtd_total_enviada || 0}
+                        </span>
                       </div>
                       <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 py-2">
-                        <span className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Sobra</span>
+                        <span className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">
+                          Sobra
+                        </span>
                         <span className="block font-mono font-black text-base text-amber-600">
-                          {isAudit ? (reg.qtd_total_retorno || 0) : '—'}
+                          {isAudit ? reg.qtd_total_retorno || 0 : '—'}
                         </span>
                       </div>
                       <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 py-2">
-                        <span className="block text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Vendido</span>
+                        <span className="block text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">
+                          Vendido
+                        </span>
                         <span className="block font-mono font-black text-base text-emerald-600">
                           {vend !== null ? vend : '—'}
                         </span>
@@ -2387,25 +2588,43 @@ export default function AuditoriaPDVPage() {
                     {isAudit && (
                       <div className="rounded-xl bg-slate-900 dark:bg-slate-950 px-3 py-2.5 space-y-1.5 text-[11px]">
                         <div className="flex justify-between text-slate-300">
-                          <span className="flex items-center gap-1"><Banknote className="h-3 w-3 text-emerald-400" /> Dinheiro:</span>
-                          <span className="font-mono font-bold text-emerald-400">R$ {Number(reg.valor_dinheiro_gaveta || 0).toFixed(2)}</span>
+                          <span className="flex items-center gap-1">
+                            <Banknote className="h-3 w-3 text-emerald-400" /> Dinheiro:
+                          </span>
+                          <span className="font-mono font-bold text-emerald-400">
+                            R$ {Number(reg.valor_dinheiro_gaveta || 0).toFixed(2)}
+                          </span>
                         </div>
                         <div className="flex justify-between text-slate-300">
-                          <span className="flex items-center gap-1"><Smartphone className="h-3 w-3 text-purple-400" /> Pix:</span>
-                          <span className="font-mono font-bold text-purple-400">R$ {Number(reg.valor_pix_declarado || 0).toFixed(2)}</span>
+                          <span className="flex items-center gap-1">
+                            <Smartphone className="h-3 w-3 text-purple-400" /> Pix:
+                          </span>
+                          <span className="font-mono font-bold text-purple-400">
+                            R$ {Number(reg.valor_pix_declarado || 0).toFixed(2)}
+                          </span>
                         </div>
                         <div className="flex justify-between text-slate-300">
-                          <span className="flex items-center gap-1"><CreditCard className="h-3 w-3 text-cyan-400" /> Cartão:</span>
-                          <span className="font-mono font-bold text-cyan-400">R$ {Number(reg.valor_cartao_declarado || 0).toFixed(2)}</span>
+                          <span className="flex items-center gap-1">
+                            <CreditCard className="h-3 w-3 text-cyan-400" /> Cartão:
+                          </span>
+                          <span className="font-mono font-bold text-cyan-400">
+                            R$ {Number(reg.valor_cartao_declarado || 0).toFixed(2)}
+                          </span>
                         </div>
                         <div className="flex justify-between border-t border-slate-800 pt-1.5 text-white font-bold">
                           <span>Faturamento:</span>
-                          <span className="font-mono text-primary">R$ {Number(reg.faturamento_liquido_esperado || 0).toFixed(2)}</span>
+                          <span className="font-mono text-primary">
+                            R$ {Number(reg.faturamento_liquido_esperado || 0).toFixed(2)}
+                          </span>
                         </div>
                         {dif !== 0 && (
-                          <div className={`flex justify-between font-bold ${ dif < 0 ? 'text-rose-400' : 'text-blue-300' }`}>
+                          <div
+                            className={`flex justify-between font-bold ${dif < 0 ? 'text-rose-400' : 'text-blue-300'}`}
+                          >
                             <span>{dif < 0 ? 'Furo:' : 'Sobra:'}</span>
-                            <span className="font-mono">{dif < 0 ? '-' : '+'}R$ {Math.abs(dif).toFixed(2)}</span>
+                            <span className="font-mono">
+                              {dif < 0 ? '-' : '+'}R$ {Math.abs(dif).toFixed(2)}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -2485,14 +2704,21 @@ export default function AuditoriaPDVPage() {
                         </span>
                       </td>
                       <td className="p-3 text-text/70">
-                        <span className="block font-bold capitalize">{reg.turno || 'Integral'}</span>
-                        <span className="block text-[10px] text-text/50">{reg.vendedor_nome || '—'}</span>
+                        <span className="block font-bold capitalize">
+                          {reg.turno || 'Integral'}
+                        </span>
+                        <span className="block text-[10px] text-text/50">
+                          {reg.vendedor_nome || '—'}
+                        </span>
                       </td>
                       <td className="p-3 text-center font-mono">
-                        <span className="text-text/50">{reg.qtd_total_enviada || 0}</span>{' / '}
+                        <span className="text-text/50">{reg.qtd_total_enviada || 0}</span>
+                        {' / '}
                         {isAudit ? (
                           <>
-                            <span className="text-amber-600 font-bold">{reg.qtd_total_retorno || 0}</span>
+                            <span className="text-amber-600 font-bold">
+                              {reg.qtd_total_retorno || 0}
+                            </span>
                             {' / '}
                             <span className="font-bold text-primary">{vend}</span>
                           </>
@@ -2501,36 +2727,64 @@ export default function AuditoriaPDVPage() {
                         )}
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-text/90">
-                        {isAudit
-                          ? `R$ ${Number(reg.faturamento_liquido_esperado || 0).toFixed(2)}`
-                          : <span className="text-amber-600 dark:text-amber-400 text-[10px] italic">Ag. auditoria</span>}
+                        {isAudit ? (
+                          `R$ ${Number(reg.faturamento_liquido_esperado || 0).toFixed(2)}`
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400 text-[10px] italic">
+                            Ag. auditoria
+                          </span>
+                        )}
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-emerald-600">
-                        {isAudit ? `R$ ${Number(reg.valor_dinheiro_gaveta || 0).toFixed(2)}` : <span className="text-text/40">—</span>}
+                        {isAudit ? (
+                          `R$ ${Number(reg.valor_dinheiro_gaveta || 0).toFixed(2)}`
+                        ) : (
+                          <span className="text-text/40">—</span>
+                        )}
                       </td>
                       <td className="p-3 text-right font-mono font-bold text-cyan-700 dark:text-cyan-400">
-                        {isAudit ? `R$ ${Number(reg.pix_cartao_esperado || 0).toFixed(2)}` : <span className="text-text/40">—</span>}
+                        {isAudit ? (
+                          `R$ ${Number(reg.pix_cartao_esperado || 0).toFixed(2)}`
+                        ) : (
+                          <span className="text-text/40">—</span>
+                        )}
                       </td>
-                      <td className={`p-3 text-right font-mono font-bold ${
-                        isAudit && Number(reg.diferenca_auditoria || 0) < 0 ? 'text-rose-600' : 'text-emerald-600'
-                      }`}>
-                        {isAudit ? `R$ ${Number(reg.diferenca_auditoria || 0).toFixed(2)}` : <span className="text-text/40">—</span>}
+                      <td
+                        className={`p-3 text-right font-mono font-bold ${
+                          isAudit && Number(reg.diferenca_auditoria || 0) < 0
+                            ? 'text-rose-600'
+                            : 'text-emerald-600'
+                        }`}
+                      >
+                        {isAudit ? (
+                          `R$ ${Number(reg.diferenca_auditoria || 0).toFixed(2)}`
+                        ) : (
+                          <span className="text-text/40">—</span>
+                        )}
                       </td>
                       <td className="p-3 text-center">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                          isAudit
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
-                            : reg.status === 'encerrado'
-                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300'
-                              : reg.status === 'dinheiro_informado' || reg.status === 'sobras_informadas'
-                                ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
-                        }`}>
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                            isAudit
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                              : reg.status === 'encerrado'
+                                ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300'
+                                : reg.status === 'dinheiro_informado' ||
+                                    reg.status === 'sobras_informadas'
+                                  ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                          }`}
+                        >
                           {isAudit
-                            ? (reg.status === 'conferido' ? 'Conferido' : 'Auditado')
-                            : reg.status === 'encerrado' ? 'Ag. Auditoria'
-                            : reg.status === 'dinheiro_informado' || reg.status === 'sobras_informadas' ? 'Sobras Lançadas'
-                            : 'Em Venda'}
+                            ? reg.status === 'conferido'
+                              ? 'Conferido'
+                              : 'Auditado'
+                            : reg.status === 'encerrado'
+                              ? 'Ag. Auditoria'
+                              : reg.status === 'dinheiro_informado' ||
+                                  reg.status === 'sobras_informadas'
+                                ? 'Sobras Lançadas'
+                                : 'Em Venda'}
                         </span>
                       </td>
                       <td className="p-3 text-center">
@@ -2580,7 +2834,6 @@ export default function AuditoriaPDVPage() {
         )}
       </div>
 
-
       {/* ── Modal Resumo de Venda ──────────────────────────────────────────── */}
       {modalResumoVenda && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 animate-fade-in">
@@ -2596,7 +2849,9 @@ export default function AuditoriaPDVPage() {
                   <span className="capitalize">{modalResumoVenda.turno || 'Integral'}</span>
                   {modalResumoVenda.vendedor_nome ? ` • ${modalResumoVenda.vendedor_nome}` : ''}
                   {modalResumoVenda.tipo_fechamento === 'unificado' && (
-                    <span className="ml-1.5 text-purple-600 dark:text-purple-400 font-bold">⚡ Unificado</span>
+                    <span className="ml-1.5 text-purple-600 dark:text-purple-400 font-bold">
+                      ⚡ Unificado
+                    </span>
                   )}
                 </p>
               </div>
@@ -2611,7 +2866,6 @@ export default function AuditoriaPDVPage() {
 
             {/* Corpo */}
             <div className="flex-1 p-5 space-y-5 overflow-y-auto">
-
               {/* SEÇÃO 1: Mercadoria */}
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-widest text-text/50 mb-2.5 flex items-center gap-1.5">
@@ -2619,18 +2873,38 @@ export default function AuditoriaPDVPage() {
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { label: 'Enviado', value: modalResumoVenda.qtd_total_enviada || 0, color: 'bg-slate-50 dark:bg-slate-900/60 text-text/80' },
-                    { label: 'Sobra', value: modalResumoVenda.qtd_total_retorno || 0, color: 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300', show: modalResumoVenda.status === 'auditado' || modalResumoVenda.status === 'conferido' },
+                    {
+                      label: 'Enviado',
+                      value: modalResumoVenda.qtd_total_enviada || 0,
+                      color: 'bg-slate-50 dark:bg-slate-900/60 text-text/80',
+                    },
+                    {
+                      label: 'Sobra',
+                      value: modalResumoVenda.qtd_total_retorno || 0,
+                      color: 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300',
+                      show:
+                        modalResumoVenda.status === 'auditado' ||
+                        modalResumoVenda.status === 'conferido',
+                    },
                     {
                       label: 'Vendido',
-                      value: (modalResumoVenda.status === 'auditado' || modalResumoVenda.status === 'conferido')
-                        ? Math.max(0, (modalResumoVenda.qtd_total_enviada || 0) - (modalResumoVenda.qtd_total_retorno || 0))
-                        : '—',
-                      color: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300',
+                      value:
+                        modalResumoVenda.status === 'auditado' ||
+                        modalResumoVenda.status === 'conferido'
+                          ? Math.max(
+                              0,
+                              (modalResumoVenda.qtd_total_enviada || 0) -
+                                (modalResumoVenda.qtd_total_retorno || 0)
+                            )
+                          : '—',
+                      color:
+                        'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300',
                     },
                   ].map((item) => (
                     <div key={item.label} className={`rounded-2xl ${item.color} p-3 text-center`}>
-                      <span className="block text-[10px] font-extrabold uppercase text-current opacity-60 mb-1">{item.label}</span>
+                      <span className="block text-[10px] font-extrabold uppercase text-current opacity-60 mb-1">
+                        {item.label}
+                      </span>
                       <span className="block text-2xl font-black font-mono">{item.value}</span>
                       <span className="text-[10px] font-semibold opacity-50">un</span>
                     </div>
@@ -2638,57 +2912,86 @@ export default function AuditoriaPDVPage() {
                 </div>
 
                 {/* Detalhamento por produto (itens_grade) */}
-                {Array.isArray(modalResumoVenda.itens_grade) && modalResumoVenda.itens_grade.length > 0 && (
-                  <div className="mt-3 rounded-xl border border-primary/10 overflow-hidden">
-                    <div className="bg-primary/5 px-3 py-2 border-b border-primary/10">
-                      <p className="text-[10px] font-bold uppercase text-text/60">Detalhe por Produto</p>
-                    </div>
-                    <div className="divide-y divide-primary/5">
-                      {modalResumoVenda.itens_grade.map((it, idx) => {
-                        const isAudit = modalResumoVenda.status === 'auditado' || modalResumoVenda.status === 'conferido';
-                        const totalDisp = (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0);
-                        const retorno = Number(it.qtd_retorno) || 0;
-                        const vendido = isAudit ? Math.max(0, totalDisp - retorno) : null;
-                        const fatItem = vendido !== null ? vendido * (Number(it.preco_unitario) || 0) : null;
-                        return (
-                          <div key={idx} className="flex items-center justify-between px-3 py-2 text-xs">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-text/80 truncate">{it.nome}</p>
-                              <p className="text-[10px] text-text/50 font-mono">
-                                R$ {Number(it.preco_unitario || 0).toFixed(2)}/un
-                              </p>
+                {Array.isArray(modalResumoVenda.itens_grade) &&
+                  modalResumoVenda.itens_grade.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-primary/10 overflow-hidden">
+                      <div className="bg-primary/5 px-3 py-2 border-b border-primary/10">
+                        <p className="text-[10px] font-bold uppercase text-text/60">
+                          Detalhe por Produto
+                        </p>
+                      </div>
+                      <div className="divide-y divide-primary/5">
+                        {modalResumoVenda.itens_grade.map((it, idx) => {
+                          const isAudit =
+                            modalResumoVenda.status === 'auditado' ||
+                            modalResumoVenda.status === 'conferido';
+                          const totalDisp =
+                            (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0);
+                          const retorno = Number(it.qtd_retorno) || 0;
+                          const vendido = isAudit ? Math.max(0, totalDisp - retorno) : null;
+                          const fatItem =
+                            vendido !== null ? vendido * (Number(it.preco_unitario) || 0) : null;
+                          return (
+                            <div
+                              key={idx}
+                              className="flex items-center justify-between px-3 py-2 text-xs"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-text/80 truncate">{it.nome}</p>
+                                <p className="text-[10px] text-text/50 font-mono">
+                                  R$ {Number(it.preco_unitario || 0).toFixed(2)}/un
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3 font-mono shrink-0 ml-2">
+                                <span className="text-text/50 min-w-[32px] text-center">
+                                  {totalDisp}
+                                </span>
+                                <span className="text-amber-600 min-w-[32px] text-center">
+                                  {isAudit ? retorno : '—'}
+                                </span>
+                                <span className="font-bold text-emerald-600 min-w-[32px] text-center">
+                                  {vendido !== null ? vendido : '—'}
+                                </span>
+                                {fatItem !== null && (
+                                  <span className="font-bold text-primary min-w-[70px] text-right">
+                                    R$ {fatItem.toFixed(2)}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3 font-mono shrink-0 ml-2">
-                              <span className="text-text/50 min-w-[32px] text-center">{totalDisp}</span>
-                              <span className="text-amber-600 min-w-[32px] text-center">{isAudit ? retorno : '—'}</span>
-                              <span className="font-bold text-emerald-600 min-w-[32px] text-center">{vendido !== null ? vendido : '—'}</span>
-                              {fatItem !== null && (
-                                <span className="font-bold text-primary min-w-[70px] text-right">R$ {fatItem.toFixed(2)}</span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="flex items-center text-[10px] font-bold uppercase text-text/40 px-3 py-1.5 bg-primary/5 border-t border-primary/10">
-                      <span className="flex-1">Total</span>
-                      <div className="flex items-center gap-3 font-mono">
-                        <span className="text-text/50 min-w-[32px] text-center">{modalResumoVenda.qtd_total_enviada || 0}</span>
-                        <span className="text-amber-600 min-w-[32px] text-center">
-                          {(modalResumoVenda.status === 'auditado' || modalResumoVenda.status === 'conferido') ? (modalResumoVenda.qtd_total_retorno || 0) : '—'}
-                        </span>
-                        <span className="font-bold text-emerald-600 min-w-[32px] text-center">
-                          {(modalResumoVenda.status === 'auditado' || modalResumoVenda.status === 'conferido')
-                            ? Math.max(0, (modalResumoVenda.qtd_total_enviada || 0) - (modalResumoVenda.qtd_total_retorno || 0))
-                            : '—'}
-                        </span>
-                        <span className="font-bold text-primary min-w-[70px] text-right">
-                          R$ {Number(modalResumoVenda.faturamento_liquido_esperado || 0).toFixed(2)}
-                        </span>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center text-[10px] font-bold uppercase text-text/40 px-3 py-1.5 bg-primary/5 border-t border-primary/10">
+                        <span className="flex-1">Total</span>
+                        <div className="flex items-center gap-3 font-mono">
+                          <span className="text-text/50 min-w-[32px] text-center">
+                            {modalResumoVenda.qtd_total_enviada || 0}
+                          </span>
+                          <span className="text-amber-600 min-w-[32px] text-center">
+                            {modalResumoVenda.status === 'auditado' ||
+                            modalResumoVenda.status === 'conferido'
+                              ? modalResumoVenda.qtd_total_retorno || 0
+                              : '—'}
+                          </span>
+                          <span className="font-bold text-emerald-600 min-w-[32px] text-center">
+                            {modalResumoVenda.status === 'auditado' ||
+                            modalResumoVenda.status === 'conferido'
+                              ? Math.max(
+                                  0,
+                                  (modalResumoVenda.qtd_total_enviada || 0) -
+                                    (modalResumoVenda.qtd_total_retorno || 0)
+                                )
+                              : '—'}
+                          </span>
+                          <span className="font-bold text-primary min-w-[70px] text-right">
+                            R${' '}
+                            {Number(modalResumoVenda.faturamento_liquido_esperado || 0).toFixed(2)}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
               </div>
 
               {/* SEÇÃO 2: Financeiro */}
@@ -2727,17 +3030,25 @@ export default function AuditoriaPDVPage() {
                       R$ {Number(modalResumoVenda.faturamento_liquido_esperado || 0).toFixed(2)}
                     </span>
                   </div>
-                  {(modalResumoVenda.status === 'auditado' || modalResumoVenda.status === 'conferido') && (
+                  {(modalResumoVenda.status === 'auditado' ||
+                    modalResumoVenda.status === 'conferido') && (
                     <>
                       {Number(modalResumoVenda.diferenca_auditoria || 0) !== 0 ? (
-                        <div className={`flex justify-between font-bold text-sm ${
-                          Number(modalResumoVenda.diferenca_auditoria || 0) < 0
-                            ? 'text-rose-400'
-                            : 'text-blue-300'
-                        }`}>
-                          <span>{Number(modalResumoVenda.diferenca_auditoria || 0) < 0 ? '⚠ Furo de Caixa:' : '⚠ Sobra de Caixa:'}</span>
+                        <div
+                          className={`flex justify-between font-bold text-sm ${
+                            Number(modalResumoVenda.diferenca_auditoria || 0) < 0
+                              ? 'text-rose-400'
+                              : 'text-blue-300'
+                          }`}
+                        >
+                          <span>
+                            {Number(modalResumoVenda.diferenca_auditoria || 0) < 0
+                              ? '⚠ Furo de Caixa:'
+                              : '⚠ Sobra de Caixa:'}
+                          </span>
                           <span className="font-mono">
-                            {Number(modalResumoVenda.diferenca_auditoria || 0) < 0 ? '-' : '+'}R$ {Math.abs(Number(modalResumoVenda.diferenca_auditoria || 0)).toFixed(2)}
+                            {Number(modalResumoVenda.diferenca_auditoria || 0) < 0 ? '-' : '+'}R${' '}
+                            {Math.abs(Number(modalResumoVenda.diferenca_auditoria || 0)).toFixed(2)}
                           </span>
                         </div>
                       ) : (
@@ -2754,7 +3065,9 @@ export default function AuditoriaPDVPage() {
 
                 {modalResumoVenda.observacoes && (
                   <div className="mt-3 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5 text-xs text-text/70">
-                    <span className="font-bold text-text/50 block text-[10px] uppercase mb-1">Observações:</span>
+                    <span className="font-bold text-text/50 block text-[10px] uppercase mb-1">
+                      Observações:
+                    </span>
                     {modalResumoVenda.observacoes}
                   </div>
                 )}

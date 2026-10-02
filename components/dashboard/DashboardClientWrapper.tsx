@@ -83,10 +83,6 @@ export default function DashboardClientWrapper({
           'ranking_produtos',
           'produtos',
           'agenda',
-          'configuracoes_lojas',
-          'pdv',
-          'pdv_caixa',
-          'pdv_controle_caixa',
           'ajuda',
         ];
 
@@ -94,7 +90,7 @@ export default function DashboardClientWrapper({
         if (isMounted) setUserPerms(rolePerms);
       } catch {
         if (isMounted) {
-          setUserPerms(['acertos_rapidos', 'agenda', 'configuracoes_lojas', 'pdv', 'produtos']);
+          setUserPerms(['acertos_rapidos', 'agenda', 'produtos', 'ajuda']);
         }
       }
     };
@@ -152,8 +148,6 @@ export default function DashboardClientWrapper({
           '/dashboard/acerto-diario',
           '/dashboard/producao/produtos',
           '/dashboard/agenda',
-          '/dashboard/configuracoes/lojas',
-          '/dashboard/pdv',
           '/dashboard/ajuda',
         ];
 
@@ -212,7 +206,9 @@ export default function DashboardClientWrapper({
   if (isOnboardingPage) {
     return (
       <AuthGuard requiredRoles={['admin', 'master', 'gerente']}>
-        <div className="min-h-screen bg-[var(--background)] text-[var(--text)] transition-colors duration-300">{children}</div>
+        <div className="min-h-screen bg-[var(--background)] text-[var(--text)] transition-colors duration-300">
+          {children}
+        </div>
       </AuthGuard>
     );
   }

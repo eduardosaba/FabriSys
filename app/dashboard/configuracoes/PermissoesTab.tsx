@@ -135,13 +135,65 @@ const DEFAULT_PERMISSOES: Record<string, string[]> = {
     'ranking_produtos',
     'produtos',
     'agenda',
-    'configuracoes_lojas',
-    'pdv',
-    'pdv_caixa',
-    'pdv_controle_caixa',
+    'ajuda',
   ],
   pdv_simples: ['acertos_rapidos', 'lancar_turno', 'pdv', 'pdv_caixa', 'agenda'],
   user: [],
+};
+
+const MENU_HIERARCHY: Record<string, string[]> = {
+  acertos_rapidos: [
+    'lancar_turno',
+    'auditoria_geral',
+    'fechamento_diario',
+    'conciliacao_bancaria',
+    'ranking_produtos',
+  ],
+  producao: [
+    'fabrica_dashboard',
+    'producao_kanban',
+    'ordens_producao',
+    'produtos',
+    'ficha_tecnica',
+    'estoque_fabrica',
+  ],
+  pdv: ['pdv_caixa', 'pdv_controle_caixa', 'pdv_recebimento', 'pdv_inventario'],
+  logistica: ['logistica_expedicao'],
+  suprimentos: [
+    'compras_sugestao',
+    'pedidos_compra',
+    'insumos_estoque',
+    'insumos_alertas',
+    'insumos_cadastro',
+    'insumos_categorias',
+    'insumos',
+    'fornecedores',
+  ],
+  relatorios: [
+    'relatorios_dre',
+    'relatorios_painel',
+    'relatorios_vendas',
+    'relatorios_historico_caixa',
+    'relatorios_estoque',
+    'relatorios_validade',
+  ],
+  financeiro: [
+    'financeiro_contas_pagar',
+    'financeiro_conferencia',
+    'financeiro_dre',
+    'financeiro_categorias',
+  ],
+  configuracoes: [
+    'configuracoes_sistema',
+    'configuracoes_permissoes',
+    'configuracoes_customizacao',
+    'configuracoes_lojas',
+    'configuracoes_promocoes',
+    'configuracoes_usuarios',
+    'configuracoes_metas',
+    'configuracoes_fidelidade',
+  ],
+  admin: ['admin_novo_cliente', 'admin_usuarios'],
 };
 
 export default function PermissoesTab() {
@@ -246,11 +298,30 @@ export default function PermissoesTab() {
       const acessosAtuais = prev[perfil] || [];
       const temAcesso = acessosAtuais.includes(moduloId);
 
-      let novosAcessos;
-      if (temAcesso) {
-        novosAcessos = acessosAtuais.filter((id) => id !== moduloId);
+      let novosAcessos: string[];
+
+      // Se for um menu pai (como 'pdv', 'configuracoes', 'producao', etc.)
+      if (moduloId in MENU_HIERARCHY) {
+        const filhos = MENU_HIERARCHY[moduloId];
+        if (temAcesso) {
+          // Desmarcar menu pai -> desmarca o pai e todos os seus filhos
+          novosAcessos = acessosAtuais.filter((id) => id !== moduloId && !filhos.includes(id));
+        } else {
+          // Marcar menu pai -> adiciona o pai
+          novosAcessos = [...acessosAtuais, moduloId];
+        }
       } else {
-        novosAcessos = [...acessosAtuais, moduloId];
+        if (temAcesso) {
+          novosAcessos = acessosAtuais.filter((id) => id !== moduloId);
+        } else {
+          novosAcessos = [...acessosAtuais, moduloId];
+          // Se for filho de algum menu pai, garante que o menu pai também seja ativado
+          for (const [pai, filhos] of Object.entries(MENU_HIERARCHY)) {
+            if (filhos.includes(moduloId) && !novosAcessos.includes(pai)) {
+              novosAcessos.push(pai);
+            }
+          }
+        }
       }
 
       return { ...prev, [perfil]: novosAcessos };
@@ -301,26 +372,30 @@ export default function PermissoesTab() {
       };
 
       const savePromise = (async () => {
-        const { error: rpcErr } = await supabase.rpc('rpc_upsert_configuracoes_sistema', rpcPayload);
+        const { error: rpcErr } = await supabase.rpc(
+          'rpc_upsert_configuracoes_sistema',
+          rpcPayload
+        );
         if (rpcErr) {
           console.warn('RPC upsert falhou, tentando fallback direto:', rpcErr);
           const updateQuery = profile?.organization_id
-            ? supabase
-                .from('configuracoes_sistema')
-                .update({
+            ? supabase.from('configuracoes_sistema').upsert(
+                {
+                  organization_id: profile.organization_id,
+                  chave: payload.chave,
                   valor: JSON.stringify(mergedPerms),
-                  updated_at: new Date().toISOString()
-                })
-                .eq('chave', payload.chave)
-                .eq('organization_id', profile.organization_id)
-            : supabase
-                .from('configuracoes_sistema')
-                .update({
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'organization_id, chave' }
+              )
+            : supabase.from('configuracoes_sistema').upsert(
+                {
+                  chave: payload.chave,
                   valor: JSON.stringify(mergedPerms),
-                  updated_at: new Date().toISOString()
-                })
-                .eq('chave', payload.chave)
-                .is('organization_id', null);
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'chave' }
+              );
           const { error: directErr } = await updateQuery;
           if (directErr) throw directErr;
         }

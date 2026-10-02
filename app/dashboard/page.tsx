@@ -16,7 +16,13 @@ import {
   Award,
   BarChart3,
   ArrowRight,
-  Package, // <--- Adicione isto aqui
+  Package,
+  Info,
+  RotateCcw,
+  Trash2,
+  ShoppingBag,
+  Receipt,
+  CheckCircle2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
@@ -24,6 +30,8 @@ import KPIsMetas from '@/components/dashboard/KPIsMetas';
 import {
   calcularTaxaPercentualEquivalente,
   classificarResultadoCaixa,
+  calcularResultadoOperacionalLiquido,
+  calcularFluxoSobrasOperacional,
 } from '@/lib/services/fechamento-pdv-calc';
 import {
   WIDGET_REGISTRY as WIDGETS,
@@ -131,6 +139,23 @@ export default function DashboardPage() {
     faturamentoEstimado: 0,
     vendasBrutas: 0,
     vendasLiquidas: 0,
+    resultadoOperacionalLiquido: 0,
+    percentualLiquidoFormatado: '0,0%',
+    furoCaixa: 0,
+    sobraFisicaFinal: 0,
+    estoqueRemanescente: 0,
+    isPeriodoMultiplo: false,
+    taxaSobraFinalFormatada: '0,0%',
+    unidadesRetornadas: 0,
+    eventosRetorno: 0,
+    unidadesReaproveitadas: 0,
+    taxaReaproveitamento: 0,
+    movimentacoesRetorno: 0,
+    totalVendidosUnidades: 0,
+    taxaAproveitamentoFormatada: '0,0%',
+    totalPerdasUnidades: 0,
+    totalPerdasCustoEstimado: 0,
+    perdasApuradasRegistradas: false,
     perdasDoacoes: 0,
     gastoCompras: 0,
     ordensAtivas: 0,
@@ -142,7 +167,7 @@ export default function DashboardPage() {
     recebimentoLiquido: 0,
     diferencaCaixa: 0,
     resultadoCaixa: {
-      status: 'conferido' as 'conferido' | 'furo' | 'sobra',
+      status: 'conferido',
       rotulo: 'Caixa Conferido',
       diferenca_absoluta: 0,
       is_perfeito: true,
@@ -377,7 +402,7 @@ export default function DashboardPage() {
           }
 
           let regBruto = 0;
-          let regPerdas = Number(reg.total_descontos_perdas || 0);
+          const regPerdas = Number(reg.total_descontos_perdas || 0);
 
           // Se tiver grade de itens detalhada e conferida
           if (Array.isArray(reg.itens_grade) && reg.itens_grade.length > 0) {
@@ -494,10 +519,36 @@ export default function DashboardPage() {
         .select('*', { count: 'exact', head: true })
         .lt('estoque_atual', 5);
 
+      const resultadoOperacional = calcularResultadoOperacionalLiquido({
+        faturamentoBruto: totalVendasBrutas,
+        taxasFinanceiras: totalTaxasFinanceiras,
+        diferencaCaixa: diferencaCaixa,
+        descontosPerdas: totalPerdasDoacoes,
+      });
+
+      const fluxoSobras = calcularFluxoSobrasOperacional(remessas || []);
+
       setKpis({
         faturamentoEstimado: totalVendasLiquidas,
         vendasBrutas: totalVendasBrutas,
         vendasLiquidas: totalVendasLiquidas,
+        resultadoOperacionalLiquido: resultadoOperacional.resultadoLiquidoOperacional,
+        percentualLiquidoFormatado: resultadoOperacional.percentualLiquidoFormatado,
+        furoCaixa: resultadoOperacional.furosCaixa,
+        sobraFisicaFinal: fluxoSobras.sobraFisicaFinal,
+        estoqueRemanescente: fluxoSobras.estoqueRemanescente,
+        isPeriodoMultiplo: fluxoSobras.isPeriodoMultiplo,
+        taxaSobraFinalFormatada: `${fluxoSobras.taxaSobraFinal.toFixed(1)}%`,
+        unidadesRetornadas: fluxoSobras.unidadesRetornadas,
+        eventosRetorno: fluxoSobras.eventosRetorno,
+        unidadesReaproveitadas: fluxoSobras.unidadesReaproveitadas,
+        taxaReaproveitamento: fluxoSobras.taxaReaproveitamento,
+        movimentacoesRetorno: fluxoSobras.movimentacoesRetorno,
+        totalVendidosUnidades: fluxoSobras.totalVendidos,
+        taxaAproveitamentoFormatada: `${fluxoSobras.taxaAproveitamento.toFixed(1)}%`,
+        totalPerdasUnidades: fluxoSobras.totalPerdasUnidades,
+        totalPerdasCustoEstimado: fluxoSobras.totalPerdasCustoEstimado,
+        perdasApuradasRegistradas: fluxoSobras.perdasApuradasRegistradas,
         perdasDoacoes: totalPerdasDoacoes,
         gastoCompras: totalCompras,
         ordensAtivas: countOrdens || 0,
@@ -851,83 +902,132 @@ export default function DashboardPage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 text-xs">
-          {/* 1. Vendas Brutas */}
-          <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block">
-              Vendas Brutas
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          {/* 1. Faturamento Líquido Real */}
+          <div className="bg-gradient-to-br from-emerald-500/10 via-background to-emerald-500/5 dark:from-emerald-950/40 dark:via-background dark:to-emerald-950/20 p-4 rounded-xl border-2 border-emerald-500/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <div
+                className="flex items-center gap-1.5 cursor-help"
+                title="Valor das vendas após taxas financeiras e divergências de caixa controladas pelo sistema. Não representa lucro."
+              >
+                <span className="text-xs text-emerald-800 dark:text-emerald-300 font-black uppercase tracking-wider block">
+                  Faturamento Líquido Real
+                </span>
+                <div className="group relative inline-flex items-center">
+                  <Info className="h-3.5 w-3.5 text-emerald-700/70 hover:text-emerald-900 dark:text-emerald-300/70" />
+                  <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 hidden w-64 rounded-lg bg-slate-900 p-2 text-[10px] font-normal normal-case text-white shadow-xl group-hover:block z-50">
+                    Valor das vendas após taxas financeiras e divergências de caixa controladas pelo
+                    sistema. Não representa lucro.
+                  </div>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700">
+                {kpis.percentualLiquidoFormatado} do bruto
+              </span>
+            </div>
+            <span className="font-mono font-black text-2xl text-emerald-700 dark:text-emerald-300 block">
+              R$ {kpis.resultadoOperacionalLiquido.toFixed(2)}
             </span>
-            <span className="font-mono font-black text-base text-slate-900 dark:text-slate-100">
+            <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40 gap-1">
+              <span>
+                Bruto:{' '}
+                <strong className="text-slate-800 dark:text-slate-200 font-mono">
+                  R$ {kpis.vendasBrutas.toFixed(2)}
+                </strong>
+              </span>
+              <span className="text-rose-600 dark:text-rose-400 font-mono font-medium">
+                Taxas: − R$ {kpis.taxasOperacionais.toFixed(2)}
+              </span>
+              <span
+                className={`font-mono font-medium ${kpis.furoCaixa > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+              >
+                {kpis.furoCaixa > 0 ? `Furos: − R$ ${kpis.furoCaixa.toFixed(2)}` : 'Furos: R$ 0,00'}
+              </span>
+            </div>
+          </div>
+
+          {/* 2. Faturamento Bruto */}
+          <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-1.5">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block">
+              Faturamento Bruto
+            </span>
+            <span className="font-mono font-black text-xl text-slate-900 dark:text-slate-100 block">
               R$ {kpis.vendasBrutas.toFixed(2)}
             </span>
-            <span className="text-[9px] text-slate-400 block mt-0.5">Apuração física total</span>
-          </div>
-
-          {/* 2. Vendas Líquidas Comerciais */}
-          <div className="bg-indigo-50/50 dark:bg-indigo-950/20 p-3 rounded-xl border border-indigo-200 dark:border-indigo-800/60">
-            <span className="text-[10px] text-indigo-700 dark:text-indigo-400 font-bold uppercase block">
-              Vendas Líquidas
-            </span>
-            <span className="font-mono font-black text-base text-indigo-900 dark:text-indigo-200">
-              R$ {kpis.vendasLiquidas.toFixed(2)}
-            </span>
-            <span className="text-[9px] text-indigo-600/70 block mt-0.5">Comercial auditado</span>
-          </div>
-
-          {/* 3. Perdas / Doações / Avarias */}
-          <div className="bg-orange-50/50 dark:bg-orange-950/20 p-3 rounded-xl border border-orange-200 dark:border-orange-800/60">
-            <span className="text-[10px] text-orange-700 dark:text-orange-400 font-bold uppercase block">
-              Perdas / Doações
-            </span>
-            <span className="font-mono font-black text-base text-orange-800 dark:text-orange-300">
-              R$ {kpis.perdasDoacoes.toFixed(2)}
-            </span>
-            <span className="text-[9px] text-orange-600/70 block mt-0.5">Saídas não comerciais</span>
-          </div>
-
-          {/* 4. Recebido Bruto */}
-          <div className="bg-cyan-50/50 dark:bg-cyan-950/20 p-3 rounded-xl border border-cyan-200 dark:border-cyan-800/60">
-            <span className="text-[10px] text-cyan-700 dark:text-cyan-400 font-bold uppercase block">
-              Recebido Bruto
-            </span>
-            <span className="font-mono font-black text-base text-cyan-800 dark:text-cyan-300">
-              R$ {kpis.recebimentoBruto.toFixed(2)}
-            </span>
-            <span className="text-[9px] text-cyan-600/70 block mt-0.5">
-              Dinheiro + Pix + Cartões
+            <span className="text-[10px] text-slate-400 block pt-1 border-t border-slate-200/60 dark:border-slate-700/40">
+              Total apurado vendido nos PDVs
             </span>
           </div>
 
-          {/* 5. Taxas Financeiras */}
+          {/* 3. Mercadoria Vendida */}
+          <div className="bg-purple-50/50 dark:bg-purple-950/20 p-4 rounded-xl border border-purple-200 dark:border-purple-800/60 space-y-1.5">
+            <span className="text-[10px] text-purple-700 dark:text-purple-400 font-bold uppercase block">
+              Mercadoria Vendida
+            </span>
+            <span className="font-mono font-black text-xl text-purple-900 dark:text-purple-200 block">
+              {kpis.totalVendidosUnidades.toLocaleString('pt-BR')} un.
+            </span>
+            <span className="text-[10px] text-purple-600/80 block pt-1 border-t border-purple-200/60 dark:border-purple-800/40">
+              {kpis.isPeriodoMultiplo
+                ? 'Total apurado vendido no período'
+                : `Aproveitamento: ${kpis.taxaAproveitamentoFormatada}`}
+            </span>
+          </div>
+
+          {/* 4. Sobra Física Final / Estoque Remanescente */}
+          <div className="bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800/60 space-y-1.5">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase block">
+                  {kpis.isPeriodoMultiplo ? 'Estoque Remanescente' : 'Sobra Física Final'}
+                </span>
+                <div className="group relative inline-flex items-center">
+                  <Info className="h-3 w-3 text-amber-700/70 hover:text-amber-900 dark:text-amber-300/70 cursor-help" />
+                  <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 hidden w-56 rounded-lg bg-slate-900 p-2 text-[10px] font-normal normal-case text-white shadow-xl group-hover:block z-50">
+                    {kpis.isPeriodoMultiplo
+                      ? 'Saldo de estoque físico em custódia nos PDVs no encerramento da data final do período.'
+                      : 'Saldo não vendido no encerramento dos turnos do dia.'}
+                  </div>
+                </div>
+              </div>
+              {!kpis.isPeriodoMultiplo && (
+                <span className="text-[9px] font-mono font-bold text-amber-800 bg-amber-100 dark:bg-amber-900/60 px-1 rounded">
+                  Taxa: {kpis.taxaSobraFinalFormatada}
+                </span>
+              )}
+            </div>
+            <span className="font-mono font-black text-xl text-amber-800 dark:text-amber-300 block">
+              {kpis.estoqueRemanescente.toLocaleString('pt-BR')} un.
+            </span>
+            <span className="text-[10px] text-amber-600/70 block pt-1 border-t border-amber-200/60 dark:border-amber-800/40">
+              {kpis.isPeriodoMultiplo
+                ? 'Saldo físico existente ao final do período selecionado'
+                : 'Saldo não vendido no encerramento de hoje'}
+            </span>
+          </div>
+        </div>
+
+        {/* Linha 2: Eficiência e deduções operacionais */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs pt-1">
+          {/* 5. Taxas de Cartão */}
           <div className="bg-rose-50/50 dark:bg-rose-950/20 p-3 rounded-xl border border-rose-200 dark:border-rose-800/60">
             <div className="flex justify-between items-center">
               <span className="text-[10px] text-rose-700 dark:text-rose-400 font-bold uppercase block">
-                Taxas Financeiras
+                Taxas de Cartão
               </span>
               <span className="text-[9px] font-mono font-bold text-rose-600 bg-rose-100 dark:bg-rose-900/40 px-1 rounded">
                 {kpis.taxasPercentualFormatado}
               </span>
             </div>
-            <span className="font-mono font-black text-base text-rose-800 dark:text-rose-300">
-              -R$ {kpis.taxasOperacionais.toFixed(2)}
+            <span className="font-mono font-black text-base text-rose-800 dark:text-rose-300 block mt-1">
+              − R$ {kpis.taxasOperacionais.toFixed(2)}
             </span>
             <span className="text-[9px] text-rose-600/70 block mt-0.5">
-              Encargos operadoras
+              Encargos de débito/crédito
             </span>
           </div>
 
-          {/* 6. Líquido Após Taxas */}
-          <div className="bg-emerald-50/50 dark:bg-emerald-950/20 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800/60">
-            <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase block">
-              Líquido Após Taxas
-            </span>
-            <span className="font-mono font-black text-base text-emerald-800 dark:text-emerald-300">
-              R$ {kpis.recebimentoLiquido.toFixed(2)}
-            </span>
-            <span className="text-[9px] text-emerald-600/70 block mt-0.5">Recebido bruto − Taxas</span>
-          </div>
-
-          {/* 7. Resultado de Caixa */}
+          {/* 6. Furos de Caixa */}
           <div
             className={`p-3 rounded-xl border ${
               kpis.resultadoCaixa.is_perfeito
@@ -937,22 +1037,71 @@ export default function DashboardPage() {
                   : 'bg-amber-100/60 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
             }`}
           >
-            <span className="text-[10px] font-bold uppercase block opacity-80">
-              Resultado de Caixa
-            </span>
-            <span className="font-mono font-black text-base block">
+            <span className="text-[10px] font-bold uppercase block opacity-80">Furos de Caixa</span>
+            <span className="font-mono font-black text-base block mt-1">
               {kpis.resultadoCaixa.is_perfeito
-                ? 'Caixa Conferido'
+                ? 'Caixa Batido'
                 : kpis.resultadoCaixa.status === 'furo'
-                  ? `Furo: R$ ${kpis.resultadoCaixa.diferenca_absoluta.toFixed(2)}`
-                  : `Sobra: R$ ${kpis.resultadoCaixa.diferenca_absoluta.toFixed(2)}`}
+                  ? `− R$ ${kpis.resultadoCaixa.diferenca_absoluta.toFixed(2)}`
+                  : `+ R$ ${kpis.resultadoCaixa.diferenca_absoluta.toFixed(2)}`}
             </span>
             <span className="text-[9px] opacity-70 block mt-0.5">
-              {kpis.resultadoCaixa.is_perfeito
-                ? '100% conferido com vendas'
-                : kpis.resultadoCaixa.status === 'furo'
-                  ? 'Não reduz faturamento'
-                  : 'Não aumenta faturamento'}
+              {kpis.resultadoCaixa.is_perfeito ? '100% conferido' : 'Diferenças de fechamento'}
+            </span>
+          </div>
+
+          {/* 7. Unidades Retornadas */}
+          <div className="bg-blue-50/50 dark:bg-blue-950/20 p-3 rounded-xl border border-blue-200 dark:border-blue-800/60">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-blue-700 dark:text-blue-400 font-bold uppercase block">
+                  Unidades Retornadas
+                </span>
+                <div className="group relative inline-flex items-center">
+                  <Info className="h-3 w-3 text-blue-700/70 hover:text-blue-900 dark:text-blue-300/70 cursor-help" />
+                  <div className="pointer-events-none absolute left-0 bottom-full mb-1.5 hidden w-56 rounded-lg bg-slate-900 p-2 text-[10px] font-normal normal-case text-white shadow-xl group-hover:block z-50">
+                    Volume operacional de unidades movimentadas em devoluções. Uma mesma unidade
+                    pode aparecer em mais de um retorno.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <span className="font-mono font-black text-base text-blue-800 dark:text-blue-300 block mt-1">
+              {kpis.unidadesRetornadas.toLocaleString('pt-BR')} un.
+            </span>
+            <span className="text-[9px] text-blue-600/70 block mt-0.5">
+              em {kpis.eventosRetorno}{' '}
+              {kpis.eventosRetorno === 1 ? 'evento de retorno' : 'eventos de retorno'}
+            </span>
+          </div>
+
+          {/* 8. Perdas / Descarte */}
+          <div className="bg-orange-50/50 dark:bg-orange-950/20 p-3 rounded-xl border border-orange-200 dark:border-orange-800/60">
+            <span className="text-[10px] text-orange-700 dark:text-orange-400 font-bold uppercase block">
+              Perdas / Descarte
+            </span>
+            <div className="flex items-baseline justify-between gap-1 mt-1">
+              {kpis.perdasApuradasRegistradas && kpis.totalPerdasUnidades > 0 ? (
+                <>
+                  <span className="font-mono font-black text-base text-orange-800 dark:text-orange-300 block">
+                    {kpis.totalPerdasUnidades} un.
+                  </span>
+                  {kpis.totalPerdasCustoEstimado > 0 && (
+                    <span className="font-mono text-[10px] font-bold text-orange-600">
+                      R$ {kpis.totalPerdasCustoEstimado.toFixed(2)} em custo
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 italic block">
+                  Não apurado
+                </span>
+              )}
+            </div>
+            <span className="text-[9px] text-orange-600/70 block mt-0.5">
+              {kpis.perdasApuradasRegistradas && kpis.totalPerdasUnidades > 0
+                ? 'Perda de estoque/custo (não deduzida)'
+                : 'Aguardando registro de descarte na fábrica'}
             </span>
           </div>
         </div>

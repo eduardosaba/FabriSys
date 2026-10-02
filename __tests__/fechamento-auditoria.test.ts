@@ -4,6 +4,8 @@ import {
   classificarResultadoCaixa,
   apurarFechamentoUnificado,
   calcularItemIndividual,
+  calcularResultadoOperacionalLiquido,
+  calcularFluxoSobrasOperacional,
   TurnoFechamentoInput,
   ItemMovimentacaoPDV,
 } from '@/lib/services/fechamento-pdv-calc';
@@ -260,6 +262,431 @@ describe('Auditoria, Conciliação Financeira e Fechamento Unificado', () => {
       expect(remessaReaberta.faturamento_liquido_esperado).toBe(400);
       expect(remessaReaberta.valor_dinheiro_gaveta).toBe(150);
       expect(remessaReaberta.itens_grade.length).toBe(1);
+    });
+  });
+
+  describe('5. Resultado Líquido Operacional (Faturamento Líquido Real)', () => {
+    it('calcula o Resultado Líquido Operacional deduzindo taxas e furos de caixa', () => {
+      // Exemplo do usuário: Vendeu R$ 20.000, taxas R$ 620, furos R$ 180
+      const res = calcularResultadoOperacionalLiquido({
+        faturamentoBruto: 20000,
+        taxasFinanceiras: 620,
+        diferencaCaixa: -180, // Furo de R$ 180
+      });
+
+      expect(res.faturamentoBruto).toBe(20000);
+      expect(res.taxasFinanceiras).toBe(620);
+      expect(res.furosCaixa).toBe(180);
+      expect(res.totalAjustes).toBe(800);
+      expect(res.resultadoLiquidoOperacional).toBe(19200);
+      expect(res.percentualLiquido).toBe(96);
+      expect(res.percentualLiquidoFormatado).toBe('96,0%');
+    });
+
+    it('calcula o exemplo de R$ 10.000 bruto, R$ 520 taxas e R$ 180 furos', () => {
+      const res = calcularResultadoOperacionalLiquido({
+        faturamentoBruto: 10000,
+        taxasFinanceiras: 520,
+        diferencaCaixa: -180,
+      });
+
+      expect(res.faturamentoBruto).toBe(10000);
+      expect(res.resultadoLiquidoOperacional).toBe(9300);
+      expect(res.percentualLiquido).toBe(93);
+      expect(res.percentualLiquidoFormatado).toBe('93,0%');
+    });
+
+    it('quando o caixa está batido (conferido), furosCaixa é zero', () => {
+      const res = calcularResultadoOperacionalLiquido({
+        faturamentoBruto: 5000,
+        taxasFinanceiras: 100,
+        diferencaCaixa: 0,
+      });
+
+      expect(res.furosCaixa).toBe(0);
+      expect(res.resultadoLiquidoOperacional).toBe(4900);
+    });
+  });
+
+  describe('6. Fluxo de Sobras Operacional & Resolução de Dupla Contagem', () => {
+    it('elimina a dupla contagem de sobras recirculadas (Exemplo Brownies)', () => {
+      // Turno 1 (Manhã): 14 enviados, 6 retornaram (8 vendidos)
+      // Turno 2 (Tarde/Fechamento): 6 enviados (recirculação), 5 retornaram (1 vendido)
+      const registros = [
+        {
+          id: 'reg-t1',
+          data: '2026-10-02',
+          turno: 'manha',
+          local_id: 'pdv-shopping',
+          status: 'auditado',
+          qtd_total_enviada: 14,
+          qtd_total_retorno: 6,
+          itens_grade: [
+            {
+              produto_id: 'prod-brownie',
+              nome: 'Brownie',
+              preco_unitario: 10,
+              qtd_enviada: 14,
+              qtd_retorno: 6,
+            },
+          ],
+        },
+        {
+          id: 'reg-t2',
+          data: '2026-10-02',
+          turno: 'tarde',
+          local_id: 'pdv-shopping',
+          status: 'auditado',
+          qtd_total_enviada: 6,
+          qtd_total_retorno: 5,
+          itens_grade: [
+            {
+              produto_id: 'prod-brownie',
+              nome: 'Brownie',
+              preco_unitario: 10,
+              qtd_enviada: 6,
+              qtd_retorno: 5,
+            },
+          ],
+        },
+      ];
+
+      const fluxo = calcularFluxoSobrasOperacional(registros);
+
+      // Ponto 1: Unidades Retornadas vs Eventos/Turnos Registrados
+      expect(fluxo.unidadesRetornadas).toBe(11); // 11 un movimentadas em retornos
+      expect(fluxo.eventosRetorno).toBe(2); // 2 turnos com devolução registrada
+      expect(fluxo.movimentacoesRetorno).toBe(11); // compatibilidade
+
+      // Sobra física final no encerramento: 5 un (apenas o que encerrou não-vendido!)
+      expect(fluxo.sobraFisicaFinal).toBe(5);
+
+      // Vendas reais: 8 (manhã) + 1 (tarde) = 9 un
+      expect(fluxo.totalVendidos).toBe(9);
+
+      // Ponto 3: Balanço Fechado de Saídas do Período: 9 vendidos + 5 sobra final = 14 un (NÃO 20!)
+      expect(fluxo.totalSaidasApuradas).toBe(14);
+      expect(fluxo.totalNovoDisponibilizado).toBe(14);
+
+      // Taxa de sobra final: 5 / 14 = 35.7% (NÃO 55%!)
+      expect(fluxo.taxaSobraFinal).toBe(35.7);
+
+      // Taxa de aproveitamento (venda): 9 / 14 = 64.3%
+      expect(fluxo.taxaAproveitamento).toBe(64.3);
+    });
+
+    it('Ponto 2: Não abate perda/descarte de produto do faturamento líquido financeiro', () => {
+      // Bruto: R$ 20.000 | Taxas: R$ 620 | Furos: R$ 180 | Perda de produto/descarte: R$ 500
+      const res = calcularResultadoOperacionalLiquido({
+        faturamentoBruto: 20000,
+        taxasFinanceiras: 620,
+        diferencaCaixa: -180,
+        descontosPerdas: 500, // Custo de descarte/avarias não reduz o faturamento líquido
+      });
+
+      // Faturamento Líquido Real = 20.000 - 620 - 180 = R$ 19.200 (96,0%)
+      expect(res.resultadoLiquidoOperacional).toBe(19200);
+      expect(res.percentualLiquido).toBe(96);
+      expect(res.percentualLiquidoFormatado).toBe('96,0%');
+      expect(res.descontosPerdas).toBe(500); // mantido no escopo de custo
+    });
+
+    it('não dispara falso alerta de produção quando a sobra foi recirculada e vendida', () => {
+      // 14 brownies produzidos:
+      // Turno 1 (Manhã): 14 enviados, 6 voltam
+      // Turno 2 (Tarde): os 6 voltam para a loja, 5 são vendidos, apenas 1 sobra ao final do dia
+      const registros = [
+        {
+          id: 'reg-m',
+          data: '2026-10-02',
+          turno: 'manha',
+          local_id: 'pdv-1',
+          status: 'auditado',
+          qtd_total_enviada: 14,
+          qtd_total_retorno: 6,
+          itens_grade: [
+            {
+              produto_id: 'prod-brownie',
+              nome: 'Brownie',
+              preco_unitario: 10,
+              qtd_enviada: 14,
+              qtd_retorno: 6,
+            },
+          ],
+        },
+        {
+          id: 'reg-t',
+          data: '2026-10-02',
+          turno: 'tarde',
+          local_id: 'pdv-1',
+          status: 'auditado',
+          qtd_total_enviada: 6,
+          qtd_total_retorno: 1,
+          itens_grade: [
+            {
+              produto_id: 'prod-brownie',
+              nome: 'Brownie',
+              preco_unitario: 10,
+              qtd_enviada: 6,
+              qtd_retorno: 1,
+            },
+          ],
+        },
+      ];
+
+      const fluxo = calcularFluxoSobrasOperacional(registros);
+
+      // Vendeu 8 + 5 = 13 brownies
+      expect(fluxo.totalVendidos).toBe(13);
+      // Sobra física final de apenas 1 brownie (7.1% de sobra, 92.9% de giro!)
+      expect(fluxo.sobraFisicaFinal).toBe(1);
+      expect(fluxo.taxaSobraFinal).toBe(7.1);
+
+      // O produto NÃO deve entrar em alerta de queda/produção (giro excelente de 92.9%)
+      expect(fluxo.produtosAlertaSobra.length).toBe(0);
+    });
+
+    it('Ponto 4: Alerta inteligente diferencia Variação Pontual (1 dia) de Tendência Recorrente (múltiplos dias)', () => {
+      // Cenário A: 1 único dia com sobra alta (ex: dia de chuva ou evento atípico)
+      const registros1Dia = [
+        {
+          id: 'reg-dia1',
+          data: '2026-10-02',
+          turno: 'integral',
+          local_id: 'pdv-1',
+          status: 'auditado',
+          qtd_total_enviada: 20,
+          qtd_total_retorno: 10,
+          itens_grade: [
+            {
+              produto_id: 'prod-torta',
+              nome: 'Torta Holandesa',
+              preco_unitario: 15,
+              qtd_enviada: 20,
+              qtd_retorno: 10,
+            },
+          ],
+        },
+      ];
+
+      const fluxo1Dia = calcularFluxoSobrasOperacional(registros1Dia);
+      expect(fluxo1Dia.diasAnalisados).toBe(1);
+      expect(fluxo1Dia.isPeriodoMultiplo).toBe(false);
+      expect(fluxo1Dia.produtosAlertaSobra.length).toBe(1);
+      expect(fluxo1Dia.produtosAlertaSobra[0].tipoAlerta).toBe('variacao_pontual');
+      // Não recomenda corte automático precipitado de fornada no dia isolado!
+      expect(fluxo1Dia.produtosAlertaSobra[0].mensagemRecomendacao).toContain('fotografia pontual');
+      expect(fluxo1Dia.produtosAlertaSobra[0].mensagemRecomendacao).toContain('3 a 7 dias');
+
+      // Cenário B: Múltiplos dias com sobra alta confirmada (tendência recorrente)
+      const registrosMultiplosDias = [
+        ...registros1Dia,
+        {
+          id: 'reg-dia2',
+          data: '2026-10-03',
+          turno: 'integral',
+          local_id: 'pdv-1',
+          status: 'auditado',
+          qtd_total_enviada: 20,
+          qtd_total_retorno: 8,
+          itens_grade: [
+            {
+              produto_id: 'prod-torta',
+              nome: 'Torta Holandesa',
+              preco_unitario: 15,
+              qtd_enviada: 20,
+              qtd_retorno: 8,
+            },
+          ],
+        },
+      ];
+
+      const fluxoMultiDias = calcularFluxoSobrasOperacional(registrosMultiplosDias);
+      expect(fluxoMultiDias.diasAnalisados).toBe(2);
+      expect(fluxoMultiDias.isPeriodoMultiplo).toBe(true);
+      expect(fluxoMultiDias.produtosAlertaSobra.length).toBe(1);
+      expect(fluxoMultiDias.produtosAlertaSobra[0].tipoAlerta).toBe('tendencia_recorrente');
+      expect(fluxoMultiDias.produtosAlertaSobra[0].mensagemRecomendacao).toContain(
+        'Estoque remanescente'
+      );
+      expect(fluxoMultiDias.produtosAlertaSobra[0].mensagemRecomendacao).toContain('em 2 dias');
+    });
+
+    it('Ponto Crítico: NÃO soma sobras diárias em períodos maiores (Calcula Estoque Remanescente Final e Reaproveitamento)', () => {
+      // Exemplo exato fornecido pelo usuário:
+      // Dia 01/10: sobra 20 ao fechar
+      // Dia 02/10: 15 vendidas, sobra 12 ao fechar
+      // Dia 03/10: 10 vendidas, sobra 7 ao fechar (continua em estoque ao final do período)
+      //
+      // Antiga fórmula errônea somaria: 20 + 12 + 7 = 39 un.
+      // Nova regra correta:
+      // - Estoque Remanescente ao Final do Período: 7 un.
+      // - Unidades Retornadas nos turnos: 20 + 12 + 7 = 39 un.
+      // - Unidades Reaproveitadas / Recirculadas: 39 - 7 = 32 un (82,1%)
+      const registrosTresDias = [
+        {
+          id: 'reg-01',
+          data: '2026-10-01',
+          turno: 'noite',
+          local_id: 'pdv-shopping',
+          status: 'auditado',
+          qtd_total_enviada: 50,
+          qtd_total_retorno: 20,
+          itens_grade: [
+            {
+              produto_id: 'prod-bolo',
+              nome: 'Bolo de Cenoura',
+              preco_unitario: 12,
+              qtd_enviada: 50,
+              qtd_retorno: 20,
+            },
+          ],
+        },
+        {
+          id: 'reg-02',
+          data: '2026-10-02',
+          turno: 'noite',
+          local_id: 'pdv-shopping',
+          status: 'auditado',
+          qtd_total_enviada: 27, // 20 reaproveitados + 7 novos
+          qtd_total_retorno: 12, // 15 vendidos (27 - 12)
+          itens_grade: [
+            {
+              produto_id: 'prod-bolo',
+              nome: 'Bolo de Cenoura',
+              preco_unitario: 12,
+              qtd_enviada: 27,
+              qtd_retorno: 12,
+            },
+          ],
+        },
+        {
+          id: 'reg-03',
+          data: '2026-10-03',
+          turno: 'noite',
+          local_id: 'pdv-shopping',
+          status: 'auditado',
+          qtd_total_enviada: 17, // 12 reaproveitados + 5 novos
+          qtd_total_retorno: 7, // 10 vendidos (17 - 7), 7 encerram o período em estoque
+          itens_grade: [
+            {
+              produto_id: 'prod-bolo',
+              nome: 'Bolo de Cenoura',
+              preco_unitario: 12,
+              qtd_enviada: 17,
+              qtd_retorno: 7,
+            },
+          ],
+        },
+      ];
+
+      const fluxo = calcularFluxoSobrasOperacional(registrosTresDias);
+
+      expect(fluxo.diasAnalisados).toBe(3);
+      expect(fluxo.isPeriodoMultiplo).toBe(true);
+
+      // ESTOQUE REMANESCENTE FINAL: apenas 7 unidades (NÃO 39!)
+      expect(fluxo.estoqueRemanescente).toBe(7);
+      expect(fluxo.sobraFisicaFinal).toBe(7);
+
+      // HISTÓRICO DE RETORNOS NOS TURNOS: 20 + 12 + 7 = 39 unidades em 3 eventos
+      expect(fluxo.unidadesRetornadas).toBe(39);
+      expect(fluxo.eventosRetorno).toBe(3);
+
+      // REAPROVEITAMENTO: Não apurado por subtração simples (evita taxa artificial quando a mesma unidade retorna múltiplas vezes)
+      expect(fluxo.unidadesReaproveitadas).toBe(0);
+      expect(fluxo.taxaReaproveitamento).toBe(0);
+
+      // VENDAS APURADAS: 30 (01/10) + 15 (02/10) + 10 (03/10) = 55 un
+      expect(fluxo.totalVendidos).toBe(55);
+
+      // BALANÇO DE SAÍDAS FECHADO: 55 vendidos + 0 perdas + 7 remanescente = 62 un
+      expect(fluxo.totalSaidasApuradas).toBe(62);
+
+      // TAXA REMANESCENTE FINAL: 7 / 62 = 11.3% (em vez dos absurdos ~40% se somasse)
+      expect(fluxo.taxaSobraFinal).toBe(11.3);
+
+      // PERDAS REAIS: como não houve registro de descarte, perdasApuradasRegistradas é false
+      expect(fluxo.perdasApuradasRegistradas).toBe(false);
+      expect(fluxo.totalPerdasUnidades).toBe(0);
+    });
+
+    it('Ponto Crítico 2: Custódia real - fechamento de PDV em data anterior não infla estoque remanescente no final do período', () => {
+      // Cenário: Período de 01/10 a 03/10
+      // PDV A encerrou suas operações em 01/10 com 10 unidades que retornaram à fábrica.
+      // PDV B operou em 02/10 e 03/10, encerrando o período em 03/10 com 4 unidades retornadas.
+      //
+      // REGRA DE CUSTÓDIA: Em 03/10, o PDV A não possui estoque (já retornou à fábrica em 01/10 e recirculou).
+      // Apenas o encerramento da dataFinalPeriodo (03/10) representa o estoque remanescente nos PDVs.
+      const registrosCustodia = [
+        {
+          id: 'reg-pdv-a-01',
+          data: '2026-10-01',
+          turno: 'noite',
+          local_id: 'pdv-a',
+          status: 'auditado',
+          qtd_total_enviada: 20,
+          qtd_total_retorno: 10,
+          itens_grade: [
+            {
+              produto_id: 'prod-torta',
+              nome: 'Torta de Limão',
+              preco_unitario: 10,
+              qtd_enviada: 20,
+              qtd_retorno: 10,
+            },
+          ],
+        },
+        {
+          id: 'reg-pdv-b-02',
+          data: '2026-10-02',
+          turno: 'noite',
+          local_id: 'pdv-b',
+          status: 'auditado',
+          qtd_total_enviada: 15,
+          qtd_total_retorno: 5,
+          itens_grade: [
+            {
+              produto_id: 'prod-torta',
+              nome: 'Torta de Limão',
+              preco_unitario: 10,
+              qtd_enviada: 15,
+              qtd_retorno: 5,
+            },
+          ],
+        },
+        {
+          id: 'reg-pdv-b-03',
+          data: '2026-10-03',
+          turno: 'noite',
+          local_id: 'pdv-b',
+          status: 'auditado',
+          qtd_total_enviada: 12,
+          qtd_total_retorno: 4,
+          itens_grade: [
+            {
+              produto_id: 'prod-torta',
+              nome: 'Torta de Limão',
+              preco_unitario: 10,
+              qtd_enviada: 12,
+              qtd_retorno: 4,
+            },
+          ],
+        },
+      ];
+
+      const fluxo = calcularFluxoSobrasOperacional(registrosCustodia);
+
+      expect(fluxo.dataFinalPeriodo).toBe('2026-10-03');
+      expect(fluxo.isPeriodoMultiplo).toBe(true);
+
+      // ESTOQUE REMANESCENTE FINAL: Apenas as 4 unidades ativas no encerramento de 03/10 (PDV B)
+      // O antigo fechamento de PDV A (10 un em 01/10) NÃO é somado!
+      expect(fluxo.estoqueRemanescente).toBe(4);
+
+      // UNIDADES RETORNADAS (Métrica logística de movimentação): 10 + 5 + 4 = 19 unidades movimentadas em 3 eventos
+      expect(fluxo.unidadesRetornadas).toBe(19);
+      expect(fluxo.eventosRetorno).toBe(3);
     });
   });
 });

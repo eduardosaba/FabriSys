@@ -263,6 +263,74 @@ describe('Auditoria, Conciliação Financeira e Fechamento Unificado', () => {
       expect(remessaReaberta.valor_dinheiro_gaveta).toBe(150);
       expect(remessaReaberta.itens_grade.length).toBe(1);
     });
+
+    it('desfaz fechamento unificado e limpa fechamento_unificado_id e digitais ao retornar de Aguardando Auditoria para Sobras & Caixa', () => {
+      const remessaEmAuditoria = {
+        id: 'rem-123',
+        status: 'encerrado',
+        fechamento_unificado_id: 'fech-999',
+        tipo_fechamento: 'unificado',
+        valor_pix_declarado: 200,
+        valor_cartao_declarado: 300,
+        valor_dinheiro_gaveta: 100,
+        itens_grade: [{ produto_id: 'p1', qtd_enviada: 20, qtd_retorno: 5 }],
+      };
+
+      // Payload executado ao reverter para Sobras & Caixa
+      const payloadRevert = {
+        status: 'sobras_informadas',
+        fechamento_unificado_id: null,
+        tipo_fechamento: null,
+        valor_pix_declarado: 0,
+        valor_cartao_declarado: 0,
+      };
+
+      const remessaRevertida = {
+        ...remessaEmAuditoria,
+        ...payloadRevert,
+      };
+
+      expect(remessaRevertida.status).toBe('sobras_informadas');
+      expect(remessaRevertida.fechamento_unificado_id).toBeNull();
+      expect(remessaRevertida.tipo_fechamento).toBeNull();
+      expect(remessaRevertida.valor_pix_declarado).toBe(0);
+      expect(remessaRevertida.valor_cartao_declarado).toBe(0);
+      // Mantém sobras e gaveta intactos para permitir ajuste antes de novo fechamento
+      expect(remessaRevertida.valor_dinheiro_gaveta).toBe(100);
+      expect(remessaRevertida.itens_grade[0].qtd_retorno).toBe(5);
+    });
+
+    it('limpa fechamento_unificado_id e zera retorno ao retornar de Sobras & Caixa para Em Venda no PDV', () => {
+      const remessaEmSobras = {
+        id: 'rem-123',
+        status: 'sobras_informadas',
+        fechamento_unificado_id: null,
+        tipo_fechamento: null,
+        valor_dinheiro_gaveta: 100,
+        itens_grade: [{ produto_id: 'p1', qtd_enviada: 20, qtd_retorno: 5 }],
+      };
+
+      const payloadResetEmVenda = {
+        status: 'aberto',
+        valor_dinheiro_gaveta: 0,
+        valor_pix_declarado: 0,
+        valor_cartao_declarado: 0,
+        fechamento_unificado_id: null,
+        tipo_fechamento: null,
+        qtd_total_retorno: 0,
+        itens_grade: remessaEmSobras.itens_grade.map((it) => ({ ...it, qtd_retorno: null })),
+      };
+
+      const remessaEmVenda = {
+        ...remessaEmSobras,
+        ...payloadResetEmVenda,
+      };
+
+      expect(remessaEmVenda.status).toBe('aberto');
+      expect(remessaEmVenda.fechamento_unificado_id).toBeNull();
+      expect(remessaEmVenda.valor_dinheiro_gaveta).toBe(0);
+      expect(remessaEmVenda.itens_grade[0].qtd_retorno).toBeNull();
+    });
   });
 
   describe('5. Resultado Líquido Operacional (Faturamento Líquido Real)', () => {
@@ -687,6 +755,161 @@ describe('Auditoria, Conciliação Financeira e Fechamento Unificado', () => {
       // UNIDADES RETORNADAS (Métrica logística de movimentação): 10 + 5 + 4 = 19 unidades movimentadas em 3 eventos
       expect(fluxo.unidadesRetornadas).toBe(19);
       expect(fluxo.eventosRetorno).toBe(3);
+    });
+  });
+
+  describe('Fechamento Unificado com Perdas e Doações', () => {
+    it('apura mercadorias descontando perdas sem cobrar do caixa e sem somar nas sobras que voltam para a fábrica', () => {
+      // Cenário:
+      // Turno Manhã: 10 bolos enviados a R$ 15 cada
+      // Sobra que volta para a fábrica: 3 bolos
+      // Perda física / doação: 2 bolos
+      // Vendido: 10 - 3 - 2 = 5 bolos
+      // Faturamento esperado: 5 * 15 = R$ 75
+      const turnosInput: TurnoFechamentoInput[] = [
+        {
+          id: 'remessa-01',
+          local_id: 'pdv-shopping',
+          pdv_nome: 'PDV Shopping',
+          data: '2026-10-07',
+          turno: 'manha',
+          status: 'sobras_informadas',
+          valor_dinheiro_gaveta: 75.0,
+          itens_grade: [
+            {
+              produto_id: 'prod-bolo',
+              nome: 'Bolo Caseiro',
+              preco_unitario: 15.0,
+              qtd_estoque_inicial: 0,
+              qtd_enviada: 10,
+              qtd_retorno: 3, // Retorno físico à fábrica
+              qtd_perda: 2, // Avaria / Doação
+            },
+          ],
+        },
+      ];
+
+      const resultado = apurarFechamentoUnificado(turnosInput, {
+        pix: 0,
+        cartao_debito: 0,
+        cartao_credito: 0,
+        outros: 0,
+        taxas_operacionais: 0,
+      });
+
+      // 1. Sobras físicas retornando à fábrica são ESTRITAMENTE 3 unidades (perda NÃO volta para a fábrica)
+      expect(resultado.total_sobras_conferidas).toBe(3);
+
+      // 2. Perdas declaradas totalizam 2 unidades
+      expect(resultado.total_perdas).toBe(2);
+
+      // 3. Unidades vendidas = 10 - 3 - 2 = 5 unidades
+      expect(resultado.total_vendido).toBe(5);
+
+      // 4. Faturamento bruto e líquido esperados são de 5 * R$ 15 = R$ 75 (sem exigir caixa das 2 perdas)
+      expect(resultado.faturamento_bruto_esperado).toBe(75.0);
+      expect(resultado.faturamento_liquido_esperado).toBe(75.0);
+
+      // 5. Caixa com R$ 75 bate 100% (diferenca_caixa = 0)
+      expect(resultado.diferenca_caixa).toBe(0);
+      expect(resultado.resultado_caixa.status).toBe('conferido');
+      expect(resultado.resultado_caixa.is_perfeito).toBe(true);
+
+      // 6. Item consolidado reflete com precisão os valores
+      expect(resultado.total_enviado_fabrica).toBe(10);
+      const itemConsolidado = resultado.itens_consolidados[0];
+      expect(itemConsolidado).toBeDefined();
+      expect(itemConsolidado.qtd_disponivel).toBe(8); // Disponível comercialmente (10 enviado - 2 perdas = 8)
+      expect(itemConsolidado.qtd_perda).toBe(2);
+      expect(itemConsolidado.qtd_vendida).toBe(5);
+      expect(itemConsolidado.faturamento_bruto).toBe(75.0);
+    });
+
+    it('Cenário Logístico Real: Sobras de manhã retornam à fábrica para redistribuição e NÃO somam no KPI de Sobras Físicas do Fechamento Unificado', () => {
+      // PDV A (Shopping): 2 turnos (Manhã e Tarde)
+      // Manhã: enviado 10, sobra 4 (retorna à fábrica para redistribuição aos PDVs) -> vendeu 6
+      // Tarde: enviado 7, sobra 2 (sobra física final da tarde) -> vendeu 5
+      // PDV B (Centro): 1 turno (Integral)
+      // enviado 15, sobra 3 (sobra física final) -> vendeu 12
+      const turnosInput: TurnoFechamentoInput[] = [
+        {
+          id: 't-pdva-manha',
+          local_id: 'pdv-a',
+          pdv_nome: 'PDV Shopping',
+          data: '2026-10-06',
+          turno: 'manha',
+          status: 'sobras_informadas',
+          valor_dinheiro_gaveta: 60.0,
+          itens_grade: [
+            {
+              produto_id: 'prod-bolo',
+              nome: 'Bolo Caseiro',
+              preco_unitario: 10.0,
+              qtd_enviada: 10,
+              qtd_retorno: 4, // Voltou para a fábrica redistribuir
+            },
+          ],
+        },
+        {
+          id: 't-pdva-tarde',
+          local_id: 'pdv-a',
+          pdv_nome: 'PDV Shopping',
+          data: '2026-10-06',
+          turno: 'tarde',
+          status: 'sobras_informadas',
+          valor_dinheiro_gaveta: 50.0,
+          itens_grade: [
+            {
+              produto_id: 'prod-bolo',
+              nome: 'Bolo Caseiro',
+              preco_unitario: 10.0,
+              qtd_enviada: 7,
+              qtd_retorno: 2, // Sobra física final do PDV Shopping
+            },
+          ],
+        },
+        {
+          id: 't-pdvb-integral',
+          local_id: 'pdv-b',
+          pdv_nome: 'PDV Centro',
+          data: '2026-10-06',
+          turno: 'integral',
+          status: 'sobras_informadas',
+          valor_dinheiro_gaveta: 120.0,
+          itens_grade: [
+            {
+              produto_id: 'prod-bolo',
+              nome: 'Bolo Caseiro',
+              preco_unitario: 10.0,
+              qtd_enviada: 15,
+              qtd_retorno: 3, // Sobra física final do PDV Centro
+            },
+          ],
+        },
+      ];
+
+      const resultado = apurarFechamentoUnificado(turnosInput, {
+        pix: 0,
+        cartao_debito: 0,
+        cartao_credito: 0,
+      });
+
+      // 1. KPI Sobras Físicas: Deve somar APENAS o último turno de cada PDV
+      // PDV A (Tarde = 2) + PDV B (Integral = 3) = 5 unidades (NÃO 4 + 2 + 3 = 9!)
+      expect(resultado.total_sobras_conferidas).toBe(5);
+
+      // 2. Vendas totais consolidadas:
+      // PDV A Manhã (6) + PDV A Tarde (5) + PDV B Integral (12) = 23 unidades vendidas
+      expect(resultado.total_vendido).toBe(23);
+
+      // 3. Faturamento consolidado: 23 * R$ 10 = R$ 230,00
+      expect(resultado.faturamento_bruto_esperado).toBe(230.0);
+      expect(resultado.faturamento_liquido_esperado).toBe(230.0);
+
+      // 4. Dinheiro somado de todos os turnos: 60 + 50 + 120 = 230,00
+      expect(resultado.total_dinheiro_turnos).toBe(230.0);
+      expect(resultado.diferenca_caixa).toBe(0.0);
+      expect(resultado.resultado_caixa.status).toBe('conferido');
     });
   });
 });

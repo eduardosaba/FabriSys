@@ -26,6 +26,7 @@ export interface ReciboItemGrade {
   qtd_sobra_anterior?: number;
   qtd_enviada?: number;
   qtd_retorno?: number;
+  qtd_perda?: number;
 }
 
 export interface ReciboRegistroData {
@@ -38,6 +39,7 @@ export interface ReciboRegistroData {
   tipo_fechamento?: string;
   qtd_total_enviada?: number;
   qtd_total_retorno?: number;
+  qtd_total_perda?: number;
   faturamento_bruto_teorico?: number;
   faturamento_liquido_esperado?: number;
   valor_dinheiro_gaveta?: number;
@@ -94,7 +96,9 @@ export default function ReciboEModaDetalhamentoModal({
     0
   );
   const totalRetorno = itens.reduce((acc, it) => acc + (Number(it.qtd_retorno) || 0), 0);
-  const totalVendido = Math.max(0, totalEnviado - totalRetorno);
+  const totalPerda = itens.reduce((acc, it) => acc + (Number(it.qtd_perda) || 0), 0);
+  const totalVendido = Math.max(0, totalEnviado - totalRetorno - totalPerda);
+  const temPerdas = totalPerda > 0;
 
   const dinheiro = Number(data.valor_dinheiro_gaveta || 0);
   const pix = Number(data.valor_pix_declarado || 0);
@@ -227,6 +231,11 @@ export default function ReciboEModaDetalhamentoModal({
                         <th className="p-2.5">Produto</th>
                         <th className="p-2.5 text-center">Disp.</th>
                         <th className="p-2.5 text-center">Sobra</th>
+                        {temPerdas && (
+                          <th className="p-2.5 text-center text-rose-600 dark:text-rose-400">
+                            Perda/Doação
+                          </th>
+                        )}
                         <th className="p-2.5 text-center">Vend.</th>
                         <th className="p-2.5 text-right">Preço</th>
                         <th className="p-2.5 text-right">Total</th>
@@ -237,7 +246,8 @@ export default function ReciboEModaDetalhamentoModal({
                         const env =
                           (Number(it.qtd_sobra_anterior) || 0) + (Number(it.qtd_enviada) || 0);
                         const ret = Number(it.qtd_retorno) || 0;
-                        const vend = Math.max(0, env - ret);
+                        const perda = Number(it.qtd_perda) || 0;
+                        const vend = Math.max(0, env - ret - perda);
                         const preco = Number(it.preco_unitario) || 0;
                         const totalItem = vend * preco;
                         const nomeProd = it.nome || it.nome_produto || 'Produto';
@@ -251,6 +261,11 @@ export default function ReciboEModaDetalhamentoModal({
                             <td className="p-2.5 text-center font-mono text-amber-600 dark:text-amber-400 font-bold">
                               {ret}
                             </td>
+                            {temPerdas && (
+                              <td className="p-2.5 text-center font-mono text-rose-600 dark:text-rose-400 font-bold">
+                                {perda > 0 ? `${perda} un` : '—'}
+                              </td>
+                            )}
                             <td className="p-2.5 text-center font-mono text-emerald-600 dark:text-emerald-400 font-black text-sm">
                               {vend}
                             </td>
@@ -271,6 +286,11 @@ export default function ReciboEModaDetalhamentoModal({
                         <td className="p-2.5 text-center font-mono text-amber-600">
                           {totalRetorno}
                         </td>
+                        {temPerdas && (
+                          <td className="p-2.5 text-center font-mono text-rose-600">
+                            {totalPerda} un
+                          </td>
+                        )}
                         <td className="p-2.5 text-center font-mono text-emerald-600 text-sm">
                           {totalVendido} un
                         </td>

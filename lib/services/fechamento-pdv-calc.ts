@@ -26,6 +26,7 @@ export interface ResultadoItemCalculado {
   preco_unitario: number;
   qtd_disponivel: number;
   qtd_vendida: number;
+  qtd_perda?: number;
   faturamento_bruto: number;
   tem_pendencia_sobra: boolean;
 }
@@ -57,6 +58,8 @@ export interface FechamentoConsolidadoResult {
   itens_consolidados: ResultadoItemCalculado[];
   total_enviado_fabrica: number;
   total_sobras_conferidas: number;
+  total_perdas?: number;
+  total_perdas_declaradas?: number;
   total_vendido: number;
   faturamento_bruto_esperado: number;
   faturamento_liquido_esperado: number;
@@ -202,6 +205,7 @@ export function calcularItemIndividual(item: ItemMovimentacaoPDV): ResultadoItem
     preco_unitario: preco,
     qtd_disponivel: qtdDisponivel,
     qtd_vendida: qtdVendida,
+    qtd_perda: perdas,
     faturamento_bruto: faturamento,
     tem_pendencia_sobra: false,
   };
@@ -255,6 +259,8 @@ export function apurarFechamentoUnificado(
       qtd_transf_enviada: number;
       qtd_devolucao_fabrica: number;
       qtd_perdas: number;
+      qtd_vendida_total: number;
+      faturamento_bruto_total: number;
       sobra_final_acumulada: number;
       tem_pendencia: boolean;
     }
@@ -274,6 +280,8 @@ export function apurarFechamentoUnificado(
           qtd_transf_enviada: 0,
           qtd_devolucao_fabrica: 0,
           qtd_perdas: 0,
+          qtd_vendida_total: 0,
+          faturamento_bruto_total: 0,
           sobra_final_acumulada: 0,
           tem_pendencia: false,
         };
@@ -304,15 +312,20 @@ export function apurarFechamentoUnificado(
           motivo: `Sobra não informada para ${item.nome} no turno ${t.turno}.`,
           tipo: 'sobra_pendente',
         });
+      } else {
+        const itemCalc = calcularItemIndividual(item);
+        registroProd.qtd_vendida_total += itemCalc.qtd_vendida;
+        registroProd.faturamento_bruto_total += itemCalc.faturamento_bruto;
       }
     });
   });
 
-  // Para calcular a sobra física real retornada à fábrica:
-  // Regra Larissa Saba: a sobra não é distribuída e sempre retorna à fábrica.
-  // Cada turno representa um envio e um retorno independente à fábrica.
-  // Caso haja um rollover interno explícito no mesmo PDV (qtd_estoque_inicial > 0),
-  // a sobra do turno anterior foi reutilizada no balcão e apenas a do último turno retorna à fábrica.
+  // Para calcular a sobra física real retornada à fábrica no final do dia:
+  // Regra Larissa Saba:
+  // As sobras de turnos da manhã retornam à fábrica para redistribuição logística entre os PDVs,
+  // portanto NÃO são consideradas sobras físicas finais do PDV.
+  // A sobra física real de cada PDV é estritamente a sobra do ÚLTIMO TURNO daquele PDV.
+  // No Fechamento Unificado, o KPI Sobras Físicas é a soma das sobras finais (último turno) de cada PDV selecionado.
   const turnosPorPDV = new Map<string, TurnoFechamentoInput[]>();
   turnos.forEach((t) => {
     const list = turnosPorPDV.get(t.local_id) || [];
@@ -320,44 +333,43 @@ export function apurarFechamentoUnificado(
     turnosPorPDV.set(t.local_id, list);
   });
 
+  const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
+
   turnosPorPDV.forEach((turnosDoPdv) => {
-    const temRolloverInterno = turnosDoPdv.some((t) =>
-      (t.itens_grade || []).some((it) => Number(it.qtd_estoque_inicial || 0) > 0)
-    );
+    turnosDoPdv.sort((a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99));
+    const ultimoTurno = turnosDoPdv[turnosDoPdv.length - 1];
 
-    if (temRolloverInterno) {
-      const ordemTurnos: Record<string, number> = { manha: 1, tarde: 2, noite: 3, integral: 4 };
-      turnosDoPdv.sort((a, b) => (ordemTurnos[a.turno] || 99) - (ordemTurnos[b.turno] || 99));
-      const ultimoTurno = turnosDoPdv[turnosDoPdv.length - 1];
-
-      (ultimoTurno.itens_grade || []).forEach((item) => {
-        const registroProd = mapaProdutos.get(item.produto_id);
-        if (registroProd && item.qtd_retorno !== null && item.qtd_retorno !== undefined) {
-          registroProd.sobra_final_acumulada += Number(item.qtd_retorno);
-        }
-      });
-    } else {
-      turnosDoPdv.forEach((t) => {
-        (t.itens_grade || []).forEach((item) => {
-          const registroProd = mapaProdutos.get(item.produto_id);
-          if (registroProd && item.qtd_retorno !== null && item.qtd_retorno !== undefined) {
-            registroProd.sobra_final_acumulada += Number(item.qtd_retorno);
-          }
-        });
-      });
-    }
+    (ultimoTurno.itens_grade || []).forEach((item) => {
+      const registroProd = mapaProdutos.get(item.produto_id);
+      if (registroProd && item.qtd_retorno !== null && item.qtd_retorno !== undefined) {
+        registroProd.sobra_final_acumulada += Number(item.qtd_retorno);
+      }
+    });
   });
 
   // 3. Apuração Final dos Itens Consolidados
   const itensCalculados: ResultadoItemCalculado[] = [];
   let totalEnviadoFabrica = 0;
   let totalSobrasFisicas = 0;
+  let totalPerdasDeclaradas = 0;
   let totalVendidoGeral = 0;
   let faturamentoBrutoGeral = 0;
 
   mapaProdutos.forEach((p) => {
     totalEnviadoFabrica += p.qtd_entradas_fabrica;
     totalSobrasFisicas += p.sobra_final_acumulada;
+    totalPerdasDeclaradas += p.qtd_perdas;
+
+    let vendida = 0;
+    let fatBruto = 0;
+
+    if (!p.tem_pendencia) {
+      vendida = p.qtd_vendida_total;
+      fatBruto = Math.round(p.faturamento_bruto_total * 100) / 100;
+    }
+
+    totalVendidoGeral += vendida;
+    faturamentoBrutoGeral += fatBruto;
 
     const disponivel =
       p.qtd_entradas_fabrica +
@@ -366,25 +378,20 @@ export function apurarFechamentoUnificado(
       p.qtd_devolucao_fabrica -
       p.qtd_perdas;
 
-    let vendida = 0;
-    let fatBruto = 0;
-
-    if (!p.tem_pendencia) {
-      vendida = Math.max(0, disponivel - p.sobra_final_acumulada);
-      fatBruto = Math.round(vendida * p.preco_unitario * 100) / 100;
-    }
-
-    totalVendidoGeral += vendida;
-    faturamentoBrutoGeral += fatBruto;
-
     // Inclui apenas itens que tiveram carga, movimentação ou sobra registrada
-    if (disponivel > 0 || p.sobra_final_acumulada > 0 || p.qtd_entradas_fabrica > 0) {
+    if (
+      disponivel > 0 ||
+      p.sobra_final_acumulada > 0 ||
+      p.qtd_entradas_fabrica > 0 ||
+      p.qtd_perdas > 0
+    ) {
       itensCalculados.push({
         produto_id: p.produto_id,
         nome: p.nome,
         preco_unitario: p.preco_unitario,
         qtd_disponivel: disponivel,
         qtd_vendida: vendida,
+        qtd_perda: p.qtd_perdas,
         faturamento_bruto: fatBruto,
         tem_pendencia_sobra: p.tem_pendencia,
       });
@@ -440,6 +447,8 @@ export function apurarFechamentoUnificado(
     itens_consolidados: itensCalculados,
     total_enviado_fabrica: totalEnviadoFabrica,
     total_sobras_conferidas: totalSobrasFisicas,
+    total_perdas: totalPerdasDeclaradas,
+    total_perdas_declaradas: totalPerdasDeclaradas,
     total_vendido: totalVendidoGeral,
     faturamento_bruto_esperado: faturamentoBrutoGeral,
     faturamento_liquido_esperado: faturamentoLiquido,

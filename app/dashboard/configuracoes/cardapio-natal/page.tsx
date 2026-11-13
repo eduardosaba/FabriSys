@@ -73,7 +73,8 @@ export default function CardapioNatalAdminPage() {
   const [subindo, setSubindo] = useState<string | null>(null);
   const [areasPagina, setAreasPagina] = useState<number | null>(null);
 
-  const permitido = profile?.role === 'admin' || profile?.role === 'master';
+  const permitido =
+    profile?.role === 'admin' || profile?.role === 'master' || profile?.role === 'express';
 
   const carregar = useCallback(async () => {
     setCarregando(true);

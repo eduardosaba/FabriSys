@@ -69,7 +69,8 @@ function resumoItens(p: PedidoNatal, max = 2): string {
 
 export default function PedidosNatalPage() {
   const { profile, loading: authLoading } = useAuth();
-  const permitido = profile?.role === 'admin' || profile?.role === 'master';
+  const permitido =
+    profile?.role === 'admin' || profile?.role === 'master' || profile?.role === 'express';
 
   const [pedidos, setPedidos] = useState<PedidoNatal[]>([]);
   const [produtos, setProdutos] = useState<ProdutoCardapio[]>(PADRAO_PRODUTOS);

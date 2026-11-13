@@ -20,6 +20,8 @@ const MODULOS = [
   { id: 'fechamento_diario', label: 'Acerto Diário: Fechamento do Dia (Trava Reversa)' },
   { id: 'conciliacao_bancaria', label: 'Acerto Diário: Conciliação Pix/Cartão vs Gaveta' },
   { id: 'ranking_produtos', label: 'Acerto Diário: Ranking de Doces Mais Vendidos' },
+  { id: 'pedidos_natal', label: 'Acerto Diário: Pedidos de Natal (ver e editar pedidos)' },
+  { id: 'cardapio_natal', label: 'Configurações: Cardápio de Natal (editar produtos e preços)' },
 
   { id: 'agenda', label: 'Agenda & Tarefas' },
   { id: 'planejamento', label: 'Planejamento de Produção' },
@@ -133,6 +135,8 @@ const DEFAULT_PERMISSOES: Record<string, string[]> = {
     'fechamento_diario',
     'conciliacao_bancaria',
     'ranking_produtos',
+    'pedidos_natal',
+    'cardapio_natal',
     'produtos',
     'agenda',
     'ajuda',
@@ -148,6 +152,7 @@ const MENU_HIERARCHY: Record<string, string[]> = {
     'fechamento_diario',
     'conciliacao_bancaria',
     'ranking_produtos',
+    'pedidos_natal',
   ],
   producao: [
     'fabrica_dashboard',

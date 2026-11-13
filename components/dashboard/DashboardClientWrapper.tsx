@@ -25,6 +25,7 @@ export default function DashboardClientWrapper({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [effectiveLogo, setEffectiveLogo] = useState<string | undefined>(logoUrl);
   const [userPerms, setUserPerms] = useState<string[]>([]);
+  const [permsProntas, setPermsProntas] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -81,16 +82,22 @@ export default function DashboardClientWrapper({
           'auditoria_geral',
           'conciliacao_bancaria',
           'ranking_produtos',
+          'pedidos_natal',
+          'cardapio_natal',
           'produtos',
           'agenda',
           'ajuda',
         ];
 
         const rolePerms = orgP[profile.role] || globalP[profile.role] || defaultExpress;
-        if (isMounted) setUserPerms(rolePerms);
+        if (isMounted) {
+          setUserPerms(rolePerms);
+          setPermsProntas(true);
+        }
       } catch {
         if (isMounted) {
           setUserPerms(['acertos_rapidos', 'agenda', 'produtos', 'ajuda']);
+          setPermsProntas(true);
         }
       }
     };
@@ -160,6 +167,8 @@ export default function DashboardClientWrapper({
           pdv_recebimento: ['/dashboard/pdv/recebimento', '/dashboard/pdv'],
           pdv_inventario: ['/dashboard/pdv/inventario', '/dashboard/pdv'],
           acertos_rapidos: ['/dashboard/acerto-diario'],
+          pedidos_natal: ['/dashboard/acerto-diario/pedidos-natal'],
+          cardapio_natal: ['/dashboard/configuracoes/cardapio-natal', '/dashboard/configuracoes'],
           auditoria_geral: ['/dashboard/acerto-diario/auditoria', '/dashboard/acerto-diario'],
           lancar_turno: ['/dashboard/acerto-diario'],
           fechamento_diario: ['/dashboard/acerto-diario/fechamento', '/dashboard/acerto-diario'],
@@ -174,6 +183,20 @@ export default function DashboardClientWrapper({
             modRouteMap[mod].forEach((r) => allowedRoutesSet.add(r));
           }
         });
+
+        // Módulos que exigem permissão explícita, mesmo estando sob rotas liberadas por padrão
+        const rotasComModulo: [string, string][] = [
+          ['/dashboard/acerto-diario/pedidos-natal', 'pedidos_natal'],
+          ['/dashboard/configuracoes/cardapio-natal', 'cardapio_natal'],
+        ];
+        const bloqueadaPorModulo = rotasComModulo.some(
+          ([rota, mod]) => pathname.startsWith(rota) && !userPerms.includes(mod)
+        );
+        if (bloqueadaPorModulo) {
+          // só redireciona depois de carregar as permissões (evita expulsar quem tem acesso)
+          if (permsProntas) router.replace('/dashboard/acerto-diario/auditoria');
+          return;
+        }
 
         const rotasPermitidas = Array.from(allowedRoutesSet);
         const rotaPermitida = rotasPermitidas.some(
@@ -193,7 +216,7 @@ export default function DashboardClientWrapper({
         router.replace('/dashboard');
       }
     }
-  }, [org, loadingOrg, isOnboardingPage, router, profile, pathname, userPerms]);
+  }, [org, loadingOrg, isOnboardingPage, router, profile, pathname, userPerms, permsProntas]);
 
   if (loadingOrg) {
     return (

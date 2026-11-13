@@ -120,6 +120,12 @@ const sidebarItems: SidebarItem[] = [
         name: 'Fechamento Diário & Conciliação',
         href: '/dashboard/acerto-diario/fechamento',
       },
+      {
+        id: 'pedidos_natal',
+        name: 'Pedidos de Natal',
+        href: '/dashboard/acerto-diario/pedidos-natal',
+        allowedRoles: ['admin', 'master'],
+      },
     ],
   },
   {
@@ -293,6 +299,12 @@ const sidebarItems: SidebarItem[] = [
         allowedRoles: ['admin', 'master', 'gerente'],
       },
       {
+        id: 'configuracoes_cardapio_natal',
+        name: 'Cardápio de Natal',
+        href: '/dashboard/configuracoes/cardapio-natal',
+        allowedRoles: ['admin', 'master'],
+      },
+      {
         id: 'configuracoes_lojas',
         name: 'Cadastro de Lojas',
         href: '/dashboard/configuracoes/lojas',
@@ -337,6 +349,11 @@ const sidebarItems: SidebarItem[] = [
         id: 'admin_usuarios',
         name: 'Equipe & Usuários',
         href: '/dashboard/configuracoes/usuarios',
+      },
+      {
+        id: 'admin_cardapio_natal',
+        name: 'Cardápio de Natal',
+        href: '/dashboard/configuracoes/cardapio-natal',
       },
     ],
   },

@@ -93,3 +93,6 @@ uploads/
 local.env
 
 # End of file
+
+# PDF original do cardápio de Natal (fonte pesada; as páginas já estão em public/cardapionatal/paginas)
+/cardapionatal/*.pdf

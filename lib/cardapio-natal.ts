@@ -3,6 +3,7 @@
  * Os dados reais vêm da tabela `cardapio_natal_produtos` (editável no admin).
  * Os PADRAO_PRODUTOS abaixo servem de fallback e de seed inicial.
  */
+import type { CSSProperties } from 'react';
 
 export const TOTAL_PAGINAS = 11;
 export const WHATSAPP_NUMERO = '5575988031197';
@@ -53,6 +54,7 @@ export interface PaginaCfg {
   midia_url: string | null;
   repetir: boolean; // vídeo da página em loop (false = toca uma vez a cada vez que a página aparece)
   overlay_url: string | null; // camada transparente (PNG/WebP) por cima da mídia
+  overlay_pos: OverlayPos | null; // posição/tamanho da camada em % da página (null = página inteira)
   areas: AreaMidia[]; // vídeos/GIFs/imagens em áreas da página
 }
 
@@ -110,6 +112,7 @@ export function mesclarPaginas(rows: Partial<PaginaCfg>[] | null | undefined): P
       midia_url: r?.midia_url ?? null,
       repetir: r?.repetir ?? true,
       overlay_url: r?.overlay_url ?? null,
+      overlay_pos: validarPos(r?.overlay_pos),
       areas: Array.isArray(r?.areas) ? r.areas : [],
     };
   });
@@ -510,4 +513,33 @@ export function mensagemPedido(args: {
     '',
     `Resumo do pedido (PDF): ${link}`,
   ].join('\n');
+}
+
+/** Posição e tamanho (em % da página) da camada transparente. */
+export interface OverlayPos {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+function validarPos(v: unknown): OverlayPos | null {
+  const o = v as Partial<OverlayPos> | null | undefined;
+  if (!o || [o.x, o.y, o.w, o.h].some((n) => typeof n !== 'number' || !Number.isFinite(n)))
+    return null;
+  if (o.w <= 0 || o.h <= 0) return null;
+  return { x: o.x, y: o.y, w: o.w, h: o.h };
+}
+
+/** Estilo da camada: sem posição cobre a página inteira; com posição ocupa exatamente o retângulo. */
+export function estiloOverlay(pos: OverlayPos | null | undefined): CSSProperties {
+  if (!pos) return { inset: 0, width: '100%', height: '100%', objectFit: 'cover' };
+  return {
+    inset: 'auto',
+    left: `${pos.x}%`,
+    top: `${pos.y}%`,
+    width: `${pos.w}%`,
+    height: `${pos.h}%`,
+    objectFit: 'fill',
+  };
 }

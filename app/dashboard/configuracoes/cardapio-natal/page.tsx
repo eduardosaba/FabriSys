@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import PageHeader from '@/components/ui/PageHeader';
 import AreasEditor from './AreasEditor';
+import OverlayEditor from './OverlayEditor';
 import { converterParaWebp, formatarTamanho } from '@/lib/converter-midia';
 import {
   PADRAO_PRODUTOS,
@@ -19,6 +20,8 @@ import {
   mesclarPaginas,
   CONFIG_PADRAO,
   type AreaMidia,
+  estiloOverlay,
+  type OverlayPos,
   type ConfigCardapio,
   type MusicaItem,
   type MidiaTipo,
@@ -75,6 +78,7 @@ export default function CardapioNatalAdminPage() {
   const [config, setConfig] = useState<ConfigCardapio>(CONFIG_PADRAO);
   const [subindo, setSubindo] = useState<string | null>(null);
   const [areasPagina, setAreasPagina] = useState<number | null>(null);
+  const [overlayPagina, setOverlayPagina] = useState<number | null>(null);
 
   const permitido =
     profile?.role === 'admin' || profile?.role === 'master' || profile?.role === 'express';
@@ -334,6 +338,7 @@ export default function CardapioNatalAdminPage() {
         midia_url: r.url,
         repetir: true,
         overlay_url: null,
+        overlay_pos: null,
         areas: [],
       };
       if (await salvarPaginas([...paginas, nova])) {
@@ -355,14 +360,29 @@ export default function CardapioNatalAdminPage() {
     const r = await subir(file, 'overlays', 20, ['imagem'], { maxLargura: 1080 });
     if (
       r &&
-      (await salvarPaginas(paginas.map((p, i) => (i === idx ? { ...p, overlay_url: r.url } : p))))
+      (await salvarPaginas(
+        paginas.map((p, i) => (i === idx ? { ...p, overlay_url: r.url, overlay_pos: null } : p))
+      ))
     )
       toast.success('Camada transparente aplicada.');
     setSubindo(null);
   };
 
   const removerOverlay = (idx: number) =>
-    void salvarPaginas(paginas.map((p, i) => (i === idx ? { ...p, overlay_url: null } : p)));
+    void salvarPaginas(
+      paginas.map((p, i) => (i === idx ? { ...p, overlay_url: null, overlay_pos: null } : p))
+    );
+
+  const salvarOverlayPos = async (chave: number, pos: OverlayPos | null) => {
+    const ok = await salvarPaginas(
+      paginas.map((p) => (p.pagina === chave ? { ...p, overlay_pos: pos } : p))
+    );
+    if (ok)
+      toast.success(
+        pos ? 'Posição da camada salva.' : 'A camada voltou a preencher a página inteira.'
+      );
+    return ok;
+  };
 
   const salvarAreas = async (chave: number, areas: AreaMidia[]) => {
     const ok = await salvarPaginas(paginas.map((p) => (p.pagina === chave ? { ...p, areas } : p)));
@@ -877,6 +897,15 @@ export default function CardapioNatalAdminPage() {
                       Remover camada
                     </button>
                   )}
+                  {p.overlay_url && (
+                    <button
+                      type="button"
+                      className="rounded bg-gray-200 px-2 py-1 font-semibold text-gray-800"
+                      onClick={() => setOverlayPagina(p.pagina)}
+                    >
+                      Ajustar camada
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="rounded bg-gray-200 px-2 py-1 font-semibold text-gray-800"
@@ -1002,6 +1031,22 @@ export default function CardapioNatalAdminPage() {
           </p>
         </section>
       )}
+      {overlayPagina != null &&
+        (() => {
+          const pg = paginas.find((p) => p.pagina === overlayPagina);
+          if (!pg || !pg.overlay_url) return null;
+          return (
+            <OverlayEditor
+              key={pg.pagina}
+              titulo={`Página ${paginas.findIndex((p) => p.pagina === pg.pagina) + 1}`}
+              base={miniatura(pg, 'h-full w-full object-cover')}
+              overlayUrl={pg.overlay_url}
+              pos={pg.overlay_pos}
+              onSalvar={(pos) => salvarOverlayPos(pg.pagina, pos)}
+              onFechar={() => setOverlayPagina(null)}
+            />
+          );
+        })()}
 
       {areasPagina != null &&
         (() => {
@@ -1013,6 +1058,7 @@ export default function CardapioNatalAdminPage() {
               titulo={`Página ${paginas.findIndex((p) => p.pagina === pg.pagina) + 1}`}
               base={miniatura(pg, 'h-full w-full object-cover')}
               overlayUrl={pg.overlay_url}
+              overlayPos={pg.overlay_pos}
               areas={pg.areas}
               onUpload={(f) =>
                 subir(f, 'areas', 40, ['imagem', 'gif', 'video'], { maxLargura: 1080 })
@@ -1105,7 +1151,8 @@ export default function CardapioNatalAdminPage() {
                 <img
                   src={cfgPagina.overlay_url}
                   alt=""
-                  className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                  className="pointer-events-none absolute"
+                  style={estiloOverlay(cfgPagina.overlay_pos)}
                   draggable={false}
                 />
               )}

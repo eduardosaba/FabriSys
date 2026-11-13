@@ -3,7 +3,13 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { toast } from 'react-hot-toast';
 import { Plus, Save, Trash2, Upload, X } from 'lucide-react';
-import { PAGINA_ASPECTO, type AreaMidia, type MidiaTipo } from '@/lib/cardapio-natal';
+import {
+  PAGINA_ASPECTO,
+  estiloOverlay,
+  type AreaMidia,
+  type MidiaTipo,
+  type OverlayPos,
+} from '@/lib/cardapio-natal';
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const btn =
@@ -18,6 +24,7 @@ interface Props {
   titulo: string;
   base: ReactNode; // arte da página (imagem/vídeo) já renderizada
   overlayUrl: string | null;
+  overlayPos: OverlayPos | null;
   areas: AreaMidia[];
   onUpload: (file: File) => Promise<{ tipo: MidiaTipo; url: string } | null>;
   onSalvar: (areas: AreaMidia[]) => Promise<boolean>;
@@ -29,6 +36,7 @@ export default function AreasEditor({
   titulo,
   base,
   overlayUrl,
+  overlayPos,
   areas: inicial,
   onUpload,
   onSalvar,
@@ -188,7 +196,8 @@ export default function AreasEditor({
               <img
                 src={overlayUrl}
                 alt=""
-                className="pointer-events-none absolute inset-0 z-20 h-full w-full object-cover"
+                className="pointer-events-none absolute z-20"
+                style={estiloOverlay(overlayPos)}
                 draggable={false}
               />
             )}

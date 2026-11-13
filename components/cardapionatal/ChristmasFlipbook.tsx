@@ -8,6 +8,7 @@ import {
   TOTAL_PAGINAS,
   paginaSrc,
   CLIENTE_VAZIO,
+  estiloOverlay,
   montarLinhas,
   pontoHotspot,
   totalLinhas,
@@ -136,7 +137,13 @@ const Page = forwardRef<HTMLDivElement, PageProps>(function Page(
         })}
       {/* camada transparente por cima da mídia */}
       {carregar && pagina.overlay_url && (
-        <img src={pagina.overlay_url} alt="" draggable={false} className="cn-overlay-img" />
+        <img
+          src={pagina.overlay_url}
+          alt=""
+          draggable={false}
+          className="cn-overlay-img"
+          style={estiloOverlay(pagina.overlay_pos)}
+        />
       )}
       {/* sombra de dobra (lombada) */}
       <div className={`cn-gutter ${pos % 2 === 0 ? 'cn-gutter-right' : 'cn-gutter-left'}`} />

@@ -4,6 +4,7 @@ import {
   PADRAO_PRODUTOS,
   mesclarPaginas,
   type ConfigCardapio,
+  type MusicaItem,
   type PaginaCfg,
   type ProdutoCardapio,
 } from '@/lib/cardapio-natal';
@@ -47,6 +48,13 @@ export async function carregarDados(): Promise<DadosCardapio> {
               fundo_url: cfg.data.fundo_url ?? null,
               fundo_mobile_url: cfg.data.fundo_mobile_url ?? null,
               og_image_url: cfg.data.og_image_url ?? null,
+              musicas: Array.isArray(cfg.data.musicas)
+                ? (cfg.data.musicas as MusicaItem[]).filter((m) => m && typeof m.url === 'string')
+                : [],
+              musica_volume:
+                typeof cfg.data.musica_volume === 'number'
+                  ? Math.min(1, Math.max(0, cfg.data.musica_volume))
+                  : 0.35,
             },
     };
   } catch {

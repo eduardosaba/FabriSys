@@ -20,6 +20,7 @@ import {
   CONFIG_PADRAO,
   type AreaMidia,
   type ConfigCardapio,
+  type MusicaItem,
   type MidiaTipo,
   type PaginaCfg,
   type ProdutoCardapio,
@@ -27,6 +28,8 @@ import {
 
 const TABELA = 'cardapio_natal_produtos';
 const BUCKET = 'cardapio-natal';
+
+type CampoUrl = 'intro_url' | 'outro_url' | 'fundo_url' | 'fundo_mobile_url' | 'og_image_url';
 
 const inputCls =
   'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white';
@@ -102,6 +105,8 @@ export default function CardapioNatalAdminPage() {
         fundo_url: cfg.data.fundo_url ?? null,
         fundo_mobile_url: cfg.data.fundo_mobile_url ?? null,
         og_image_url: cfg.data.og_image_url ?? null,
+        musicas: Array.isArray(cfg.data.musicas) ? (cfg.data.musicas as MusicaItem[]) : [],
+        musica_volume: typeof cfg.data.musica_volume === 'number' ? cfg.data.musica_volume : 0.35,
       });
     }
     setCarregando(false);
@@ -365,10 +370,43 @@ export default function CardapioNatalAdminPage() {
     return ok;
   };
 
+  const adicionarMusica = async (file: File) => {
+    if (!file.type.startsWith('audio/'))
+      return toast.error('Envie um arquivo de áudio (MP3 recomendado).');
+    if (file.size > 12 * 1024 * 1024) {
+      return toast.error('Arquivo acima de 12 MB. Converta para MP3 128 kbps antes de enviar.');
+    }
+    if (config.musicas.length >= 5)
+      return toast.error('Limite de 5 músicas. Remova uma para adicionar outra.');
+    setSubindo('musica');
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? 'mp3';
+    const path = `musicas/${Date.now()}.${ext}`;
+    const up = await supabase.storage
+      .from(BUCKET)
+      .upload(path, file, { cacheControl: '31536000', upsert: false });
+    if (up.error) {
+      toast.error(`Falha no envio: ${up.error.message}`);
+      setSubindo(null);
+      return;
+    }
+    const url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+    await salvarConfig({
+      musicas: [...config.musicas, { nome: file.name.replace(/\.[^.]+$/, '').slice(0, 60), url }],
+    });
+    setSubindo(null);
+  };
+
+  const removerMusica = async (i: number) => {
+    if (!window.confirm('Remover esta música do cardápio?')) return;
+    await salvarConfig({ musicas: config.musicas.filter((_, k) => k !== i) });
+  };
+
   const salvarConfig = async (patch: Partial<ConfigCardapio>) => {
     const novo = { ...config, ...patch };
     const { error } = await supabase.from('cardapio_natal_config').upsert({
       id: 'default',
+      ...(novo.musicas.length > 0 || 'musicas' in patch ? { musicas: novo.musicas } : {}),
+      ...('musica_volume' in patch ? { musica_volume: novo.musica_volume } : {}),
       intro_url: novo.intro_url,
       outro_url: novo.outro_url,
       fundo_url: novo.fundo_url,
@@ -420,12 +458,7 @@ export default function CardapioNatalAdminPage() {
       img.src = url;
     });
 
-  const enviarConfig = async (
-    campo: keyof ConfigCardapio,
-    file: File,
-    aceitar: MidiaTipo[],
-    maxMB: number
-  ) => {
+  const enviarConfig = async (campo: CampoUrl, file: File, aceitar: MidiaTipo[], maxMB: number) => {
     setSubindo(campo);
     if (campo === 'og_image_url') {
       try {
@@ -892,6 +925,81 @@ export default function CardapioNatalAdminPage() {
               />
             </label>
           </div>
+        </section>
+      )}
+      {!semTabela && !carregando && (
+        <section className="space-y-3 rounded-md border border-gray-200 p-3 dark:border-gray-700">
+          <div>
+            <h2 className="text-base font-bold">Música de fundo</h2>
+            <p className="text-xs text-gray-500">
+              Envie 2 ou 3 músicas (até 5). Elas tocam em ordem aleatória no cardápio, a partir do
+              primeiro toque do cliente, e ele pode silenciar pelo botão no topo da tela. Use
+              somente músicas que você tem direito de usar (autorais ou livres de direitos); músicas
+              comerciais de streaming não podem ser usadas.
+            </p>
+          </div>
+          {config.musicas.length === 0 && (
+            <p className="text-sm text-gray-500">
+              Nenhuma música enviada. O cardápio fica sem som.
+            </p>
+          )}
+          <ul className="space-y-2">
+            {config.musicas.map((m, i) => (
+              <li
+                key={m.url}
+                className="flex flex-wrap items-center gap-2 rounded-md border border-gray-200 p-2 dark:border-gray-700"
+              >
+                <span className="min-w-[8rem] flex-1 truncate text-sm font-medium">
+                  {i + 1}. {m.nome}
+                </span>
+                <audio src={m.url} controls preload="none" className="h-9 max-w-full" />
+                <button
+                  type="button"
+                  className={`${btnCls} text-red-700`}
+                  onClick={() => void removerMusica(i)}
+                  aria-label={`Remover ${m.nome}`}
+                >
+                  <Trash2 size={14} /> Remover
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className={`${btnCls} cursor-pointer bg-gray-200 text-gray-800`}>
+              <Upload size={14} /> {subindo === 'musica' ? 'Enviando…' : 'Adicionar música'}
+              <input
+                type="file"
+                accept="audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/x-m4a,.mp3,.m4a,.ogg,.wav"
+                className="hidden"
+                disabled={subindo !== null}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void adicionarMusica(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              Volume
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(config.musica_volume * 100)}
+                onChange={(e) =>
+                  setConfig((c) => ({ ...c, musica_volume: Number(e.target.value) / 100 }))
+                }
+                onPointerUp={() => void salvarConfig({ musica_volume: config.musica_volume })}
+                onKeyUp={() => void salvarConfig({ musica_volume: config.musica_volume })}
+                aria-label="Volume da música de fundo"
+              />
+              <span className="w-10 text-right">{Math.round(config.musica_volume * 100)}%</span>
+            </label>
+          </div>
+          <p className="text-xs text-gray-500">
+            MP3 de até 12 MB cada. Para converter e nivelar o volume:{' '}
+            <code>node scripts/otimizar-audio.mjs minha-musica.wav</code>
+          </p>
         </section>
       )}
 

@@ -21,6 +21,7 @@ import {
 } from '@/lib/cardapio-natal';
 import CheckoutPanel from './CheckoutPanel';
 import FlipbookControls from './FlipbookControls';
+import MusicaFundo from './MusicaFundo';
 import ProductQuickView from './ProductQuickView';
 import VideoOverlay from './VideoOverlay';
 import WhatsappFloatingButton from './WhatsappFloatingButton';
@@ -429,6 +430,11 @@ export default function ChristmasFlipbook({
       <header className="cn-header">
         <span className="cn-brand">Larissa Saba Gourmet</span>
         <span className="cn-brand-sub">Cardápio Natalino</span>
+        <MusicaFundo
+          musicas={config.musicas}
+          volume={config.musica_volume}
+          pausar={introAtiva || outroAberto}
+        />
         <button
           type="button"
           className="cn-cart"

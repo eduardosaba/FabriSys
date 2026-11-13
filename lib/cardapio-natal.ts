@@ -73,6 +73,13 @@ export interface ConfigCardapio {
   fundo_url: string | null; // imagem de fundo da tela do flipbook (desktop)
   fundo_mobile_url: string | null; // imagem de fundo para celular (retrato); se vazia, usa a do desktop
   og_image_url: string | null; // imagem de pré-visualização ao compartilhar o link (WhatsApp, etc.)
+  musicas: MusicaItem[]; // músicas de fundo (tocam em ordem aleatória)
+  musica_volume: number; // 0 a 1
+}
+
+export interface MusicaItem {
+  nome: string;
+  url: string;
 }
 
 export const CONFIG_PADRAO: ConfigCardapio = {
@@ -81,6 +88,8 @@ export const CONFIG_PADRAO: ConfigCardapio = {
   fundo_url: null,
   fundo_mobile_url: null,
   og_image_url: null,
+  musicas: [],
+  musica_volume: 0.35,
 };
 
 /** Mescla as páginas padrão do PDF (1..11) com o que estiver salvo no banco. */

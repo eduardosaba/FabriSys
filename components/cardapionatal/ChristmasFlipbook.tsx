@@ -187,11 +187,18 @@ export default function ChristmasFlipbook({
   config: ConfigCardapio;
 }) {
   const bookRef = useRef<{
-    pageFlip: () => { flipNext: () => void; flipPrev: () => void; flip: (n: number) => void };
+    pageFlip: () => {
+      flipNext: () => void;
+      flipPrev: () => void;
+      flip: (n: number) => void;
+      getCurrentPageIndex: () => number;
+      turnToPage: (n: number) => void;
+    };
   } | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [dim, setDim] = useState<{ w: number; h: number; mobile: boolean } | null>(null);
   const [indice, setIndice] = useState(0);
+  const [trocando, setTrocando] = useState(false); // esmaece a troca de página ao voltar (modo 1 página)
   const [zoom, setZoom] = useState(1);
   const [modo, setModo] = useState<'auto' | 'uma'>('auto');
   const [selecionado, setSelecionado] = useState<ProdutoCardapio | null>(null);
@@ -319,10 +326,31 @@ export default function ChristmasFlipbook({
     }
     bookRef.current?.pageFlip().flipNext();
   }, [naUltima, temOutro]);
+  // Lê a página real do livro (o evento onFlip não é confiável no modo de 1 página)
+  const sincronizarIndice = useCallback(() => {
+    const i = bookRef.current?.pageFlip().getCurrentPageIndex?.();
+    if (typeof i === 'number') setIndice(i);
+  }, []);
+
   const anterior = useCallback(() => {
     interagiu.current = true;
-    bookRef.current?.pageFlip().flipPrev();
-  }, []);
+    const pf = bookRef.current?.pageFlip();
+    if (!pf) return;
+    if (dim?.mobile) {
+      // No modo de 1 página a biblioteca não anima o "voltar" (flipPrev/flip não fazem nada):
+      // troca direto de página, com um rápido esmaecer para não parecer um salto seco.
+      const alvo = Math.max(0, pf.getCurrentPageIndex() - 1);
+      setTrocando(true);
+      setTimeout(() => {
+        bookRef.current?.pageFlip().turnToPage(alvo);
+        sincronizarIndice();
+        setTrocando(false);
+      }, 140);
+      return;
+    }
+    pf.flipPrev();
+    setTimeout(sincronizarIndice, 1100); // garante o indicador/botões certos ao fim da animação
+  }, [dim?.mobile, sincronizarIndice]);
 
   // Teclado
   useEffect(() => {
@@ -432,6 +460,7 @@ export default function ChristmasFlipbook({
               style={{
                 // livro fechado fica centrado na página da direita (efeito de capa)
                 transform: !dim.mobile && !aberto ? `translateX(${-dim.w / 2}px)` : 'translateX(0)',
+                opacity: trocando ? 0.2 : 1,
               }}
             >
               <Book
@@ -462,6 +491,7 @@ export default function ChristmasFlipbook({
                 startZIndex={0}
                 onInit={() => setPronto(true)}
                 onFlip={(e: { data: number }) => setIndice(e.data)}
+                onChangeState={(e: { data: string }) => e.data === 'read' && sincronizarIndice()}
                 className="cn-flip"
                 style={{}}
               >

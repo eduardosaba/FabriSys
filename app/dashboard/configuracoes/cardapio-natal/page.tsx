@@ -44,6 +44,20 @@ function slug(s: string) {
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
+/** Mensagem amigável: erro de coluna/tabela inexistente quase sempre é migração SQL não aplicada. */
+function mensagemErroBanco(contexto: string, e: { message: string; code?: string }): string {
+  const m = e.message.toLowerCase();
+  const faltaEstrutura =
+    m.includes('column') ||
+    m.includes('schema cache') ||
+    m.includes('does not exist') ||
+    e.code === 'PGRST204' ||
+    e.code === '42703';
+  return faltaEstrutura
+    ? `${contexto}: o banco ainda não tem as colunas novas. Rode as migrações SQL mais recentes (syslari/migrations) e tente de novo. Detalhe: ${e.message}`
+    : `${contexto}: ${e.message}`;
+}
+
 export default function CardapioNatalAdminPage() {
   const { profile, loading: authLoading } = useAuth();
   const [produtos, setProdutos] = useState<ProdutoCardapio[]>([]);
@@ -255,7 +269,7 @@ export default function CardapioNatalAdminPage() {
       .from('cardapio_natal_paginas')
       .upsert(reindexada.map((p) => ({ ...p, updated_at: agora })));
     if (error) {
-      toast.error(`Erro ao salvar páginas: ${error.message}`);
+      toast.error(mensagemErroBanco('Erro ao salvar páginas', error), { duration: 12000 });
       return false;
     }
     setPaginas(reindexada);
@@ -366,7 +380,10 @@ export default function CardapioNatalAdminPage() {
         : {}),
       updated_at: new Date().toISOString(),
     });
-    if (error) return toast.error(`Erro ao salvar: ${error.message}`);
+    if (error)
+      return toast.error(mensagemErroBanco('Erro ao salvar a configuração', error), {
+        duration: 12000,
+      });
     setConfig(novo);
     toast.success('Configuração salva. A página pública atualiza em até 1 minuto.');
   };

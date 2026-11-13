@@ -1046,3 +1046,10 @@ a.cn-modal-wa {
   pointer-events: none;
   user-select: none;
 }
+
+/* esmaecer rapido ao voltar de pagina no modo 1 pagina */
+.cn-book-wrap {
+  transition:
+    transform 0.9s cubic-bezier(0.45, 0, 0.2, 1),
+    opacity 0.14s ease;
+}
